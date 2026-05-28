@@ -2,6 +2,13 @@
   "name": "@codegps/cli",
   "version": "0.1.0",
   "description": "Local, layered knowledge graph across projects and AI agent conversations. Code + decisions + business logic + cross-project links, all local SQLite.",
+  "homepage": "https://tienan92it.github.io/CodeGps/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tienan92it/CodeGps.git"
+  },
+  "bugs": "https://github.com/tienan92it/CodeGps/issues",
+  "author": "Tien An Nguyen",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {

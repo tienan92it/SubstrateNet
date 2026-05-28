@@ -9,6 +9,8 @@
 [![Node.js](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)](https://nodejs.org/)
 [![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](./CHANGELOG.md)
 
+**[Documentation →](https://tienan92it.github.io/CodeGps/)**
+
 </div>
 
 CodeGps indexes your code structure *and* the conversations you have with AI
