@@ -86,14 +86,6 @@ flowchart TB
   facts --> ver[Verifier Agent\n contradictions / pruning]
 ```
 
-### Hard rule
-
-A regex can tell us *"this string looks like a file path."* A regex cannot tell
-us *"this paragraph documents a business invariant."* Every such semantic
-decision goes through a named agent with a versioned prompt and a JSON schema,
-cached and audited via `agent_runs`. **There is no `if (text.includes("decided"))`
-anywhere in the codebase.**
-
 ---
 
 ## What gets captured
@@ -218,16 +210,6 @@ first `init`). Per-project overrides go in `<project>/.codegps/config.json`.
 Bumping a model invalidates that agent's cache on the next run; old runs stay
 in `agent_runs` for audit.
 
-### Recommended local models (M-series Mac, 24 GB)
-
-| Agent role | Pick | Why |
-|---|---|---|
-| Classifier (triage, intent, clusterer) | `qwen3:4b-instruct` (~2.5 GB) | Best small-model JSON adherence in 2026 |
-| Extractor (decision, businessLogic, summarizer, linker, verifier) | `qwen2.5:14b` Q4 (~9 GB) | Strongest structured extraction at this scale |
-| Embeddings (dedupe) | `qwen3-embedding:0.6b` (~1 GB) | #1 on MTEB at this size, 32K context |
-
-Combined hot footprint: ~12.5 GB, leaves ~10 GB headroom on a 24 GB machine.
-
 ### Frontier-quality routing (optional)
 
 Add an `apiKeyEnv` backend and route only the hardest agents to it; the rest
@@ -242,21 +224,6 @@ stay local:
   }
 }
 ```
-
----
-
-## Cursor Canvases
-
-`codegps canvas <kind>` generates a self-contained `.canvas.tsx` under
-`<project>/.codegps/canvas/`. Open it in Cursor's canvas pane.
-
-| Kind | Purpose |
-|---|---|
-| `triage-audit` | every triaged window with labels + rationale; filter by kept/dropped/domain |
-| `project-map` | L3 concepts grouped with their member facts and L0 code links |
-| `decision-timeline` | chronological view of decisions, business rules, problems/solutions |
-| `business-logic` | domain rules and entities, grouped by concept |
-| `cross-project-bridge` | shared concepts across two or more registered projects |
 
 ---
 
@@ -276,40 +243,6 @@ stay local:
 
 All files are local SQLite. Conversation transcripts are read in-place from
 each agent's home directory — never copied.
-
----
-
-## Trade-offs and non-goals
-
-- **Local only.** No cloud sync. Embedding models and chat backends are
-  pluggable but default to Ollama.
-- **A local LLM is a hard runtime dependency.** Without one, only the
-  deterministic syntax pass runs and L1.5 / L2 / L3 stay empty. This is
-  intentional — the alternative is faking NL understanding with regex.
-- **Cached, not deterministic.** Agent output is stable per
-  `(agent, model, input_hash, prompt_version)`. Bumping the prompt version
-  invalidates the cache by design.
-- **Incremental clustering.** The Clusterer may drift over time;
-  `codegps link --rebuild` triggers a full recompute.
-- **No real-time chat hooks.** Ingestion is pull-based off transcript files;
-  re-run `codegps ingest` (or trigger it via `codegps_ingest` from your agent)
-  to pick up new sessions.
-- **Code DB stays compatible with [codegraph](https://github.com/colbymchenry/codegraph).**
-  Drop-in for existing codegraph users.
-
----
-
-## Status & roadmap
-
-**v0.1.0** — all six layers wired end-to-end. See [CHANGELOG.md](./CHANGELOG.md)
-for the full surface. The plan and outstanding work live in
-[`.cursor/plans/codegps_plan_82f6e65a.plan.md`](.cursor/plans/codegps_plan_82f6e65a.plan.md).
-
-Likely next milestones:
-- Additional languages with tree-sitter WASM already shipped (Swift, Kotlin, PHP, Ruby, C/C++)
-- `sqlite-vec` integration for faster nearest-neighbour at scale
-- File watcher for `serve --mcp` so the index stays fresh between agent turns
-- LSP bridge so VS Code / Neovim users get the same tools as MCP-aware agents
 
 ---
 
