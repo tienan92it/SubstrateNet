@@ -27,7 +27,12 @@ Syntax is deterministic. Meaning is agent-driven. There is no `if (text.includes
 
 ## Status
 
-Early. See [milestones](.cursor/plans/codegps_plan_82f6e65a.plan.md) for the build sequence.
+v0.1.0 — every layer L0 through L4 is wired end-to-end. See
+[CHANGELOG.md](./CHANGELOG.md) for what's shipped and the layer-by-layer
+breakdown. The plan and remaining ideas live in
+[`.cursor/plans/codegps_plan_82f6e65a.plan.md`](.cursor/plans/codegps_plan_82f6e65a.plan.md).
+
+[![CI](https://github.com/tienan92it/CodeGps/actions/workflows/ci.yml/badge.svg)](https://github.com/tienan92it/CodeGps/actions/workflows/ci.yml)
 
 ## Install (dev)
 
