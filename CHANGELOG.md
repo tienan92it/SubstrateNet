@@ -6,6 +6,32 @@ All notable changes to CodeGps. Format loosely follows
 
 ## [Unreleased]
 
+### Added — Domain enrichment (L2.5)
+
+Turns CodeGps from a fact store into a business-domain graph. Every enriched
+node and edge carries a `grounding` tier (`stated` | `structural` |
+`corroborated`) and an evidence citation; nothing is fabricated.
+
+- **Grounding model** — new `grounding` column on `k_nodes` (additive migration
+  for existing DBs); makes "based on facts, never assume" queryable.
+- **Structural extraction** (`pipeline/domain-from-code.ts`) — deterministic,
+  zero-assumption: SQL tables → `entity` facts, foreign keys → `relates_to`
+  edges. Entities are identified by table name, collapsing schema-qualified
+  definitions with unqualified FK stubs into one node.
+- **DomainModeler agent** (`agents/domain-modeler.ts`) — proposes relationships
+  between existing entities and names knowledge gaps; every claim must quote
+  verbatim evidence or it is dropped in postprocess. Cannot invent entities.
+- **Gap detector** (`pipeline/gap-detector.ts`) — deterministic, evidence-cited
+  `knowledge_gap` nodes: external FK targets and ungoverned central entities.
+  Names the gap, never the answer.
+- **Pipeline** — `runEnrichment` runs as ingest step 8 and standalone via
+  `codegps enrich [--no-agent]`.
+- **MCP** — `codegps_domain_model`, `codegps_gaps`, `codegps_enrich`.
+- **Status** — `codegps status` now reports L2.5 entities / relationships / gaps.
+- New node kinds: `actor`, `process`, `metric`, `glossary_term`, `knowledge_gap`.
+  New edge kinds: `relates_to`, `has_state`, `transitions_to`, `governed_by`,
+  `owned_by`, `part_of`, `gap_in`.
+
 ## [0.1.0] — 2026-05-28
 
 Initial cut. Layered local knowledge graph end-to-end: L0 code → L1

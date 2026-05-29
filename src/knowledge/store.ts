@@ -8,18 +8,29 @@ export function upsertKNode(db: SqliteDb, n: KNode): void {
   db.prepare(`
     INSERT INTO k_nodes
       (id, kind, title, summary, evidence_text, confidence, source, agent_model,
-       created_at, updated_at, cluster_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       grounding, created_at, updated_at, cluster_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       title=excluded.title, summary=excluded.summary,
       evidence_text=excluded.evidence_text, confidence=excluded.confidence,
       source=excluded.source, agent_model=excluded.agent_model,
+      grounding=excluded.grounding,
       updated_at=excluded.updated_at
   `).run(
     n.id, n.kind, n.title, n.summary ?? null, n.evidenceText ?? null,
     n.confidence, n.source, n.agentModel ?? null,
-    n.createdAt, n.updatedAt, n.clusterId ?? null,
+    n.grounding ?? null, n.createdAt, n.updatedAt, n.clusterId ?? null,
   );
+}
+
+/** Insert a k_edge only if an identical (source, target, kind) edge doesn't exist. */
+export function insertKEdgeUnique(db: SqliteDb, e: KEdge): boolean {
+  const existing = db.prepare(
+    `SELECT 1 FROM k_edges WHERE source=? AND target=? AND kind=? LIMIT 1`,
+  ).get(e.source, e.target, e.kind);
+  if (existing) return false;
+  insertKEdge(db, e);
+  return true;
 }
 
 export function insertKEdge(db: SqliteDb, e: KEdge): void {

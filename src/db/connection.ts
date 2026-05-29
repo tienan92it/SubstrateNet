@@ -28,6 +28,23 @@ function applySchema(db: SqliteDb, schemaFile: string): void {
   db.exec(sql);
 }
 
+/** Add a column to a table if it doesn't already exist (idempotent migration). */
+function ensureColumn(db: SqliteDb, table: string, column: string, ddl: string): void {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  }
+}
+
+/**
+ * Migrate an existing knowledge.db forward. CREATE TABLE IF NOT EXISTS cannot
+ * add columns to a pre-existing table, so additive columns are applied here.
+ */
+function migrateKnowledgeDb(db: SqliteDb): void {
+  ensureColumn(db, 'k_nodes', 'grounding', 'grounding TEXT');
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_knodes_grounding ON k_nodes(grounding)`);
+}
+
 export function openCodeDb(projectRoot: string): SqliteDb {
   const db = open(join(projectConfigDir(projectRoot), 'code.db'));
   applySchema(db, 'code-schema.sql');
@@ -37,6 +54,7 @@ export function openCodeDb(projectRoot: string): SqliteDb {
 export function openKnowledgeDb(projectRoot: string): SqliteDb {
   const db = open(join(projectConfigDir(projectRoot), 'knowledge.db'));
   applySchema(db, 'knowledge-schema.sql');
+  migrateKnowledgeDb(db);
   return db;
 }
 

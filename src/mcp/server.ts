@@ -16,6 +16,8 @@ import {
 import { listConcepts, membersOf, getConcept } from '../knowledge/concept-store.js';
 import { listCrossProjectLinks } from '../link/cross-project.js';
 import { runVerify } from '../pipeline/verify.js';
+import { runEnrichment } from '../pipeline/enrich.js';
+import { listEntities, relationshipsFor, listGaps } from '../knowledge/domain-store.js';
 import { loadConfig } from '../config.js';
 import { ingestProject } from '../ingest/orchestrator.js';
 import { syncProject } from '../code/sync.js';
@@ -284,6 +286,69 @@ export async function startMcpServer(root: string): Promise<void> {
         const stats = await runVerify(db, loadConfig(root), { pruneBelowConfidence: pruneBelow });
         return text(JSON.stringify(stats, null, 2));
       } finally { db.close(); }
+    },
+  );
+
+  server.tool(
+    'codegps_domain_model',
+    'The business-domain graph: entities + their evidence-grounded relationships. Every item shows its grounding (stated | structural | corroborated).',
+    { entity: z.string().optional(), limit: z.number().optional() },
+    async ({ entity, limit }) => {
+      const db = openKnowledgeDb(root);
+      try {
+        const entities = listEntities(db, { query: entity, limit: limit ?? 60 });
+        if (entities.length === 0) {
+          return text('No domain entities yet. Run `codegps sync` then `codegps enrich`.');
+        }
+        const lines: string[] = [`# Domain model (${entities.length} entit${entities.length === 1 ? 'y' : 'ies'})`];
+        for (const e of entities) {
+          lines.push(
+            `\n## ${e.title}  _(${e.grounding})_` +
+            (e.summary ? `\n${e.summary}` : '') +
+            (e.codeFiles.length ? `\ncode: ${e.codeFiles.slice(0, 5).join(', ')}` : ''),
+          );
+          const rels = relationshipsFor(db, e.id).filter((r) => r.fromId === e.id);
+          for (const r of rels) {
+            lines.push(`  - ${r.kind} → ${r.toTitle}  _(${r.grounding})_` + (r.evidence ? `  · ${r.evidence}` : ''));
+          }
+        }
+        return text(lines.join('\n'));
+      } finally { db.close(); }
+    },
+  );
+
+  server.tool(
+    'codegps_gaps',
+    'Open questions / knowledge gaps in the domain graph. Each names a gap and cites the evidence that revealed it — it never fabricates the missing answer.',
+    { limit: z.number().optional() },
+    async ({ limit }) => {
+      const db = openKnowledgeDb(root);
+      try {
+        const gaps = listGaps(db, limit ?? 100);
+        if (gaps.length === 0) return text('No knowledge gaps recorded.');
+        return text(
+          `# Knowledge gaps (${gaps.length})\n` +
+          gaps.map((g) =>
+            `- **${g.title}**  _(${g.grounding} · ${g.source})_` +
+            (g.summary ? `\n    ${g.summary}` : '') +
+            (g.evidenceText ? `\n    evidence: ${g.evidenceText}` : ''),
+          ).join('\n'),
+        );
+      } finally { db.close(); }
+    },
+  );
+
+  server.tool(
+    'codegps_enrich',
+    'Run the domain enrichment pass: structural entities + relationships from code, plus evidence-grounded gaps.',
+    { noAgent: z.boolean().optional() },
+    async ({ noAgent }) => {
+      const code = openCodeDb(root);
+      const know = openKnowledgeDb(root);
+      try {
+        const stats = await runEnrichment(know, code, loadConfig(root), { noAgent });
+        return text(JSON.stringify(stats, null, 2));
+      } finally { code.close(); know.close(); }
     },
   );
 

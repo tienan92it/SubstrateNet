@@ -172,13 +172,28 @@ export type KNodeKind =
   | 'decision' | 'intent' | 'business_rule' | 'problem' | 'solution'
   | 'question' | 'answer' | 'todo' | 'warning'
   | 'pattern'  | 'entity' | 'constraint'
+  // domain-enrichment kinds:
+  | 'actor' | 'process' | 'metric' | 'glossary_term' | 'knowledge_gap'
   // syntax-source kinds (deterministic):
   | 'path_mention' | 'code_block' | 'shell_command'
   | 'error_message' | 'stack_trace' | 'ticket_id' | 'url';
 
 export type KEdgeKind =
   | 'mentions' | 'resolves' | 'contradicts' | 'supersedes'
-  | 'derived_from' | 'same_as' | 'depends_on' | 'caused_by';
+  | 'derived_from' | 'same_as' | 'depends_on' | 'caused_by'
+  // domain-graph edges:
+  | 'relates_to' | 'has_state' | 'transitions_to' | 'governed_by'
+  | 'owned_by' | 'part_of' | 'gap_in';
+
+/**
+ * How a fact is grounded in evidence. This is the contract that enforces
+ * "based on facts, never assume":
+ *   - 'stated'       — explicitly said in a conversation (provenance → window).
+ *   - 'structural'   — derived from code structure (provenance → code node).
+ *   - 'corroborated' — supported by >=2 independent sources (stated + structural).
+ * A NULL value (legacy rows) is treated as 'stated'.
+ */
+export type Grounding = 'stated' | 'structural' | 'corroborated';
 
 export interface KNode {
   id: string;
@@ -187,8 +202,9 @@ export interface KNode {
   summary?: string;
   evidenceText?: string;
   confidence: number;
-  source: string;         // 'syntax' | 'agent:<name>' | 'manual'
+  source: string;         // 'syntax' | 'agent:<name>' | 'structural:code' | 'manual'
   agentModel?: string;
+  grounding?: Grounding;
   createdAt: number;
   updatedAt: number;
   clusterId?: string;
@@ -215,6 +231,39 @@ export interface KToCode {
   codeNodeId: string;
   codeFile?: string;
   weight?: number;
+}
+
+// =============================================================================
+// Domain enrichment (L2.5) — entity/relationship graph + gaps
+// =============================================================================
+
+/** A domain entity with its evidence-grounded relationships. */
+export interface DomainEntity {
+  id: string;
+  title: string;
+  summary?: string;
+  grounding: Grounding;
+  source: string;
+  codeFiles: string[];     // resolved L0 files backing this entity (if structural)
+}
+
+export interface DomainRelationship {
+  fromId: string;
+  toId: string;
+  fromTitle: string;
+  toTitle: string;
+  kind: KEdgeKind;
+  evidence?: string;       // verbatim quote or code ref (e.g. "table:accounts")
+  grounding: Grounding;
+}
+
+export interface KnowledgeGap {
+  id: string;
+  title: string;
+  summary?: string;
+  evidenceText?: string;
+  grounding: Grounding;
+  source: string;
 }
 
 // =============================================================================

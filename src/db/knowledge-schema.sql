@@ -98,6 +98,7 @@ CREATE TABLE IF NOT EXISTS k_nodes (
     confidence REAL NOT NULL,
     source TEXT NOT NULL,
     agent_model TEXT,
+    grounding TEXT,             -- 'stated' | 'structural' | 'corroborated' (NULL => 'stated')
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     cluster_id TEXT
@@ -105,6 +106,7 @@ CREATE TABLE IF NOT EXISTS k_nodes (
 CREATE INDEX IF NOT EXISTS idx_knodes_kind ON k_nodes(kind);
 CREATE INDEX IF NOT EXISTS idx_knodes_source ON k_nodes(source);
 CREATE INDEX IF NOT EXISTS idx_knodes_cluster ON k_nodes(cluster_id);
+CREATE INDEX IF NOT EXISTS idx_knodes_grounding ON k_nodes(grounding);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS k_nodes_fts USING fts5(
     id, title, summary, evidence_text,

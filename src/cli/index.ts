@@ -10,6 +10,7 @@ import { registerCanvas } from './canvas.js';
 import { registerLink } from './link.js';
 import { registerTriage } from './triage.js';
 import { registerVerify } from './verify.js';
+import { registerEnrich } from './enrich.js';
 
 const program = new Command();
 
@@ -28,6 +29,7 @@ registerCanvas(program);
 registerLink(program);
 registerTriage(program);
 registerVerify(program);
+registerEnrich(program);
 
 program.parseAsync(process.argv).catch((err) => {
   console.error(err?.stack ?? err);

@@ -27,11 +27,14 @@ import type { AgentId, Turn } from '../types.js';
 import { runTriageForWindows, type TriageRunResult } from '../pipeline/triage.js';
 import { runExtractorsForKeptWindows } from '../pipeline/extract.js';
 import { runClustererForNewFacts } from '../pipeline/cluster.js';
+import { runEnrichment } from '../pipeline/enrich.js';
 
 export interface IngestOpts {
   agentFilter?: AgentId;
   runTriage?: boolean;
   runExtract?: boolean;
+  /** Skip the domain enrichment pass (L2.5). Defaults to running it. */
+  runEnrich?: boolean;
 }
 
 export interface IngestStats {
@@ -45,6 +48,9 @@ export interface IngestStats {
   factsProduced: number;
   conceptsCreated: number;
   conceptsAttached: number;
+  domainEntities: number;
+  domainRelationships: number;
+  knowledgeGaps: number;
 }
 
 export async function ingestProject(root: string, opts: IngestOpts = {}): Promise<IngestStats> {
@@ -56,6 +62,7 @@ export async function ingestProject(root: string, opts: IngestOpts = {}): Promis
     sessionsSeen: 0, sessionsNew: 0, turnsIngested: 0,
     windowsCreated: 0, triaged: 0, kept: 0, dropped: 0, factsProduced: 0,
     conceptsCreated: 0, conceptsAttached: 0,
+    domainEntities: 0, domainRelationships: 0, knowledgeGaps: 0,
   };
 
   try {
@@ -149,6 +156,16 @@ export async function ingestProject(root: string, opts: IngestOpts = {}): Promis
           stats.conceptsAttached = clStats.attached;
         }
       }
+    }
+
+    // 8. Domain enrichment (L2.5). Runs unconditionally — structural
+    //    extraction depends on the code graph (updated by `sync`, not ingest),
+    //    and is idempotent. Skip only when explicitly disabled.
+    if (opts.runEnrich !== false) {
+      const enrich = await runEnrichment(knowDb, codeDb, cfg, { noAgent: opts.runExtract === false });
+      stats.domainEntities = enrich.structuralEntities;
+      stats.domainRelationships = enrich.structuralRelationships + enrich.agentRelationships;
+      stats.knowledgeGaps = enrich.detectedGaps + enrich.agentGaps;
     }
   } finally {
     codeDb.close();

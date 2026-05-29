@@ -27,6 +27,9 @@ export function registerStatus(program: Command): void {
           facts: count(know, 'k_nodes'),
           concepts: count(know, 'concepts'),
           agentRuns: count(know, 'agent_runs'),
+          entities: count(know, "k_nodes WHERE kind='entity'"),
+          relationships: count(know, "k_edges WHERE kind IN ('relates_to','owned_by','part_of','depends_on','has_state','transitions_to','governed_by')"),
+          gaps: count(know, "k_nodes WHERE kind='knowledge_gap'"),
         };
 
         console.log('CodeGps status');
@@ -42,6 +45,10 @@ export function registerStatus(program: Command): void {
         console.log(`    windows:  ${knowStats.windows}`);
         console.log(`    triaged:  ${knowStats.triaged}  (kept=${knowStats.kept}, dropped=${knowStats.dropped})`);
         console.log('  L2 facts:    ', knowStats.facts);
+        console.log('  L2.5 domain:');
+        console.log(`    entities:      ${knowStats.entities}`);
+        console.log(`    relationships: ${knowStats.relationships}`);
+        console.log(`    knowledge gaps: ${knowStats.gaps}`);
         console.log('  L3 concepts: ', knowStats.concepts);
         console.log('  Agent runs:  ', knowStats.agentRuns);
       } finally {
