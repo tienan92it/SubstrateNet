@@ -18,6 +18,7 @@ import '../agents/index.js';
 import { TRIAGE_AGENT, shouldKeep, labelsToRow } from '../agents/triage.js';
 import { DedupeAgent, storeWindowEmbedding } from '../agents/dedupe.js';
 import { upsertTriageLabels, getWindowText } from '../knowledge/triage-store.js';
+import { mapPool } from '../util/pool.js';
 
 export interface TriageRunResult {
   triaged: number;
@@ -37,30 +38,41 @@ export async function runTriageForWindows(
     embedded: 0, duplicateWindows: 0,
   };
 
-  for (const windowId of windowIds) {
+  const limit = cfg.concurrency ?? 4;
+
+  // Phase 1: run triage agent calls concurrently (the expensive part).
+  type Labeled =
+    | { windowId: string; ok: true; model: string; output: any }
+    | { windowId: string; ok: false; error: string }
+    | undefined;
+  const labeled = await mapPool(windowIds, limit, async (windowId): Promise<Labeled> => {
     const text = getWindowText(db, windowId);
-    if (!text) continue;
+    if (!text) return undefined;
     try {
       const out = await rt.run(TRIAGE_AGENT, { payload: { text, windowId } });
-      const kept = shouldKeep(out.output);
-      upsertTriageLabels(db, labelsToRow(windowId, out.model, out.output, kept));
-      result.triaged++;
-      if (kept) {
-        result.kept++;
-        result.keptWindowIds.push(windowId);
-      } else {
-        result.dropped++;
-      }
+      return { windowId, ok: true, model: out.model, output: out.output };
     } catch (e) {
-      const fallback = labelsToRow(windowId, 'fallback', {
+      return { windowId, ok: false, error: (e as Error).message.slice(0, 200) };
+    }
+  });
+
+  // Phase 2: persist labels sequentially (DB writes).
+  for (const l of labeled) {
+    if (!l) continue;
+    if (l.ok) {
+      const kept = shouldKeep(l.output);
+      upsertTriageLabels(db, labelsToRow(l.windowId, l.model, l.output, kept));
+      result.triaged++;
+      if (kept) { result.kept++; result.keptWindowIds.push(l.windowId); }
+      else result.dropped++;
+    } else {
+      upsertTriageLabels(db, labelsToRow(l.windowId, 'fallback', {
         relevance: 'unknown', domain: 'unknown', quality: 'signal', linkage: 'this_project',
-        confidence: 0.1,
-        rationale: `triage agent failed: ${(e as Error).message.slice(0, 200)}`,
-      }, true);
-      upsertTriageLabels(db, fallback);
+        confidence: 0.1, rationale: `triage agent failed: ${l.error}`,
+      }, true));
       result.triaged++;
       result.kept++;
-      result.keptWindowIds.push(windowId);
+      result.keptWindowIds.push(l.windowId);
     }
   }
 

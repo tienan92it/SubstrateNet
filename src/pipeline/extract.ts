@@ -25,6 +25,7 @@ import { DedupeAgent, storeKNodeEmbedding } from '../agents/dedupe.js';
 import { getWindowText, getTriageLabels } from '../knowledge/triage-store.js';
 import { upsertKNode, insertProvenance } from '../knowledge/store.js';
 import { resolvePath, resolveSymbol, writeKToCode } from './resolve.js';
+import { mapPool } from '../util/pool.js';
 
 export interface ExtractStats {
   factsProduced: number;
@@ -92,29 +93,39 @@ export async function runExtractorsForKeptWindows(
   let dedupe: DedupeAgent | undefined;
   try { dedupe = new DedupeAgent(cfg); } catch { dedupe = undefined; }
 
+  // Build the full (window × agent) task list first, then run the chat calls
+  // concurrently and persist results sequentially. The clusterer (incremental)
+  // stays serial elsewhere; extractors are independent per window so this is safe.
+  const tasks: Array<{ windowId: string; text: string; domain: string; agent: Extractor }> = [];
   for (const windowId of windowIds) {
     const labels = getTriageLabels(knowDb, windowId);
     if (!labels) continue;
     const text = getWindowText(knowDb, windowId);
     if (!text) continue;
-
-    // Skip windows tagged as duplicates by the Dedupe pass in triage.
-    if (labels.rationale && /\[dup_of:/.test(labels.rationale)) continue;
-
+    if (labels.rationale && /\[dup_of:/.test(labels.rationale)) continue; // skip dups
     const { agents } = route(labels.domain, labels.quality);
-    if (agents.length === 0) continue;
+    for (const agent of agents) tasks.push({ windowId, text, domain: labels.domain, agent });
+  }
 
-    for (const agent of agents) {
-      let out;
-      try {
-        out = await rt.run<ExtractorPayload, ExtractorOutput>(agent, {
-          payload: { text, windowId, domain: labels.domain },
-        });
-      } catch {
-        // Backend error: skip this agent for this window, continue with others.
-        continue;
-      }
+  const limit = cfg.concurrency ?? 4;
+  const outcomes = await mapPool(tasks, limit, async (t) => {
+    try {
+      const out = await rt.run<ExtractorPayload, ExtractorOutput>(t.agent, {
+        payload: { text: t.text, windowId: t.windowId, domain: t.domain },
+      });
+      return { t, out };
+    } catch {
+      return undefined; // backend error for this call; others continue
+    }
+  });
 
+  // Persist sequentially (DB writes + code resolution + embeddings).
+  for (const oc of outcomes) {
+    if (!oc) continue;
+    const { t, out } = oc;
+    const agent = t.agent;
+    const windowId = t.windowId;
+    {
       for (const fact of out.output.facts) {
         const { node, provenance } = factToRows(fact, windowId, agent.name, out.model);
         const tx = knowDb.transaction(() => {

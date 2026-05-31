@@ -1,0 +1,31 @@
+{
+  "concurrency": 8,
+  "agentBackends": {
+    "local": { "kind": "ollama", "endpoint": "http://localhost:11434" },
+    "openrouter": {
+      "kind": "openai-compatible",
+      "endpoint": "https://openrouter.ai/api/v1",
+      "apiKeyEnv": "OPENROUTER_API_KEY"
+    }
+  },
+  "agents": {
+    "dedupe":             { "model": "local:nomic-embed-text" },
+
+    "triage":             { "model": "openrouter:google/gemini-2.5-flash" },
+    "intent":             { "model": "openrouter:google/gemini-2.5-flash" },
+    "clusterer":          { "model": "openrouter:google/gemini-2.5-flash" },
+    "summarizer":         { "model": "openrouter:google/gemini-2.5-flash" },
+
+    "decision":           { "model": "openrouter:anthropic/claude-sonnet-4" },
+    "businessLogic":      { "model": "openrouter:anthropic/claude-sonnet-4" },
+    "problemSolution":    { "model": "openrouter:anthropic/claude-sonnet-4" },
+    "domainModeler":      { "model": "openrouter:anthropic/claude-sonnet-4" },
+    "technicalProfiler":  { "model": "openrouter:anthropic/claude-sonnet-4" },
+    "industryClassifier": { "model": "openrouter:anthropic/claude-sonnet-4" },
+    "industryEnricher":   { "model": "openrouter:anthropic/claude-sonnet-4" },
+    "linker":             { "model": "openrouter:anthropic/claude-sonnet-4" },
+    "verifier":           { "model": "openrouter:anthropic/claude-sonnet-4" },
+    "skillSynthesizer":   { "model": "openrouter:anthropic/claude-sonnet-4" }
+  },
+  "research": { "kind": "none" }
+}
