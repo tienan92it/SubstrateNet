@@ -146,10 +146,14 @@ function extractPathsFromArgs(args: unknown): string[] | undefined {
 }
 
 /**
- * Cursor project slug rule: strip leading slash, replace remaining "/" with "-".
- *   /Users/me/Workspace/Foo  ->  Users-me-Workspace-Foo
+ * Cursor project slug rule: replace every run of non-alphanumeric characters
+ * with a single "-", then trim leading/trailing dashes. This matches Cursor's
+ * actual encoding — NOT just slash replacement:
+ *   /Users/me/Workspace/Foo        -> Users-me-Workspace-Foo
+ *   /Users/me/Workspace/kafi/k_one -> Users-me-Workspace-kafi-k-one   (_ -> -)
+ *   /Users/me/Workspace/kafi/dp-2.0-> Users-me-Workspace-kafi-dp-2-0  (. -> -)
+ *   /Users/me/Desktop/.nosync/app  -> Users-me-Desktop-nosync-app     (runs collapse)
  */
 export function slugForPath(absPath: string): string {
-  const p = absPath.startsWith('/') ? absPath.slice(1) : absPath;
-  return p.split(/[\\/]/).join('-');
+  return absPath.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '');
 }

@@ -41,6 +41,19 @@ describe('CursorAdapter', () => {
     expect(slugForPath('/Users/me/Workspace/Foo')).toBe('Users-me-Workspace-Foo');
   });
 
+  it('encodes non-alphanumeric chars (underscore, dot, runs) like Cursor does', () => {
+    // underscore -> dash
+    expect(slugForPath('/Users/antran/Workspace/kafi/k_one')).toBe('Users-antran-Workspace-kafi-k-one');
+    // dot -> dash
+    expect(slugForPath('/Users/antran/Workspace/kafi/dp-2.0')).toBe('Users-antran-Workspace-kafi-dp-2-0');
+    // a run of separators (/.) collapses to a single dash
+    expect(slugForPath('/Users/antran/Desktop/Workspace/.nosync/kafi/kafi-gh'))
+      .toBe('Users-antran-Desktop-Workspace-nosync-kafi-kafi-gh');
+    // .code-workspace file
+    expect(slugForPath('/Users/antran/Workspace/kafi/k-wealth.code-workspace'))
+      .toBe('Users-antran-Workspace-kafi-k-wealth-code-workspace');
+  });
+
   it('discovers transcripts under a fake projects root', async () => {
     const fakeCursorRoot = mkdtempSync(join(tmpdir(), 'cursor-root-'));
     const projectPath = '/tmp/MyProject';
