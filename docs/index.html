@@ -27,13 +27,14 @@
   </header>
 
   <section class="hero">
-    <h1>A local, layered knowledge graph across code and AI agent conversations.</h1>
+    <h1>A local second brain across code and AI agent conversations.</h1>
     <p class="tagline">
       CodeGps indexes your code structure and the conversations you have with
       AI coding agents (Cursor, Claude Code, Codex, Copilot) into one local
-      knowledge graph. An agent pipeline triages noise, extracts decisions
-      and business rules, clusters them into concepts, and links shared
-      concepts across repositories.
+      knowledge graph. An agent pipeline triages noise, extracts decisions and
+      business rules, models the business domain, and aggregates what you know
+      into a cross-project skill graph — split along two axes: technical and
+      industry.
     </p>
     <div class="hero-actions">
       <a class="primary" href="getting-started.html">$ codegps init →</a>
@@ -43,8 +44,10 @@
   </section>
 
   <div class="layers" aria-label="Layer stack">
+<span class="lname">L5</span>  <span class="ldesc">Skill graph</span>              ── technical + industry skills across projects
 <span class="lname">L4</span>  <span class="ldesc">Cross-project links</span>      ── concepts shared between repos
 <span class="lname">L3</span>  <span class="ldesc">Concepts</span>                 ── clustered facts, agent-named
+<span class="lname">L2.5</span> <span class="ldesc">Domain enrichment</span>       ── entities, relationships, skills, industry, gaps
 <span class="lname">L2</span>  <span class="ldesc">Facts</span>                    ── decisions, business rules, intents
 <span class="lname">L1.5</span> <span class="ldesc">Triage</span>                  ── relevance / domain / quality / linkage
 <span class="lname">L1</span>  <span class="ldesc">Conversations</span>            ── sessions, turns, tool calls
@@ -60,16 +63,20 @@
       <p>Triage, extraction, clustering, linking, verification — each is a named agent with a versioned prompt and JSON schema, cached in <code>agent_runs</code>.</p>
     </div>
     <div class="feature">
-      <h3>Conversations as first-class evidence.</h3>
-      <p>Cursor / Claude Code / Codex / Copilot transcripts are ingested in-place. Decisions and rules survive the session.</p>
+      <h3>Grounded, never assumed.</h3>
+      <p>Every node carries a <code>grounding</code> tier — <code>structural</code>, <code>stated</code>, <code>corroborated</code>, <code>external</code>, <code>model</code> — so project truth and inferred knowledge stay separable and filterable.</p>
+    </div>
+    <div class="feature">
+      <h3>Technical and industry scopes.</h3>
+      <p>One axis is what the architecture objectively says; the other is the business domain your projects serve. Skills aggregate across both into a second-brain profile.</p>
     </div>
     <div class="feature">
       <h3>Local-first, SQLite throughout.</h3>
-      <p>Three databases: <code>code.db</code>, <code>knowledge.db</code>, and a global <code>~/.codegps/global.db</code>. Ollama is the default backend.</p>
+      <p>Three databases: <code>code.db</code>, <code>knowledge.db</code>, and a global <code>~/.codegps/global.db</code>. Ollama is the default backend; any OpenAI-compatible endpoint works.</p>
     </div>
     <div class="feature">
       <h3>MCP-native.</h3>
-      <p>14 tools over stdio. Drop into any MCP-aware agent in a single config block.</p>
+      <p>20 tools over stdio. Drop into any MCP-aware agent in a single config block.</p>
     </div>
     <div class="feature">
       <h3>Cross-project memory.</h3>
@@ -92,7 +99,8 @@ cd /path/to/your/project
 codegps init
 codegps sync
 codegps ingest
-codegps status</code></pre>
+codegps link        # cross-project links + skill graph
+codegps profile     # industries + top skills</code></pre>
 
   <p>
     Full walkthrough: <a href="getting-started.html">getting started →</a>
@@ -106,9 +114,10 @@ codegps status</code></pre>
     constraints, the trade-offs that never made it into a comment.
   </p>
   <p>
-    CodeGps adds five layers on top: raw conversation, triage, facts, concepts,
-    and cross-project links. Each layer is auditable, each agent's run is
-    cached, and every semantic call is a model + prompt + schema you can swap.
+    CodeGps adds the layers on top: raw conversation, triage, facts, domain
+    enrichment, concepts, cross-project links, and a global skill graph. Each
+    layer is auditable, each agent's run is cached, and every semantic call is a
+    model + prompt + schema you can swap.
   </p>
 
   <footer class="site-footer">

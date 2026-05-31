@@ -2,7 +2,7 @@
 
 # CodeGps
 
-**A local, layered knowledge graph across your code and your AI agent conversations.**
+**A local second brain: a layered knowledge graph across your code and your AI agent conversations.**
 
 [![CI](https://github.com/tienan92it/CodeGps/actions/workflows/ci.yml/badge.svg)](https://github.com/tienan92it/CodeGps/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
@@ -16,10 +16,16 @@
 CodeGps indexes your code structure *and* the conversations you have with AI
 coding agents (Cursor, Claude Code, Codex, Copilot) into one local knowledge
 graph. An agent pipeline triages noise, extracts decisions and business rules,
-clusters them into concepts, and links shared concepts across repositories.
+clusters them into concepts, models the business domain, and aggregates what you
+know into a cross-project skill graph.
+
+The result is a queryable picture of your work along two axes: **technical**
+(what the architecture objectively says) and **industry** (the business domain
+your projects serve). Every node is tagged with its **grounding** — how it's
+known — so project truth and inferred knowledge never blur together.
 
 Everything is local. SQLite for storage. Ollama is the default LLM backend; any
-OpenAI-compatible endpoint works too.
+OpenAI-compatible endpoint (OpenRouter, OpenAI, Together, Groq) works too.
 
 ---
 
@@ -39,116 +45,87 @@ ollama pull qwen3-embedding:0.6b                 # dedupe / clustering
 cd /path/to/your/project
 codegps init                                     # creates .codegps/
 codegps sync                                     # L0 — code structure
-codegps ingest                                   # L1 → L3 — conversations + agents
+codegps ingest                                   # L1 → L3 + enrichment (L2.5)
 codegps status                                   # see what landed in each layer
+
+# 4. Aggregate the second brain across projects
+codegps link                                     # L4 links + L5 skill graph
+codegps profile                                  # industries + top skills
 ```
 
 To make CodeGps callable from your AI agents, see [MCP integration](#mcp-integration).
 
 ---
 
-## Architecture
+## The model
 
-### Layers
-
-CodeGps splits "knowledge" into six layers along the DIKW pyramid. Each layer is
-its own SQLite table family. Edges cross layers explicitly. **Syntax is
+CodeGps splits "knowledge" into layers along the DIKW pyramid. Each layer is its
+own SQLite table family; edges cross layers explicitly. **Syntax is
 deterministic. Meaning is agent-driven.**
 
 | Layer | Content | How it's produced |
 |---|---|---|
-| **L0** Code Structure | symbols, calls, imports, fields | deterministic (tree-sitter / regex DDL) |
+| **L0** Code structure | symbols, calls, imports, fields, SQL tables | deterministic (tree-sitter / regex DDL) |
 | **L1** Conversations | sessions, turns, tool calls | deterministic (file parsers) |
-| **L1.5** Triage | Relevance / Domain / Quality / Linkage per window | **agent** (Triage) |
+| **L1.5** Triage | relevance / domain / quality / linkage per window | **agent** (Triage) |
 | **L2** Facts | decisions, business rules, intents, problems / solutions | **agents** (Decision · BusinessLogic · Intent · ProblemSolution) + syntax pass |
-| **L3** Concepts | clustered facts with names + structured summaries | **agents** (Clusterer · Summarizer) |
-| **L4** Cross-Project | shared concepts between repos | mechanical (exact + SimHash) + **agent** (Linker) |
+| **L2.5** Domain enrichment | dependencies, skills, entities, relationships, industry, gaps | manifests + SQL (structural) · reconciler · **agents** (TechnicalProfiler · DomainModeler · IndustryClassifier · IndustryEnricher) |
+| **L3** Concepts | clustered facts with names + structured summaries, scope-tagged | **agents** (Clusterer · Summarizer) |
+| **L4** Cross-project | shared concepts between repos | mechanical (exact + SimHash) + **agent** (Linker) |
+| **L5** Global skill graph | technical + industry skills aggregated across all projects | mechanical aggregation over L2.5 evidence |
 
-### Pipeline
+### Scope × grounding
 
-```mermaid
-flowchart TB
-  raw[L1 raw turns] --> seg[Window Segmenter\n deterministic]
-  seg --> syn[Syntax Pass\n paths / code / shell]
-  seg --> tri[Triage Agent\n relevance / domain / quality / linkage]
-  tri -->|kept| ded[Dedupe Agent\n embeddings]
-  ded -->|novel| route{Route by domain}
-  route --> dec[Decision Agent]
-  route --> biz[BusinessLogic Agent]
-  route --> int[Intent Agent]
-  route --> ps[ProblemSolution Agent]
-  syn --> facts[L2 facts]
-  dec & biz & int & ps --> facts
-  facts --> res[Code Resolver\n k_to_code]
-  facts --> clu[Clusterer Agent]
-  clu --> sum[Summarizer Agent]
-  sum --> concepts[L3 concepts]
-  concepts --> link[Linker Agent + mechanical]
-  link --> global[L4 global]
-  facts --> ver[Verifier Agent\n contradictions / pruning]
-```
+Two tags keep objective fact separate from inference:
 
----
+- **scope** — `technical` (architecture) · `industry` (business domain) · `meta`
+- **grounding** — how the claim is known:
 
-## What gets captured
-
-### Languages (L0 code structure)
-
-| Extension | Language | Engine |
+| Grounding | Meaning | Source |
 |---|---|---|
-| `.ts` `.tsx` `.mts` `.cts` `.js` `.jsx` `.mjs` `.cjs` | TypeScript / JavaScript | tree-sitter |
-| `.py` | Python | tree-sitter |
-| `.dart` | Dart | tree-sitter |
-| `.go` | Go | tree-sitter |
-| `.rs` | Rust | tree-sitter |
-| `.java` | Java | tree-sitter |
-| `.cs` | C# | tree-sitter |
-| `.sql` `.ddl` | SQL DDL (tables, columns, FKs, views, indexes, functions) | regex parser |
+| `structural` | objective, parsed from artifacts | code symbols, SQL schema, manifests |
+| `stated` | asserted in a conversation | extracted facts |
+| `corroborated` | stated **and** matched to a code entity | the Reconciler |
+| `external` | cited from outside the project | research backend (opt-in) |
+| `model` | the agent's own inference | enrichment agents |
 
-### Conversation sources (L1)
-
-| Source | Location | Notes |
-|---|---|---|
-| **Cursor** | `~/.cursor/projects/<slug>/agent-transcripts/<uuid>/<uuid>.jsonl` | full transcripts + tool calls |
-| **Claude Code** | `~/.claude/projects/<slug>/*.jsonl` | full transcripts + tool calls |
-| **Codex CLI** | `~/.codex/sessions/**/*.jsonl` | filtered by `cwd` metadata |
-| **GitHub Copilot Chat** | VS Code workspace storage (best-effort) | partial — VS Code internals |
-
-### Knowledge kinds (L2)
-
-| Kind | Source | Use case |
-|---|---|---|
-| `decision` · `constraint` · `pattern` | Decision Agent | "What did we decide about caching?" |
-| `business_rule` · `entity` · `constraint` · `pattern` | BusinessLogic Agent | "What invariants must refunds satisfy?" |
-| `intent` | Intent Agent | "What was the user trying to do in this session?" |
-| `problem` · `solution` | ProblemSolution Agent | "When did we hit this error last, and how was it fixed?" |
-| `path_mention` · `code_block` · `shell_command` · `error_message` · `stack_trace` · `ticket_id` · `url` | Syntax pass | grounding evidence |
+Project-truth queries default to `structural` / `stated` / `corroborated`.
+`external` and `model` are opt-in and always filterable — so "fill the gap"
+knowledge never gets mistaken for "what your project actually does."
 
 ---
 
 ## CLI
 
 ```
-codegps init [path]                # writes .codegps/{code.db,knowledge.db,config.json}
-codegps sync [path] [--full]       # re-index code (L0)
-codegps ingest [path] [--agent X]  # pull conversations + run agent pipeline (L1.5 → L3)
-codegps serve [path] --mcp         # MCP server over stdio (code + knowledge tools)
-codegps agents list                # list registered agents
-codegps agents eval [--agent X]    # run golden test fixtures against the live LLM
-codegps agents run <name> [path]   # run one agent over pending input (debug)
-codegps canvas <kind> [path]       # generate .canvas.tsx (triage-audit / project-map / ...)
-codegps link [path] [--rebuild]    # rebuild cross-project links (L4)
-codegps triage audit [path]        # show triaged windows with labels and rationale
-codegps verify [path]              # contradiction detection + low-confidence pruning
-codegps status [path]              # counts per layer
+codegps init [path]                  # writes .codegps/{code.db,knowledge.db,config.json}
+codegps sync [path] [--full]         # re-index code (L0)
+codegps ingest [path]                # conversations + agent pipeline + enrichment (L1.5→L2.5)
+  [--agent X] [--no-triage] [--no-extract] [--no-enrich] [--reprocess]
+codegps enrich [path] [--no-agent]   # run the L2.5 enrichment pass on its own
+codegps link [path] [--rebuild]      # rebuild cross-project links (L4) + skill graph (L5)
+codegps skills [--scope X] [--cross] # global skill graph, weighted by evidence
+codegps profile                      # industries + top skills across all projects
+codegps learn [path]                 # industry-standard knowledge not yet in your work
+codegps serve [path] --mcp           # MCP server over stdio
+codegps status [path]                # counts per layer, with scope + grounding breakdown
+codegps triage audit [path]          # show triaged windows with labels and rationale
+codegps verify [path]                # contradiction detection + low-confidence pruning
+codegps canvas <kind> [path]         # generate .canvas.tsx (triage-audit / project-map / ...)
+codegps clean [path]                 # remove project data (--local-only / --global-only / --all)
+codegps agents list | eval | run     # inspect / test / debug agents
 ```
+
+`ingest` is incremental: it only processes newly pulled windows. Use
+`--reprocess` to re-run the pipeline over **all** existing windows after a model
+swap or an interrupted run.
 
 ---
 
 ## MCP integration
 
-A single MCP server exposes 14 tools — both code (L0) and knowledge (L1.5–L3) —
-over stdio. Drop into Cursor / Claude Code via:
+A single MCP server exposes 20 tools — code (L0), knowledge (L1.5–L3), domain
+(L2.5), and the global second-brain (L4–L5) — over stdio:
 
 ```jsonc
 // ~/.cursor/mcp.json  (or equivalent for Claude Code)
@@ -162,70 +139,52 @@ over stdio. Drop into Cursor / Claude Code via:
 }
 ```
 
-Available tools:
-
-| Tool | Purpose |
-|---|---|
-| `codegps_search` | symbol search across code (name / kind / file:line) |
-| `codegps_node` | one symbol's details (signature, docstring, location) |
-| `codegps_context` | primary tool — facts + related code for a topic |
-| `codegps_recall` | semantic + FTS query across past conversations |
-| `codegps_decisions` | decisions / constraints / patterns for a topic or file |
-| `codegps_business_logic` | business rules / invariants / entities |
-| `codegps_concepts` | list or inspect L3 concepts |
-| `codegps_explain` | structured systematic-thinking view of a concept |
-| `codegps_link` | cross-project: where else this concept appears |
-| `codegps_triage_audit` | inspect kept vs dropped windows + rationale |
-| `codegps_verify` | run the Verifier sweep on demand |
-| `codegps_ingest` | trigger incremental ingest |
-| `codegps_sync` | trigger code re-index |
-| `codegps_status` | counts per layer |
+Primary tools: `codegps_context` (facts + code for a topic), `codegps_recall`
+(semantic + FTS over conversations), `codegps_domain_model`, `codegps_gaps`,
+`codegps_skills`, `codegps_profile`, `codegps_learn`. Full catalogue in the
+[MCP docs](https://tienan92it.github.io/CodeGps/mcp.html).
 
 ---
 
 ## Configuration
 
 Per-agent model selection lives in `~/.codegps/config.json` (auto-created on
-first `init`). Per-project overrides go in `<project>/.codegps/config.json`.
+first `init`). Per-project overrides go in `<project>/.codegps/config.json` and
+deep-merge over global.
 
 ```jsonc
 {
+  "concurrency": 8,
   "agentBackends": {
-    "default":  { "kind": "ollama", "endpoint": "http://localhost:11434" },
-    "frontier": { "kind": "openai-compatible", "endpoint": "https://api.openai.com/v1", "apiKeyEnv": "OPENAI_API_KEY" }
+    "local":      { "kind": "ollama", "endpoint": "http://localhost:11434" },
+    "openrouter": {
+      "kind": "openai-compatible",
+      "endpoint": "https://openrouter.ai/api/v1",
+      "apiKeyEnv": "OPENROUTER_API_KEY"   // name of the env var holding the key
+    }
   },
   "agents": {
-    "triage":          { "model": "default:qwen3:4b-instruct", "windowTokens": 2000 },
-    "dedupe":          { "model": "default:qwen3-embedding:0.6b" },
-    "decision":        { "model": "default:qwen2.5:14b", "fallback": "default:llama3.1:8b" },
-    "businessLogic":   { "model": "default:qwen2.5:14b" },
-    "intent":          { "model": "default:qwen3:4b-instruct" },
-    "problemSolution": { "model": "default:qwen2.5:14b" },
-    "clusterer":       { "model": "default:qwen3:4b-instruct" },
-    "summarizer":      { "model": "default:qwen2.5:14b" },
-    "linker":          { "model": "default:qwen2.5:14b" },
-    "verifier":        { "model": "default:qwen2.5:14b" }
+    "triage":            { "model": "openrouter:google/gemini-2.5-flash" },
+    "dedupe":            { "model": "local:nomic-embed-text" },
+    "businessLogic":     { "model": "openrouter:anthropic/claude-sonnet-4", "fallback": "local:qwen2.5:14b" },
+    "technicalProfiler": { "model": "openrouter:anthropic/claude-sonnet-4" },
+    "industryClassifier":{ "model": "openrouter:anthropic/claude-sonnet-4" }
+    // ... decision, problemSolution, domainModeler, industryEnricher,
+    //     clusterer, summarizer, linker, verifier, skillSynthesizer
   }
 }
 ```
 
-Bumping a model invalidates that agent's cache on the next run; old runs stay
-in `agent_runs` for audit.
+See [`frontier.config.example.json`](./frontier.config.example.json) for a
+full local-plus-frontier split.
 
-### Frontier-quality routing (optional)
+> **API keys.** `apiKeyEnv` is the *name of an environment variable*, not the
+> key itself — the backend reads `process.env[apiKeyEnv]`. To paste a key
+> directly, use the `apiKey` field instead. Prefer `apiKeyEnv` to keep secrets
+> out of the config file.
 
-Add an `apiKeyEnv` backend and route only the hardest agents to it; the rest
-stay local:
-
-```jsonc
-{
-  "agents": {
-    "decision":      { "model": "frontier:gpt-4o-mini", "fallback": "default:qwen2.5:14b" },
-    "businessLogic": { "model": "frontier:gpt-4o-mini", "fallback": "default:qwen2.5:14b" },
-    "linker":        { "model": "frontier:gpt-4o-mini", "fallback": "default:qwen2.5:14b" }
-  }
-}
-```
+Bumping a model invalidates that agent's cache on the next run; old runs stay in
+`agent_runs` for audit.
 
 ---
 
@@ -234,17 +193,17 @@ stay local:
 ```
 <project>/.codegps/
 ├── code.db          # L0 — codegraph-compatible schema
-├── knowledge.db     # L1, L1.5, L2, L3, agent_runs cache
+├── knowledge.db     # L1, L1.5, L2, L2.5, L3 + agent_runs cache
 ├── canvas/          # generated .canvas.tsx files
 └── config.json      # per-project agent overrides
 
 ~/.codegps/
-├── global.db        # L4 — cross-project registry + concept_links
+├── global.db        # L4 links + L5 skills / industries + project registry
 └── config.json      # global defaults
 ```
 
-All files are local SQLite. Conversation transcripts are read in-place from
-each agent's home directory — never copied.
+All files are local SQLite. Conversation transcripts are read in-place from each
+agent's home directory — never copied.
 
 ---
 
@@ -253,13 +212,13 @@ each agent's home directory — never copied.
 ```bash
 npm install
 npm run build       # tsc + copy schemas / canvas templates
-npm test            # 59 unit + golden tests, ~600ms
+npm test            # unit + golden tests
 npm run dev         # tsc --watch
 ```
 
 Adding a language: add the extension to [`src/code/languages.ts`](src/code/languages.ts),
-register handlers in [`src/code/extractor.ts`](src/code/extractor.ts), add a
-test in [`__tests__/unit/code-extractor.test.ts`](__tests__/unit/code-extractor.test.ts).
+register handlers in [`src/code/extractor.ts`](src/code/extractor.ts), add a test
+in [`__tests__/unit/code-extractor.test.ts`](__tests__/unit/code-extractor.test.ts).
 ~50 lines per language is typical.
 
 Adding an agent: implement the `Agent<I, O>` interface in `src/agents/<name>.ts`,

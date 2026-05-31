@@ -31,8 +31,9 @@
   <div class="toc">
     <h4>commands</h4>
     <ul>
-      <li><a href="#init">init</a> · <a href="#sync">sync</a> · <a href="#ingest">ingest</a> · <a href="#status">status</a></li>
-      <li><a href="#serve">serve</a> · <a href="#canvas">canvas</a> · <a href="#link">link</a> · <a href="#verify">verify</a></li>
+      <li><a href="#init">init</a> · <a href="#sync">sync</a> · <a href="#ingest">ingest</a> · <a href="#enrich">enrich</a> · <a href="#status">status</a></li>
+      <li><a href="#link">link</a> · <a href="#skills">skills</a> · <a href="#profile">profile</a> · <a href="#learn">learn</a></li>
+      <li><a href="#serve">serve</a> · <a href="#canvas">canvas</a> · <a href="#verify">verify</a> · <a href="#clean">clean</a></li>
       <li><a href="#triage">triage audit</a> · <a href="#agents">agents (list / eval / run)</a></li>
     </ul>
   </div>
@@ -52,14 +53,21 @@
   <pre><code>L0 sync complete: 142 files, 2041 nodes, 3177 edges</code></pre>
 
   <h2 id="ingest">ingest</h2>
-  <pre><code>codegps ingest [path] [--agent &lt;id&gt;] [--no-triage] [--no-extract]</code></pre>
-  <p>Pulls new conversation data and runs the agent pipeline.</p>
+  <pre><code>codegps ingest [path] [--agent &lt;id&gt;] [--no-triage] [--no-extract] [--no-enrich] [--reprocess]</code></pre>
+  <p>Pulls new conversation data, runs the agent pipeline (L1.5→L3), then the enrichment pass (L2.5).</p>
   <table>
     <tr><th>Flag</th><th>Effect</th></tr>
     <tr><td><code>--agent cursor|claude-code|codex|copilot</code></td><td>Limit to one adapter.</td></tr>
     <tr><td><code>--no-triage</code></td><td>Skip the Triage Agent — useful when the LLM is offline.</td></tr>
     <tr><td><code>--no-extract</code></td><td>Skip extractor agents — populate L1/L1.5 only.</td></tr>
+    <tr><td><code>--no-enrich</code></td><td>Skip the L2.5 enrichment pass.</td></tr>
+    <tr><td><code>--reprocess</code></td><td>Re-run triage / extract / cluster over <strong>all</strong> existing windows, not just newly ingested ones. Use after a model swap or an interrupted run.</td></tr>
   </table>
+  <p class="small">
+    <code>ingest</code> is incremental — it only processes windows created this
+    run. If a previous run finished cleanly, a re-run reports zeros because there
+    is nothing new. <code>--reprocess</code> forces a full re-pass.
+  </p>
   <p>Output:</p>
   <pre><code>Ingest complete:
   Sessions seen:    24 (new: 3)
@@ -67,11 +75,33 @@
   Windows created:  19
   Triaged:          19 (kept 14, dropped 5)
   Facts produced:   31
-  Concepts:         6 created, 14 attached</code></pre>
+  Concepts:         6 created, 14 attached
+  Domain entities:  8
+  Relationships:    11
+  Knowledge gaps:   2</code></pre>
+
+  <h2 id="enrich">enrich</h2>
+  <pre><code>codegps enrich [path] [--no-agent]</code></pre>
+  <p>
+    Runs the L2.5 enrichment pass on its own: manifest + SQL structural
+    extraction, entity reconciliation, technical-skill synthesis, domain
+    modeling, industry classification, industry enrichment, and gap detection.
+    Works for any project type — frontend, library, or schema-heavy backend —
+    using whatever signal exists (code, manifests, conversations).
+  </p>
+  <table>
+    <tr><th>Flag</th><th>Effect</th></tr>
+    <tr><td><code>--no-agent</code></td><td>Structural + deterministic gaps only (no LLM): manifests, SQL entities, reconciliation, detected gaps.</td></tr>
+  </table>
+  <p class="small">
+    Counts in the report are <strong>rows added this run</strong>, not totals. A
+    re-run over already-enriched data shows zeros; use <code>codegps status</code>
+    for true totals.
+  </p>
 
   <h2 id="status">status</h2>
   <pre><code>codegps status [path]</code></pre>
-  <p>Counts per layer. Cheap, read-only.</p>
+  <p>Counts per layer, broken down by <code>scope</code> and <code>grounding</code>. Cheap, read-only.</p>
 
   <h2 id="serve">serve</h2>
   <pre><code>codegps serve [path] --mcp</code></pre>
@@ -91,11 +121,28 @@
 
   <h2 id="link">link</h2>
   <pre><code>codegps link [path] [--rebuild]</code></pre>
-  <p>Rebuilds the L4 cross-project graph: exports this project's concepts to <code>~/.codegps/global.db</code>, runs mechanical matching, then the Linker Agent.</p>
+  <p>Rebuilds the L4 cross-project graph and the L5 skill graph: exports this project's concepts and enrichment evidence to <code>~/.codegps/global.db</code>, runs mechanical matching, the Linker Agent, then synthesizes skills across all registered projects.</p>
   <table>
     <tr><th>Flag</th><th>Effect</th></tr>
     <tr><td><code>--rebuild</code></td><td>Wipe <code>concept_links</code> first; re-compute from scratch.</td></tr>
   </table>
+
+  <h2 id="skills">skills</h2>
+  <pre><code>codegps skills [--scope technical|industry] [--cross] [--limit &lt;n&gt;]</code></pre>
+  <p>The global skill graph (L5): what you know, weighted by evidence across projects. Each row shows evidence weight, grounding, and project count.</p>
+  <table>
+    <tr><th>Flag</th><th>Effect</th></tr>
+    <tr><td><code>--scope</code></td><td>Filter to <code>technical</code> or <code>industry</code> skills.</td></tr>
+    <tr><td><code>--cross</code></td><td>Only skills present in more than one project.</td></tr>
+  </table>
+
+  <h2 id="profile">profile</h2>
+  <pre><code>codegps profile</code></pre>
+  <p>The big-picture second-brain summary across all projects: classified industries, top technical skills by evidence weight, and the grounding mix. Read-only over <code>global.db</code>.</p>
+
+  <h2 id="learn">learn</h2>
+  <pre><code>codegps learn [path] [--limit &lt;n&gt;]</code></pre>
+  <p>Learning targets: industry-standard knowledge (grounding <code>model</code> / <code>external</code>) the IndustryEnricher surfaced that is <em>not</em> yet grounded in your own work. These are general domain knowledge, explicitly distinct from facts about your project.</p>
 
   <h2 id="verify">verify</h2>
   <pre><code>codegps verify [path] [--prune-below &lt;n&gt;] [--max-pairs &lt;n&gt;] [--invalidate-triage-days &lt;n&gt;]</code></pre>
@@ -105,6 +152,17 @@
     <li>For each cluster with multiple same-kind facts, pairwise verify (cap per cluster).</li>
     <li>Optionally invalidate triage cache entries older than N days so the next ingest re-triages them.</li>
   </ol>
+
+  <h2 id="clean">clean</h2>
+  <pre><code>codegps clean [path] [--local-only] [--global-only] [--all] [--yes]</code></pre>
+  <p>Removes a project's knowledge: its local <code>.codegps/</code> and/or its rows in the global brain. The skill graph is re-aggregated after global rows are removed. Runs as a dry run by default — it prints the plan and only deletes with <code>--yes</code>.</p>
+  <table>
+    <tr><th>Flag</th><th>Effect</th></tr>
+    <tr><td><code>--local-only</code></td><td>Only delete the local <code>.codegps/</code> directory.</td></tr>
+    <tr><td><code>--global-only</code></td><td>Only delete this project's rows in <code>~/.codegps/global.db</code>.</td></tr>
+    <tr><td><code>--all</code></td><td>Full reset: every registered project's local data + the global brain (keeps <code>config.json</code>).</td></tr>
+    <tr><td><code>-y, --yes</code></td><td>Skip the dry run and actually delete.</td></tr>
+  </table>
 
   <h2 id="triage">triage audit</h2>
   <pre><code>codegps triage audit [path] [--dropped] [--limit &lt;n&gt;]</code></pre>

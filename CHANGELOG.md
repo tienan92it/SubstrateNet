@@ -6,11 +6,56 @@ All notable changes to CodeGps. Format loosely follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **API key resolution** — backends now accept an inline `apiKey` field in
+  addition to `apiKeyEnv` (env-var name), and guard against a raw key pasted
+  into `apiKeyEnv`. Previously a misplaced key silently failed every
+  OpenAI-compatible agent with "requires apiKey".
+- **Nested manifests** — the manifest parser now walks the project
+  (depth-limited, skipping `node_modules` / `build` / `.dart_tool` / …) instead
+  of reading the root only. Monorepos (e.g. a Flutter app + a web frontend in
+  one repo) now contribute all of their dependencies and tooling.
+- **Industry classification ungated** — the IndustryClassifier now reads the
+  full available picture (package metadata, dependencies, code symbols, README,
+  entities, rules) and no longer early-returns "unclassified" when there's no
+  SQL schema or business rules. Frontend / library / data projects classify
+  from their stack and naming.
+
+### Added — Second brain (L2.5 + L5)
+
+Turns CodeGps from a fact store into a business-domain graph and a cross-project
+skill graph. Knowledge is tagged on two axes — `scope` (`technical` | `industry`
+| `meta`) and `grounding` (`structural` | `stated` | `corroborated` | `external`
+| `model`) — and every enriched node carries an evidence citation; nothing is
+fabricated.
+
+- **Skill graph (L5)** — `codegps skills` / `codegps profile` / `codegps learn`
+  aggregate per-project technical and industry evidence into weighted skills in
+  `~/.codegps/global.db`, with cross-project counts. `codegps link` synthesizes
+  it. MCP: `codegps_skills`, `codegps_profile`, `codegps_learn`.
+- **Technical profile** (`agents/technical-profiler.ts`) — synthesizes higher-
+  level skills from languages + declared dependencies (manifests).
+- **Manifest / infra parser** (`pipeline/manifests.ts`) — deterministic
+  `dependency` and `tool` facts across npm, pip, poetry, Go, Cargo, pubspec,
+  composer, Gemfile, Maven, Gradle, csproj, plus Docker / CI / k8s detection.
+- **Entity reconciliation** (`pipeline/reconcile.ts`) — matches stated entities
+  to structural code entities by normalized name, links them `same_as`, and
+  upgrades grounding to `corroborated`.
+- **Industry classification + enrichment** — IndustryClassifier names the
+  business domain; IndustryEnricher proposes industry-standard concepts as
+  `model` / `external` learning targets (never confused with project truth).
+- **Scope × grounding** — `scope` and `grounding` columns on `k_nodes` and
+  `concepts` (additive migrations); `codegps status` breaks counts down by both.
+- **Incremental control** — `codegps ingest --reprocess` re-runs the pipeline
+  over all existing windows; `--no-enrich` skips the L2.5 pass.
+- **Cleanup** — `codegps clean` removes project data locally and/or globally
+  (`--local-only` / `--global-only` / `--all`) and re-aggregates the skill graph.
+
 ### Added — Domain enrichment (L2.5)
 
-Turns CodeGps from a fact store into a business-domain graph. Every enriched
-node and edge carries a `grounding` tier (`stated` | `structural` |
-`corroborated`) and an evidence citation; nothing is fabricated.
+Every enriched node and edge carries a `grounding` tier (`stated` |
+`structural` | `corroborated`) and an evidence citation.
 
 - **Grounding model** — new `grounding` column on `k_nodes` (additive migration
   for existing DBs); makes "based on facts, never assume" queryable.

@@ -34,14 +34,15 @@
 
   <h1>Architecture</h1>
   <p class="lede">
-    Six layers, two databases, one runtime contract. Syntax is deterministic.
-    Meaning is agent-driven.
+    Eight layers, three databases, one runtime contract. Syntax is
+    deterministic. Meaning is agent-driven. Every claim carries its grounding.
   </p>
 
   <div class="toc">
     <h4>on this page</h4>
     <ul>
       <li><a href="#layers">layered model</a></li>
+      <li><a href="#scope-grounding">scope × grounding</a></li>
       <li><a href="#pipeline">pipeline</a></li>
       <li><a href="#agents">the agent layer</a></li>
       <li><a href="#runtime">agent runtime</a></li>
@@ -61,13 +62,38 @@
 
   <table>
     <tr><th>Layer</th><th>Content</th><th>Produced by</th></tr>
-    <tr><td><strong>L0</strong> Code Structure</td><td>symbols, calls, imports, fields</td><td>deterministic (tree-sitter / regex DDL)</td></tr>
+    <tr><td><strong>L0</strong> Code Structure</td><td>symbols, calls, imports, fields, SQL tables</td><td>deterministic (tree-sitter / regex DDL)</td></tr>
     <tr><td><strong>L1</strong> Conversations</td><td>sessions, turns, tool calls</td><td>deterministic (file parsers)</td></tr>
     <tr><td><strong>L1.5</strong> Triage</td><td>Relevance / Domain / Quality / Linkage labels</td><td><strong>agent</strong> (Triage)</td></tr>
     <tr><td><strong>L2</strong> Facts</td><td>decisions, business rules, intents, problems, solutions</td><td><strong>agents</strong> (Decision · BusinessLogic · Intent · ProblemSolution) + syntax pass</td></tr>
-    <tr><td><strong>L3</strong> Concepts</td><td>clustered facts with names + structured summaries</td><td><strong>agents</strong> (Clusterer · Summarizer)</td></tr>
+    <tr><td><strong>L2.5</strong> Domain enrichment</td><td>dependencies, skills, entities, relationships, industry, gaps</td><td>manifests + SQL (structural) · Reconciler · <strong>agents</strong> (TechnicalProfiler · DomainModeler · IndustryClassifier · IndustryEnricher)</td></tr>
+    <tr><td><strong>L3</strong> Concepts</td><td>clustered facts with names + structured summaries, scope-tagged</td><td><strong>agents</strong> (Clusterer · Summarizer)</td></tr>
     <tr><td><strong>L4</strong> Cross-Project</td><td>shared concepts between repos</td><td>mechanical (exact + SimHash) + <strong>agent</strong> (Linker)</td></tr>
+    <tr><td><strong>L5</strong> Skill graph</td><td>technical + industry skills aggregated across all projects</td><td>mechanical aggregation over L2.5 evidence</td></tr>
   </table>
+
+  <h2 id="scope-grounding">Scope × grounding</h2>
+  <p>
+    Two tags on every knowledge node keep objective fact separate from
+    inference. They are the mechanism behind "based on facts, never assume."
+  </p>
+  <p><strong>scope</strong> — <code>technical</code> (architecture) ·
+    <code>industry</code> (business domain) · <code>meta</code>.</p>
+  <table>
+    <tr><th>grounding</th><th>meaning</th><th>source</th></tr>
+    <tr><td><code>structural</code></td><td>objective, parsed from artifacts</td><td>code symbols, SQL schema, manifests</td></tr>
+    <tr><td><code>stated</code></td><td>asserted in a conversation</td><td>extracted facts</td></tr>
+    <tr><td><code>corroborated</code></td><td>stated <em>and</em> matched to a code entity</td><td>the Reconciler</td></tr>
+    <tr><td><code>external</code></td><td>cited from outside the project</td><td>research backend (opt-in)</td></tr>
+    <tr><td><code>model</code></td><td>the agent's own inference</td><td>enrichment agents</td></tr>
+  </table>
+  <p class="small">
+    Project-truth queries default to <code>structural</code> / <code>stated</code> /
+    <code>corroborated</code>. <code>external</code> and <code>model</code> are
+    opt-in and always filterable, so "fill the gap" knowledge never gets mistaken
+    for what your project actually does. <code>codegps status</code> breaks every
+    layer down by both scope and grounding.
+  </p>
 
   <h2 id="pipeline">Pipeline</h2>
   <p>
@@ -96,10 +122,24 @@ flowchart TB
   facts --&gt; clu[Clusterer]
   clu --&gt; sum[Summarizer]
   sum --&gt; concepts[L3 concepts]
+  facts --&gt; enr[L2.5 Enrichment]
+  code[L0 code + manifests] --&gt; enr
+  enr --&gt; entities[entities / relationships / skills / industry / gaps]
   concepts --&gt; link[Linker + mechanical]
-  link --&gt; global[L4 global]
+  entities --&gt; link
+  link --&gt; global[L4 links + L5 skills]
   facts --&gt; ver[Verifier]
   </div>
+
+  <p><strong>Enrichment stages (L2.5)</strong></p>
+  <ul>
+    <li><em>Manifest parser</em> — walks the project (depth-limited) for dependency manifests and infra files; emits <code>dependency</code> / <code>tool</code> facts (structural). Monorepos with nested manifests are fully covered.</li>
+    <li><em>Domain-from-code</em> — promotes SQL tables to <code>entity</code> facts and foreign keys to <code>relates_to</code> edges (structural).</li>
+    <li><em>Reconciler</em> — matches stated entities to structural ones by normalized name; links <code>same_as</code> and upgrades grounding to <code>corroborated</code>.</li>
+    <li><em>TechnicalProfiler</em> — synthesizes higher-level skills from languages + declared dependencies.</li>
+    <li><em>IndustryClassifier / IndustryEnricher</em> — names the business domain from any available signal; proposes industry-standard concepts as <code>model</code>/<code>external</code> learning targets.</li>
+    <li><em>Gap detector</em> — evidence-cited <code>knowledge_gap</code> nodes; names the gap, never the answer.</li>
+  </ul>
 
   <p><strong>Deterministic stages</strong></p>
   <ul>
@@ -121,10 +161,11 @@ flowchart TB
 
   <h2 id="agents">The agent layer</h2>
   <p>
-    There are nine chat agents and one embedding-only agent. Each has a
+    There are fourteen chat agents and one embedding-only agent. Each has a
     versioned prompt, a JSON schema, and a model reference resolved from
     config. All share a single runtime that handles caching, validation, and
-    persistence.
+    persistence. Agent-bound calls run with bounded concurrency
+    (<code>config.concurrency</code>).
   </p>
 
   <table>
@@ -137,6 +178,10 @@ flowchart TB
     <tr><td><code>problemSolution</code></td><td>window</td><td>(problem, solution) pairs</td><td>domain ∈ {debugging, implementation}</td></tr>
     <tr><td><code>clusterer</code></td><td>new fact + top-K candidate concepts</td><td>attach / create / merge</td><td>each new fact</td></tr>
     <tr><td><code>summarizer</code></td><td>concept + member facts</td><td>name + structured summary</td><td>each touched concept</td></tr>
+    <tr><td><code>technicalProfiler</code></td><td>languages + dependencies</td><td>technical skills</td><td>enrichment (L2.5)</td></tr>
+    <tr><td><code>domainModeler</code></td><td>entities + evidence</td><td>relationships / gaps (evidence-enforced)</td><td>enrichment (L2.5)</td></tr>
+    <tr><td><code>industryClassifier</code></td><td>stack + symbols + README + entities + rules</td><td>industry label + confidence + evidence</td><td>enrichment (L2.5)</td></tr>
+    <tr><td><code>industryEnricher</code></td><td>industry + present concepts</td><td>industry-standard concepts (model/external)</td><td>enrichment (L2.5)</td></tr>
     <tr><td><code>linker</code></td><td>two cross-project concepts</td><td>same_as / variant_of / supersedes / contradicts / none</td><td>cross-project candidate pairs</td></tr>
     <tr><td><code>verifier</code></td><td>pair of same-cluster facts</td><td>consistent / contradicts / supersedes</td><td>periodic sweep</td></tr>
   </table>
@@ -182,14 +227,16 @@ interface AgentRuntime {
 │   ├── nodes_fts          (FTS5 over names / signatures / docstrings)
 │   └── unresolved_refs
 │
-├── knowledge.db     # L1, L1.5, L2, L3 + agent cache
+├── knowledge.db     # L1, L1.5, L2, L2.5, L3 + agent cache
 │   ├── sessions / turns / tool_calls
 │   ├── turns_fts          (FTS5 over turn text)
 │   ├── turn_windows / triage_labels
-│   ├── k_nodes / k_edges / k_provenance / k_to_code
+│   ├── k_nodes            (+ scope, grounding, source_url columns)
+│   ├── k_edges / k_provenance / k_to_code
 │   ├── k_nodes_fts        (FTS5 over fact titles + summaries)
 │   ├── k_node_embeddings  (sidecar — keeps k_nodes lean)
-│   ├── concepts
+│   ├── concepts           (+ scope, grounding columns)
+│   ├── research_cache     (external lookups, opt-in)
 │   └── agent_runs         (cache + audit)
 │
 └── canvas/          # generated .canvas.tsx artifacts
@@ -198,13 +245,18 @@ interface AgentRuntime {
 ├── global.db
 │   ├── projects
 │   ├── concepts_global    (mirrors per-project concepts with embeddings)
-│   └── concept_links      (a, b, kind, score, source)
+│   ├── concept_links      (a, b, kind, score, source)
+│   ├── skills             (L5 — name, scope, evidence_weight, project_count)
+│   ├── skill_evidence     (per-project evidence behind each skill)
+│   └── industries         (classified business domains across projects)
 └── config.json</code></pre>
 
   <p>
     Three databases, three responsibilities. The split keeps the code DB
     drop-in for <a href="https://github.com/colbymchenry/codegraph">codegraph</a>
-    users and lets the knowledge schema evolve independently.
+    users and lets the knowledge schema evolve independently. Knowledge-schema
+    columns (<code>scope</code>, <code>grounding</code>, …) are added via additive
+    migrations, so existing databases upgrade in place.
   </p>
 
   <h2 id="languages">Languages</h2>
