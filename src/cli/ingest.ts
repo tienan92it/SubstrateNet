@@ -11,13 +11,15 @@ export function registerIngest(program: Command): void {
     .option('--no-triage', 'Skip Triage Agent (debug)')
     .option('--no-extract', 'Skip extractor agents (debug)')
     .option('--no-enrich', 'Skip domain enrichment pass (L2.5)')
-    .action(async (path: string, opts: { agent?: string; triage?: boolean; extract?: boolean; enrich?: boolean }) => {
+    .option('--reprocess', 'Re-run triage/extract/cluster over ALL existing windows (after a model swap or interrupted run), not just newly ingested ones', false)
+    .action(async (path: string, opts: { agent?: string; triage?: boolean; extract?: boolean; enrich?: boolean; reprocess?: boolean }) => {
       const root = resolve(path);
       const stats = await ingestProject(root, {
         agentFilter: opts.agent as any,
         runTriage: opts.triage !== false,
         runExtract: opts.extract !== false,
         runEnrich: opts.enrich !== false,
+        reprocess: opts.reprocess === true,
       });
       console.log(`Ingest complete:`);
       console.log(`  Sessions seen:    ${stats.sessionsSeen} (new: ${stats.sessionsNew})`);

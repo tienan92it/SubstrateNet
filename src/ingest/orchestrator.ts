@@ -35,6 +35,11 @@ export interface IngestOpts {
   runExtract?: boolean;
   /** Skip the domain enrichment pass (L2.5). Defaults to running it. */
   runEnrich?: boolean;
+  /**
+   * Re-run triage/extract/cluster over ALL existing windows, not just newly
+   * ingested ones. Use after switching models or to finish an interrupted run.
+   */
+  reprocess?: boolean;
 }
 
 export interface IngestStats {
@@ -138,9 +143,17 @@ export async function ingestProject(root: string, opts: IngestOpts = {}): Promis
       }
     }
 
+    // Which windows feed triage/extraction: only newly-created ones by default,
+    // or EVERY existing window with --reprocess (e.g. after a model swap or an
+    // interrupted run). Agent-run caching makes a same-model reprocess cheap;
+    // a new model is a genuine re-run.
+    const windowsToProcess = opts.reprocess
+      ? (knowDb.prepare(`SELECT id FROM turn_windows ORDER BY rowid`).all() as Array<{ id: string }>).map((w) => w.id)
+      : newWindowIds;
+
     // 5. Triage (M3)
-    if (opts.runTriage !== false && newWindowIds.length > 0) {
-      const tri: TriageRunResult = await runTriageForWindows(root, knowDb, cfg, newWindowIds);
+    if (opts.runTriage !== false && windowsToProcess.length > 0) {
+      const tri: TriageRunResult = await runTriageForWindows(root, knowDb, cfg, windowsToProcess);
       stats.triaged = tri.triaged;
       stats.kept = tri.kept;
       stats.dropped = tri.dropped;
