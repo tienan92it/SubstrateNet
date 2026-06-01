@@ -25,7 +25,12 @@
     "industryEnricher":   { "model": "openrouter:anthropic/claude-sonnet-4" },
     "linker":             { "model": "openrouter:anthropic/claude-sonnet-4" },
     "verifier":           { "model": "openrouter:anthropic/claude-sonnet-4" },
-    "skillSynthesizer":   { "model": "openrouter:anthropic/claude-sonnet-4" }
+    "skillSynthesizer":   { "model": "openrouter:anthropic/claude-sonnet-4" },
+
+    "fileAnalyzer":        { "model": "openrouter:google/gemini-2.5-flash" },
+    "architectureAnalyzer":{ "model": "openrouter:google/gemini-2.5-flash" },
+    "domainAnalyzer":      { "model": "openrouter:anthropic/claude-sonnet-4" },
+    "profileWriter":       { "model": "openrouter:anthropic/claude-sonnet-4" }
   },
   "research": { "kind": "none" }
 }
