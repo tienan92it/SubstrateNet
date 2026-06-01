@@ -2,7 +2,7 @@
 
 # Substrate Net
 
-**A local second brain: a layered knowledge graph across your code and your AI agent conversations.**
+**Cross-project skills. One local view.**
 
 [![CI](https://github.com/tienan92it/SubstrateNet/actions/workflows/ci.yml/badge.svg)](https://github.com/tienan92it/SubstrateNet/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
@@ -13,11 +13,13 @@
 
 </div>
 
-Substrate Net indexes your code structure *and* the conversations you have with AI
-coding agents (Cursor, Claude Code, Codex, Copilot) into one local knowledge
-graph. An agent pipeline triages noise, extracts decisions and business rules,
+Substrate Net turns your code and AI agent conversations into a **cross-project
+skill graph** you can query locally — skills, domain context, portfolio
+highlights, and an interactive dashboard in one view.
+
+An agent pipeline triages noise, extracts decisions and business rules,
 clusters them into concepts, models the business domain, and aggregates what you
-know into a cross-project skill graph.
+know across every registered project.
 
 It follows a tree-sitter + LLM hybrid: the parser resolves the exact imports,
 definitions, and call graph; the LLMs read that structure to produce summaries,
@@ -55,10 +57,10 @@ subnet analyze                                  # L0.5 — file summaries + laye
 subnet ingest                                   # L1 → L3 + enrichment (L2.5)
 subnet status                                   # see what landed in each layer
 
-# 4. Aggregate the second brain across projects
+# 4. Build the cross-project view
 subnet link                                     # L4 links + L5 skill graph
 subnet profile                                  # industries + top skills
-subnet dashboard --open                         # interactive graph (build:dashboard once)
+subnet dashboard --open                         # the local view (build:dashboard once)
 ```
 
 To make Substrate Net callable from your AI agents, see [MCP integration](#mcp-integration).
@@ -140,7 +142,7 @@ swap or an interrupted run.
 ## MCP integration
 
 A single MCP server exposes 21 tools — code (L0/L0.5), knowledge (L1.5–L3), domain
-(L2.5), and the global second-brain (L4–L5) — over stdio:
+(L2.5), and the global skill view (L4–L5) — over stdio:
 
 ```jsonc
 // ~/.cursor/mcp.json  (or equivalent for Claude Code)

@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Substrate Net — local, layered knowledge graph</title>
-  <meta name="description" content="A local, layered knowledge graph across your code and your AI agent conversations. SQLite, agent-driven, MCP-native.">
+  <title>Substrate Net — cross-project skills, one local view</title>
+  <meta name="description" content="Cross-project skills. One local view. Grounded skill graph, domain context, and dashboard — built locally from your code and agent work.">
   <link rel="stylesheet" href="assets/style.css">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23b25a3c' d='M12 2 L14 12 L12 22 L10 12 Z M2 12 L12 14 L22 12 L12 10 Z'/%3E%3C/svg%3E">
 </head>
@@ -13,7 +13,7 @@
   <header class="site-header">
     <a class="brand" href="./">
       <svg class="brand-mark" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 L14 12 L12 22 L10 12 Z M2 12 L12 14 L22 12 L12 10 Z"/></svg>
-      subnet
+      Substrate Net
     </a>
     <nav class="site-nav">
       <a class="active" href="./">overview</a>
@@ -28,73 +28,70 @@
   </header>
 
   <section class="hero">
-    <h1>A local second brain across code and AI agent conversations.</h1>
+    <p class="eyebrow">skills · domains · portfolio</p>
+    <h1>Cross-project skills. One local view.</h1>
     <p class="tagline">
-      Substrate Net indexes your code structure and the conversations you have with
-      AI coding agents (Cursor, Claude Code, Codex, Copilot) into one local
-      knowledge graph. An agent pipeline triages noise, extracts decisions and
-      business rules, models the business domain, and aggregates what you know
-      into a cross-project skill graph — split along two axes: technical and
-      industry.
+      Code, conversations, and domain context roll up into a grounded skill graph,
+      portfolio highlights, and an offline dashboard — all local, all queryable.
     </p>
     <div class="hero-actions">
       <a class="primary" href="getting-started.html">$ subnet init →</a>
-      <a href="architecture.html">read the architecture</a>
+      <a href="architecture.html">architecture</a>
+      <a href="dashboard.html">dashboard</a>
       <a href="https://github.com/tienan92it/SubstrateNet">source</a>
     </div>
   </section>
 
-  <div class="layers" aria-label="Layer stack">
-<span class="lname">L5</span>  <span class="ldesc">Skill graph</span>              ── technical + industry skills across projects
-<span class="lname">L4</span>  <span class="ldesc">Cross-project links</span>      ── concepts shared between repos
-<span class="lname">L3</span>  <span class="ldesc">Concepts</span>                 ── clustered facts, agent-named
-<span class="lname">L2.5</span> <span class="ldesc">Domain enrichment</span>       ── entities, relationships, skills, industry, gaps
-<span class="lname">L2</span>  <span class="ldesc">Facts</span>                    ── decisions, business rules, intents
-<span class="lname">L1.5</span> <span class="ldesc">Triage</span>                  ── relevance / domain / quality / linkage
-<span class="lname">L1</span>  <span class="ldesc">Conversations</span>            ── sessions, turns, tool calls
-<span class="lname">L0.5</span> <span class="ldesc">Code analysis</span>           ── file summaries, architectural layers, tags
-<span class="lname">L0</span>  <span class="ldesc">Code structure</span>           ── symbols, calls, imports, fields</div>
-
-  <section class="features">
+  <section class="features compact" aria-label="Core value">
     <div class="feature">
-      <h3>Syntax is deterministic.</h3>
-      <p>File paths, code blocks, shell commands, stack traces — pure parsers. Tree-sitter for code, regex DDL for SQL.</p>
+      <h3>Grounded memory.</h3>
+      <p>Every claim carries its source: structural, stated, corroborated, external, or model. The graph separates evidence from inference.</p>
     </div>
     <div class="feature">
-      <h3>Meaning is agent-driven.</h3>
-      <p>Triage, extraction, clustering, linking, verification — each is a named agent with a versioned prompt and JSON schema, cached in <code>agent_runs</code>.</p>
+      <h3>Hybrid code intelligence.</h3>
+      <p>Tree-sitter resolves imports, definitions, and calls. Agents read that structure to summarize files, assign layers, and extract domain context.</p>
     </div>
     <div class="feature">
-      <h3>Tree-sitter + LLM hybrid.</h3>
-      <p>The parser resolves exact imports, defs, and the call graph; LLM file-analyzers read that structure to add summaries and architectural layers (L0.5) — fewer tokens, fewer hallucinations.</p>
-    </div>
-    <div class="feature">
-      <h3>Interactive dashboard.</h3>
-      <p><code>subnet dashboard</code> renders the whole graph from SQLite as a single offline-openable HTML — layer-colored graph, fuzzy search, domain and layer views. Shareable as one file.</p>
-    </div>
-    <div class="feature">
-      <h3>Grounded, never assumed.</h3>
-      <p>Every node carries a <code>grounding</code> tier — <code>structural</code>, <code>stated</code>, <code>corroborated</code>, <code>external</code>, <code>model</code> — so project truth and inferred knowledge stay separable and filterable.</p>
-    </div>
-    <div class="feature">
-      <h3>Technical and industry scopes.</h3>
-      <p>One axis is what the architecture objectively says; the other is the business domain your projects serve. Skills aggregate across both into a second-brain profile.</p>
-    </div>
-    <div class="feature">
-      <h3>Local-first, SQLite throughout.</h3>
-      <p>Three databases: <code>code.db</code>, <code>knowledge.db</code>, and a global <code>~/.substrate-net/global.db</code>. Ollama is the default backend; any OpenAI-compatible endpoint works.</p>
-    </div>
-    <div class="feature">
-      <h3>MCP-native.</h3>
-      <p>21 tools over stdio. Drop into any MCP-aware agent in a single config block.</p>
-    </div>
-    <div class="feature">
-      <h3>Cross-project memory.</h3>
-      <p>Concepts you decided in project A surface when you start project B. Mechanical match plus a Linker Agent for semantic similarity.</p>
+      <h3>One local view.</h3>
+      <p>Skills, industry context, and portfolio highlights roll up across projects into one dashboard you can explore, query, and share.</p>
     </div>
   </section>
 
-  <h2>Quickstart</h2>
+  <h2>Documentation</h2>
+  <div class="guide-grid">
+    <a class="guide-card" href="getting-started.html">
+      <span class="kicker">operate</span>
+      <h3>Getting Started</h3>
+      <p>Install, initialize a project, run sync/analyze/ingest, inspect status, and open the dashboard.</p>
+    </a>
+    <a class="guide-card" href="architecture.html">
+      <span class="kicker">system</span>
+      <h3>Architecture</h3>
+      <p>L0-L5, scope x grounding, agent runtime, storage boundaries, sources, and trade-offs.</p>
+    </a>
+    <a class="guide-card" href="cli.html">
+      <span class="kicker">commands</span>
+      <h3>CLI Reference</h3>
+      <p>Exact command surfaces for sync, analyze, ingest, enrich, link, profile, dashboard, clean, and agents.</p>
+    </a>
+    <a class="guide-card" href="mcp.html">
+      <span class="kicker">agent api</span>
+      <h3>MCP Integration</h3>
+      <p>Wire Substrate Net into Cursor, Claude Code, or any stdio MCP client. Tool catalog included.</p>
+    </a>
+    <a class="guide-card" href="dashboard.html">
+      <span class="kicker">visualize</span>
+      <h3>Dashboard</h3>
+      <p>Build the local view: offline graph, layers, domains, and a shareable snapshot.</p>
+    </a>
+    <a class="guide-card" href="configuration.html">
+      <span class="kicker">runtime</span>
+      <h3>Configuration</h3>
+      <p>Backends, per-agent model routing, OpenRouter, concurrency, transcript roots, and cache behavior.</p>
+    </a>
+  </div>
+
+  <h2>Minimal Run</h2>
   <pre class="shell"><code># 1. Install (Node 20+)
 git clone https://github.com/tienan92it/SubstrateNet && cd SubstrateNet
 npm install &amp;&amp; npm run build &amp;&amp; npm link
@@ -114,23 +111,7 @@ subnet link          # cross-project links + skill graph
 subnet profile       # industries + top skills
 subnet dashboard --open   # interactive graph</code></pre>
 
-  <p>
-    Full walkthrough: <a href="getting-started.html">getting started →</a>
-  </p>
-
-  <h2>Why Substrate Net exists</h2>
-  <p>
-    Pre-indexed code graphs (e.g. <a href="https://github.com/colbymchenry/codegraph">codegraph</a>)
-    make agents cheaper and faster. But they only know what the AST says, never
-    what you and the agent <em>decided</em> together — the rationale, the
-    constraints, the trade-offs that never made it into a comment.
-  </p>
-  <p>
-    Substrate Net adds the layers on top: raw conversation, triage, facts, domain
-    enrichment, concepts, cross-project links, and a global skill graph. Each
-    layer is auditable, each agent's run is cached, and every semantic call is a
-    model + prompt + schema you can swap.
-  </p>
+  <p>Full walkthrough: <a href="getting-started.html">getting started →</a></p>
 
   <footer class="site-footer">
     <span>v0.1.0 · MIT</span>
@@ -139,5 +120,6 @@ subnet dashboard --open   # interactive graph</code></pre>
     </span>
   </footer>
 </div>
+<script src="assets/substrate-bg.js" defer></script>
 </body>
 </html>
