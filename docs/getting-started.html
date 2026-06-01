@@ -115,12 +115,15 @@ subnet init</code></pre>
     <li><em>Dedupe</em> kept windows by embedding similarity</li>
     <li><em>Extract</em> facts via Decision / BusinessLogic / Intent / ProblemSolution agents (routed by triage domain)</li>
     <li><em>Cluster</em> each new fact into a concept; <em>Summarize</em> affected concepts</li>
-    <li><em>Enrich</em> (L2.5) — manifests + SQL → entities/skills, reconcile stated ↔ structural, classify industry, detect gaps</li>
+    <li><em>Analyze</em> (L0.5) — per-file summaries + architectural layers + tags from the tree-sitter graph (FileAnalyzer · ArchitectureAnalyzer)</li>
+    <li><em>Enrich</em> (L2.5) — manifests + SQL → entities/skills, reconcile stated ↔ structural, classify industry, fuse domain highlights, detect gaps</li>
   </ol>
   <p class="small">
     <code>ingest</code> is incremental — only new windows are processed. Use
     <code>subnet ingest --reprocess</code> after a model swap or interrupted run
-    to re-pass every window; <code>--no-enrich</code> skips step 9.
+    to re-pass every window; <code>--no-analyze</code> and <code>--no-enrich</code>
+    skip those passes. Run <code>subnet analyze --full</code> to force a complete
+    re-analysis independent of ingest.
   </p>
 
   <p><strong>L4 → L5 — cross-project links + the second brain</strong></p>
@@ -155,6 +158,10 @@ subnet skills --cross # skills demonstrated in more than one project</code></pre
 
   <p>Inspect what got dropped vs kept and why:</p>
   <pre class="shell"><code>subnet triage audit --dropped</code></pre>
+
+  <p>Open the interactive graph dashboard (build the viewer bundle once with <code>npm run build:dashboard</code>):</p>
+  <pre class="shell"><code>subnet dashboard --open</code></pre>
+  <p class="small">See the <a href="dashboard.html">dashboard guide</a> for the views and the shareable <code>graph.json</code>.</p>
 
   <p>Generate canvases (open in Cursor's canvas pane):</p>
   <pre class="shell"><code>subnet canvas triage-audit

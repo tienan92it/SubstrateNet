@@ -52,6 +52,7 @@
 <span class="lname">L2</span>  <span class="ldesc">Facts</span>                    ── decisions, business rules, intents
 <span class="lname">L1.5</span> <span class="ldesc">Triage</span>                  ── relevance / domain / quality / linkage
 <span class="lname">L1</span>  <span class="ldesc">Conversations</span>            ── sessions, turns, tool calls
+<span class="lname">L0.5</span> <span class="ldesc">Code analysis</span>           ── file summaries, architectural layers, tags
 <span class="lname">L0</span>  <span class="ldesc">Code structure</span>           ── symbols, calls, imports, fields</div>
 
   <section class="features">
@@ -62,6 +63,14 @@
     <div class="feature">
       <h3>Meaning is agent-driven.</h3>
       <p>Triage, extraction, clustering, linking, verification — each is a named agent with a versioned prompt and JSON schema, cached in <code>agent_runs</code>.</p>
+    </div>
+    <div class="feature">
+      <h3>Tree-sitter + LLM hybrid.</h3>
+      <p>The parser resolves exact imports, defs, and the call graph; LLM file-analyzers read that structure to add summaries and architectural layers (L0.5) — fewer tokens, fewer hallucinations.</p>
+    </div>
+    <div class="feature">
+      <h3>Interactive dashboard.</h3>
+      <p><code>subnet dashboard</code> renders the whole graph from SQLite as a single offline-openable HTML — layer-colored graph, fuzzy search, domain and layer views. Shareable as one file.</p>
     </div>
     <div class="feature">
       <h3>Grounded, never assumed.</h3>
@@ -77,7 +86,7 @@
     </div>
     <div class="feature">
       <h3>MCP-native.</h3>
-      <p>20 tools over stdio. Drop into any MCP-aware agent in a single config block.</p>
+      <p>21 tools over stdio. Drop into any MCP-aware agent in a single config block.</p>
     </div>
     <div class="feature">
       <h3>Cross-project memory.</h3>
@@ -98,10 +107,12 @@ ollama pull qwen3-embedding:0.6b
 # 3. Index a project
 cd /path/to/your/project
 subnet init
-subnet sync
-subnet ingest
-subnet link        # cross-project links + skill graph
-subnet profile     # industries + top skills</code></pre>
+subnet sync          # L0 code structure
+subnet analyze       # L0.5 summaries + layers (hybrid)
+subnet ingest        # L1→L3 + enrichment (L2.5)
+subnet link          # cross-project links + skill graph
+subnet profile       # industries + top skills
+subnet dashboard --open   # interactive graph</code></pre>
 
   <p>
     Full walkthrough: <a href="getting-started.html">getting started →</a>

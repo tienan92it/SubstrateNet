@@ -51,12 +51,14 @@ ollama pull qwen3-embedding:0.6b                 # dedupe / clustering
 cd /path/to/your/project
 subnet init                                     # creates .substrate-net/
 subnet sync                                     # L0 — code structure
+subnet analyze                                  # L0.5 — file summaries + layers (hybrid)
 subnet ingest                                   # L1 → L3 + enrichment (L2.5)
 subnet status                                   # see what landed in each layer
 
 # 4. Aggregate the second brain across projects
 subnet link                                     # L4 links + L5 skill graph
 subnet profile                                  # industries + top skills
+subnet dashboard --open                         # interactive graph (build:dashboard once)
 ```
 
 To make Substrate Net callable from your AI agents, see [MCP integration](#mcp-integration).
@@ -137,7 +139,7 @@ swap or an interrupted run.
 
 ## MCP integration
 
-A single MCP server exposes 20 tools — code (L0), knowledge (L1.5–L3), domain
+A single MCP server exposes 21 tools — code (L0/L0.5), knowledge (L1.5–L3), domain
 (L2.5), and the global second-brain (L4–L5) — over stdio:
 
 ```jsonc
