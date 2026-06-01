@@ -1,0 +1,12 @@
+{
+  "payload": {
+    "industry": "fintech / investment trading",
+    "skills": ["Go backend", "event-driven architecture", "Kafka", "PostgreSQL", "React frontend"],
+    "layers": ["api", "service", "data", "ui"],
+    "facts": [
+      "Orders settle only after the matching engine confirms fill",
+      "Positions are marked-to-market every tick",
+      "KYC must complete before a withdrawal is allowed"
+    ]
+  }
+}

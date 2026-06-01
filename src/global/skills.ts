@@ -82,6 +82,11 @@ export async function exportProjectSkills(root: string): Promise<SkillExportStat
       VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET name=excluded.name, confidence=excluded.confidence, grounding=excluded.grounding, updated_at=excluded.updated_at
     `);
+    const insertHighlight = gdb.prepare(`
+      INSERT INTO highlights (id, statement, project_id, evidence, grounding, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET statement=excluded.statement, evidence=excluded.evidence, grounding=excluded.grounding, updated_at=excluded.updated_at
+    `);
 
     const tx = gdb.transaction(() => {
       // Clear this project's prior technical evidence so re-export is clean.
@@ -100,6 +105,14 @@ export async function exportProjectSkills(root: string): Promise<SkillExportStat
         const id = createHash('sha1').update(`ind|${projectId}|${ind.title.toLowerCase()}`).digest('hex').slice(0, 16);
         insertIndustry.run(id, ind.title, projectId, ind.confidence ?? null, ind.grounding, now);
         stats.industries++;
+      }
+      // Portfolio highlights (technical x industry).
+      gdb.prepare(`DELETE FROM highlights WHERE project_id=?`).run(projectId);
+      for (const h of know.prepare(
+        `SELECT title, evidence_text, COALESCE(grounding,'model') AS grounding FROM k_nodes WHERE kind='domain_highlight'`,
+      ).all() as Array<{ title: string; evidence_text: string | null; grounding: string }>) {
+        const id = createHash('sha1').update(`hl|${projectId}|${h.title.toLowerCase()}`).digest('hex').slice(0, 16);
+        insertHighlight.run(id, h.title, projectId, h.evidence_text ?? null, h.grounding, now);
       }
     });
     tx();
@@ -176,6 +189,14 @@ export function listSkills(gdb: SqliteDb, opts: { scope?: string; limit?: number
     evidenceWeight: r.evidence_weight, grounding: (r.grounding ?? 'stated') as Grounding,
     projectCount: r.project_count,
   }));
+}
+
+export function listHighlights(gdb: SqliteDb, limit = 60): Array<{ statement: string; evidence: string | null; grounding: string; projectCount: number }> {
+  const rows = gdb.prepare(`
+    SELECT statement, MIN(evidence) AS evidence, MIN(grounding) AS grounding, COUNT(DISTINCT project_id) AS projects
+    FROM highlights GROUP BY lower(statement) ORDER BY projects DESC LIMIT ?
+  `).all(limit) as Array<{ statement: string; evidence: string | null; grounding: string; projects: number }>;
+  return rows.map((r) => ({ statement: r.statement, evidence: r.evidence, grounding: r.grounding, projectCount: r.projects }));
 }
 
 export function listIndustries(gdb: SqliteDb): Array<{ name: string; projectCount: number; confidence: number }> {

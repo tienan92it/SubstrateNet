@@ -11,14 +11,16 @@ export function registerIngest(program: Command): void {
     .option('--no-triage', 'Skip Triage Agent (debug)')
     .option('--no-extract', 'Skip extractor agents (debug)')
     .option('--no-enrich', 'Skip domain enrichment pass (L2.5)')
+    .option('--no-analyze', 'Skip code-grounded analysis pass (file summaries + layers)')
     .option('--reprocess', 'Re-run triage/extract/cluster over ALL existing windows (after a model swap or interrupted run), not just newly ingested ones', false)
-    .action(async (path: string, opts: { agent?: string; triage?: boolean; extract?: boolean; enrich?: boolean; reprocess?: boolean }) => {
+    .action(async (path: string, opts: { agent?: string; triage?: boolean; extract?: boolean; enrich?: boolean; analyze?: boolean; reprocess?: boolean }) => {
       const root = resolve(path);
       const stats = await ingestProject(root, {
         agentFilter: opts.agent as any,
         runTriage: opts.triage !== false,
         runExtract: opts.extract !== false,
         runEnrich: opts.enrich !== false,
+        runAnalyze: opts.analyze !== false,
         reprocess: opts.reprocess === true,
       });
       console.log(`Ingest complete:`);
@@ -28,6 +30,7 @@ export function registerIngest(program: Command): void {
       console.log(`  Triaged:          ${stats.triaged} (kept ${stats.kept}, dropped ${stats.dropped})`);
       console.log(`  Facts produced:   ${stats.factsProduced}`);
       console.log(`  Concepts:         ${stats.conceptsCreated} created, ${stats.conceptsAttached} attached`);
+      console.log(`  Files analyzed:   ${stats.filesAnalyzed}`);
       console.log(`  Domain entities:  ${stats.domainEntities}`);
       console.log(`  Relationships:    ${stats.domainRelationships}`);
       console.log(`  Knowledge gaps:   ${stats.knowledgeGaps}`);

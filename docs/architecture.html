@@ -27,6 +27,7 @@
       <a class="active" href="architecture.html">architecture</a>
       <a href="cli.html">cli</a>
       <a href="mcp.html">mcp</a>
+      <a href="dashboard.html">dashboard</a>
       <a href="configuration.html">config</a>
       <a href="https://github.com/tienan92it/CodeGps">github →</a>
     </nav>
@@ -63,6 +64,7 @@
   <table>
     <tr><th>Layer</th><th>Content</th><th>Produced by</th></tr>
     <tr><td><strong>L0</strong> Code Structure</td><td>symbols, calls, imports, fields, SQL tables</td><td>deterministic (tree-sitter / regex DDL)</td></tr>
+    <tr><td><strong>L0.5</strong> Code Analysis</td><td>per-file summaries, architectural layer, tags</td><td>tree-sitter structure + <strong>agents</strong> (FileAnalyzer · ArchitectureAnalyzer)</td></tr>
     <tr><td><strong>L1</strong> Conversations</td><td>sessions, turns, tool calls</td><td>deterministic (file parsers)</td></tr>
     <tr><td><strong>L1.5</strong> Triage</td><td>Relevance / Domain / Quality / Linkage labels</td><td><strong>agent</strong> (Triage)</td></tr>
     <tr><td><strong>L2</strong> Facts</td><td>decisions, business rules, intents, problems, solutions</td><td><strong>agents</strong> (Decision · BusinessLogic · Intent · ProblemSolution) + syntax pass</td></tr>
@@ -161,7 +163,7 @@ flowchart TB
 
   <h2 id="agents">The agent layer</h2>
   <p>
-    There are fourteen chat agents and one embedding-only agent. Each has a
+    There are eighteen chat agents and one embedding-only agent. Each has a
     versioned prompt, a JSON schema, and a model reference resolved from
     config. All share a single runtime that handles caching, validation, and
     persistence. Agent-bound calls run with bounded concurrency
@@ -178,10 +180,14 @@ flowchart TB
     <tr><td><code>problemSolution</code></td><td>window</td><td>(problem, solution) pairs</td><td>domain ∈ {debugging, implementation}</td></tr>
     <tr><td><code>clusterer</code></td><td>new fact + top-K candidate concepts</td><td>attach / create / merge</td><td>each new fact</td></tr>
     <tr><td><code>summarizer</code></td><td>concept + member facts</td><td>name + structured summary</td><td>each touched concept</td></tr>
+    <tr><td><code>fileAnalyzer</code></td><td>file defs + imports + calls + source slice</td><td>summary + layer + tags + concepts</td><td>analysis (L0.5), per file</td></tr>
+    <tr><td><code>architectureAnalyzer</code></td><td>per-directory layer histogram</td><td>canonical layer per directory</td><td>analysis (L0.5)</td></tr>
     <tr><td><code>technicalProfiler</code></td><td>languages + dependencies</td><td>technical skills</td><td>enrichment (L2.5)</td></tr>
     <tr><td><code>domainModeler</code></td><td>entities + evidence</td><td>relationships / gaps (evidence-enforced)</td><td>enrichment (L2.5)</td></tr>
     <tr><td><code>industryClassifier</code></td><td>stack + symbols + README + entities + rules</td><td>industry label + confidence + evidence</td><td>enrichment (L2.5)</td></tr>
     <tr><td><code>industryEnricher</code></td><td>industry + present concepts</td><td>industry-standard concepts (model/external)</td><td>enrichment (L2.5)</td></tr>
+    <tr><td><code>domainAnalyzer</code></td><td>industry + skills + layers + facts</td><td>composite portfolio highlights (evidence-cited)</td><td>enrichment (L2.5)</td></tr>
+    <tr><td><code>profileWriter</code></td><td>global industries + skills + highlights</td><td>portfolio/background markdown</td><td><code>profile --prose</code> (global)</td></tr>
     <tr><td><code>linker</code></td><td>two cross-project concepts</td><td>same_as / variant_of / supersedes / contradicts / none</td><td>cross-project candidate pairs</td></tr>
     <tr><td><code>verifier</code></td><td>pair of same-cluster facts</td><td>consistent / contradicts / supersedes</td><td>periodic sweep</td></tr>
   </table>
@@ -224,6 +230,7 @@ interface AgentRuntime {
 │   ├── nodes              (id, kind, name, qualified_name, file_path, ...)
 │   ├── edges              (source, target, kind, line, col, provenance)
 │   ├── files              (path, content_hash, indexed_at, ...)
+│   ├── file_analysis      (L0.5 — summary, layer, tags per file)
 │   ├── nodes_fts          (FTS5 over names / signatures / docstrings)
 │   └── unresolved_refs
 │
@@ -248,7 +255,9 @@ interface AgentRuntime {
 │   ├── concept_links      (a, b, kind, score, source)
 │   ├── skills             (L5 — name, scope, evidence_weight, project_count)
 │   ├── skill_evidence     (per-project evidence behind each skill)
-│   └── industries         (classified business domains across projects)
+│   ├── industries         (classified business domains across projects)
+│   ├── highlights         (composite portfolio statements per project)
+│   └── agent_runs         (cache + audit for global agents, e.g. ProfileWriter)
 └── config.json</code></pre>
 
   <p>

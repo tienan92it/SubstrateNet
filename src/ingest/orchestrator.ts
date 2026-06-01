@@ -28,6 +28,7 @@ import { runTriageForWindows, type TriageRunResult } from '../pipeline/triage.js
 import { runExtractorsForKeptWindows } from '../pipeline/extract.js';
 import { runClustererForNewFacts } from '../pipeline/cluster.js';
 import { runEnrichment } from '../pipeline/enrich.js';
+import { analyzeWithDbs } from '../pipeline/analyze-code.js';
 
 export interface IngestOpts {
   agentFilter?: AgentId;
@@ -35,6 +36,8 @@ export interface IngestOpts {
   runExtract?: boolean;
   /** Skip the domain enrichment pass (L2.5). Defaults to running it. */
   runEnrich?: boolean;
+  /** Skip the code-grounded analysis pass (file summaries + layers). Defaults to running it. */
+  runAnalyze?: boolean;
   /**
    * Re-run triage/extract/cluster over ALL existing windows, not just newly
    * ingested ones. Use after switching models or to finish an interrupted run.
@@ -56,6 +59,7 @@ export interface IngestStats {
   domainEntities: number;
   domainRelationships: number;
   knowledgeGaps: number;
+  filesAnalyzed: number;
 }
 
 export async function ingestProject(root: string, opts: IngestOpts = {}): Promise<IngestStats> {
@@ -68,6 +72,7 @@ export async function ingestProject(root: string, opts: IngestOpts = {}): Promis
     windowsCreated: 0, triaged: 0, kept: 0, dropped: 0, factsProduced: 0,
     conceptsCreated: 0, conceptsAttached: 0,
     domainEntities: 0, domainRelationships: 0, knowledgeGaps: 0,
+    filesAnalyzed: 0,
   };
 
   try {
@@ -169,6 +174,16 @@ export async function ingestProject(root: string, opts: IngestOpts = {}): Promis
           stats.conceptsAttached = clStats.attached;
         }
       }
+    }
+
+    // 7.5 Code-grounded analysis (file summaries + architectural layers).
+    //     Depends on the L0 graph (from `sync`); incremental + idempotent.
+    //     Runs before enrichment so the domain-analyzer can use layers.
+    if (opts.runAnalyze !== false && opts.runExtract !== false) {
+      try {
+        const an = await analyzeWithDbs(codeDb, knowDb, root, cfg);
+        stats.filesAnalyzed = an.filesAnalyzed;
+      } catch { /* analysis is best-effort; pipeline continues */ }
     }
 
     // 8. Domain enrichment (L2.5). Runs unconditionally — structural

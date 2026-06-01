@@ -116,3 +116,18 @@ CREATE TABLE IF NOT EXISTS project_metadata (
     value TEXT NOT NULL,
     updated_at INTEGER NOT NULL
 );
+
+-- Semantic overlay on the structural graph: per-file LLM analysis
+-- (summary, architectural layer, tags) grounded in the tree-sitter facts.
+-- Incremental: content_hash mirrors files.content_hash; a match means skip.
+CREATE TABLE IF NOT EXISTS file_analysis (
+    path TEXT PRIMARY KEY,
+    summary TEXT,
+    layer TEXT,                  -- api | service | data | ui | utility | other
+    tags TEXT,                   -- JSON array
+    language_concepts TEXT,      -- JSON array
+    model TEXT,
+    content_hash TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_file_analysis_layer ON file_analysis(layer);

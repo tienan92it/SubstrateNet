@@ -20,7 +20,9 @@
   ],
   "scripts": {
     "build": "tsc && npm run copy-assets && node -e \"require('fs').chmodSync('dist/cli/index.js', 0o755)\"",
-    "copy-assets": "node -e \"const fs=require('fs'),p=require('path');fs.mkdirSync('dist/db',{recursive:true});['code-schema.sql','knowledge-schema.sql','global-schema.sql'].forEach(f=>fs.copyFileSync('src/db/'+f,'dist/db/'+f));fs.mkdirSync('dist/canvas/templates',{recursive:true});if(fs.existsSync('src/canvas/templates'))fs.readdirSync('src/canvas/templates').forEach(f=>fs.copyFileSync('src/canvas/templates/'+f,'dist/canvas/templates/'+f));\"",
+    "copy-assets": "node -e \"const fs=require('fs');fs.mkdirSync('dist/db',{recursive:true});['code-schema.sql','knowledge-schema.sql','global-schema.sql'].forEach(f=>fs.copyFileSync('src/db/'+f,'dist/db/'+f));fs.mkdirSync('dist/canvas/templates',{recursive:true});if(fs.existsSync('src/canvas/templates'))fs.readdirSync('src/canvas/templates').forEach(f=>fs.copyFileSync('src/canvas/templates/'+f,'dist/canvas/templates/'+f));if(fs.existsSync('dashboard/dist/index.html')){fs.mkdirSync('dist/dashboard/app',{recursive:true});fs.cpSync('dashboard/dist','dist/dashboard/app',{recursive:true});}\"",
+    "build:dashboard": "cd dashboard && npm install && npm run build",
+    "build:all": "npm run build:dashboard && npm run build",
     "dev": "tsc --watch",
     "cli": "npm run build && node dist/cli/index.js",
     "test": "vitest run",

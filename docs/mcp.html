@@ -20,6 +20,7 @@
       <a href="architecture.html">architecture</a>
       <a href="cli.html">cli</a>
       <a class="active" href="mcp.html">mcp</a>
+      <a href="dashboard.html">dashboard</a>
       <a href="configuration.html">config</a>
       <a href="https://github.com/tienan92it/CodeGps">github →</a>
     </nav>
@@ -27,7 +28,7 @@
 
   <h1>MCP integration</h1>
   <p class="lede">
-    A single MCP server exposes 20 tools — code (L0), knowledge (L1.5–L3),
+    A single MCP server exposes 21 tools — code (L0/L0.5), knowledge (L1.5–L3),
     domain (L2.5), and the global second-brain (L4–L5) — over stdio. Drop into
     any MCP-aware agent with a few lines of config.
   </p>
@@ -72,6 +73,7 @@
     <tr><td><code>codegps_search</code></td><td>Symbol search across code by name + kind.</td><td><code>query, kind?, limit?</code></td></tr>
     <tr><td><code>codegps_node</code></td><td>One symbol's details — signature, docstring, location.</td><td><code>name</code></td></tr>
     <tr><td><code>codegps_sync</code></td><td>Trigger code re-index.</td><td><code>full?</code></td></tr>
+    <tr><td><code>codegps_analyze</code></td><td>Code-grounded analysis: per-file LLM summaries + architectural layers + tags (the hybrid L0 → semantic pass).</td><td><code>full?</code></td></tr>
   </table>
   <p class="small">Knowledge (L1.5–L3)</p>
   <table>
@@ -99,7 +101,7 @@
     <tr><th>Tool</th><th>Purpose</th><th>Key args</th></tr>
     <tr><td><code>codegps_link</code></td><td>Cross-project — where else this concept appears, with relation kind and score.</td><td><code>conceptId</code></td></tr>
     <tr><td><code>codegps_skills</code></td><td>Global skill graph — technical + industry skills aggregated across projects, weighted by evidence.</td><td><code>scope?, cross?, limit?</code></td></tr>
-    <tr><td><code>codegps_profile</code></td><td>Big-picture knowledge profile — industries, top technical skills, evidence mix.</td><td>—</td></tr>
+    <tr><td><code>codegps_profile</code></td><td>Big-picture knowledge profile — industries, top technical skills, evidence mix. Pass <code>prose</code> for ProfileWriter-generated portfolio markdown.</td><td><code>prose?</code></td></tr>
     <tr><td><code>codegps_learn</code></td><td>Learning targets — industry-standard knowledge not yet grounded in your work.</td><td><code>limit?</code></td></tr>
   </table>
 

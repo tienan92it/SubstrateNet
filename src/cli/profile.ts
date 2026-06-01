@@ -1,7 +1,12 @@
 import type { Command } from 'commander';
-import { resolve } from 'path';
+import { resolve, join } from 'path';
+import { writeFileSync, mkdirSync } from 'fs';
 import { openGlobalDb, openKnowledgeDb } from '../db/connection.js';
-import { listSkills, listIndustries } from '../global/skills.js';
+import { listSkills, listIndustries, listHighlights } from '../global/skills.js';
+import { globalConfigDir, loadConfig } from '../config.js';
+import { AgentRuntime } from '../agents/runtime.js';
+import { PROFILE_WRITER_AGENT } from '../agents/profile-writer.js';
+import '../agents/index.js';
 
 export function registerProfile(program: Command): void {
   // codegps skills — the global technical skill graph.
@@ -33,7 +38,10 @@ export function registerProfile(program: Command): void {
   program
     .command('profile')
     .description('Big-picture knowledge profile across all projects')
-    .action(async () => {
+    .option('--prose', 'Generate portfolio/background prose via the ProfileWriter agent', false)
+    .option('--out <path>', 'Where to write the prose markdown', join(globalConfigDir(), 'profile.md'))
+    .action(async (opts: { prose: boolean; out: string }) => {
+      if (opts.prose) return writeProse(opts.out);
       const gdb = openGlobalDb();
       try {
         const projectCount = (gdb.prepare(`SELECT COUNT(*) AS n FROM projects`).get() as any).n;
@@ -92,4 +100,31 @@ export function registerProfile(program: Command): void {
         console.log(`\n${rows.length} target(s). These are general industry knowledge, not facts about your project.`);
       } finally { db.close(); }
     });
+}
+
+/** Generate portfolio prose via the ProfileWriter agent and write it to disk. */
+async function writeProse(outPath: string): Promise<void> {
+  const gdb = openGlobalDb();
+  try {
+    const projectCount = (gdb.prepare(`SELECT COUNT(*) AS n FROM projects`).get() as any).n;
+    const industries = listIndustries(gdb).map((i) => ({ name: i.name, projectCount: i.projectCount }));
+    const skills = listSkills(gdb, { scope: 'technical', limit: 40 })
+      .map((s) => ({ name: s.name, grounding: s.grounding, projectCount: s.projectCount }));
+    const highlights = listHighlights(gdb).map((h) => ({ statement: h.statement, grounding: h.grounding }));
+
+    if (industries.length === 0 && skills.length === 0 && highlights.length === 0) {
+      console.log('Nothing to write yet. Run `codegps enrich` then `codegps link` in your projects first.');
+      return;
+    }
+
+    const cfg = loadConfig();
+    const rt = new AgentRuntime({ knowledgeDb: gdb, config: cfg });
+    const out = await rt.run(PROFILE_WRITER_AGENT, { payload: { projectCount, industries, skills, highlights } });
+    const md = out.output.markdown;
+
+    mkdirSync(resolve(outPath, '..'), { recursive: true });
+    writeFileSync(outPath, md, 'utf8');
+    console.log(md);
+    console.log(`\nWritten to ${outPath}`);
+  } finally { gdb.close(); }
 }

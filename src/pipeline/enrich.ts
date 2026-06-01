@@ -21,6 +21,7 @@ import { DOMAIN_MODELER_AGENT } from '../agents/domain-modeler.js';
 import { TECHNICAL_PROFILER_AGENT } from '../agents/technical-profiler.js';
 import { INDUSTRY_CLASSIFIER_AGENT } from '../agents/industry-classifier.js';
 import { INDUSTRY_ENRICHER_AGENT } from '../agents/industry-enricher.js';
+import { DOMAIN_ANALYZER_AGENT } from '../agents/domain-analyzer.js';
 import { runDomainFromCode } from './domain-from-code.js';
 import { runManifestParser } from './manifests.js';
 import { runGapDetector } from './gap-detector.js';
@@ -47,6 +48,7 @@ export interface EnrichStats {
   industry?: string;
   industryConcepts: number;
   externalUpgrades: number;
+  domainHighlights: number;
 }
 
 export interface EnrichOpts {
@@ -65,7 +67,7 @@ export async function runEnrichment(
     dependencies: 0, tools: 0, technicalSkills: 0,
     structuralEntities: 0, externalEntities: 0, structuralRelationships: 0,
     reconciledEntities: 0, agentRelationships: 0, agentGaps: 0, detectedGaps: 0,
-    industryConcepts: 0, externalUpgrades: 0,
+    industryConcepts: 0, externalUpgrades: 0, domainHighlights: 0,
   };
 
   // ── 1. Deterministic technical evidence (manifests + infra) ──────────
@@ -114,6 +116,11 @@ export async function runEnrichment(
         producedClusterableFacts ||= enr.produced > 0;
       } catch { /* ignore */ }
     }
+
+    // ── 7b. DomainAnalyzer: fuse technical + industry into portfolio highlights ─
+    try {
+      stats.domainHighlights = await runDomainAnalyzer(knowDb, codeDb, cfg, stats.industry);
+    } catch { /* ignore */ }
   }
 
   // ── 8. Gap detector (deterministic) ──────────────────────────────────
@@ -361,4 +368,52 @@ async function runIndustryEnricher(
     produced++;
   }
   return { produced, upgraded };
+}
+
+/**
+ * DomainAnalyzer: fuse the technical skills, architectural layers, classified
+ * industry, and salient facts into composite `domain_highlight` portfolio
+ * statements. Each is evidence-cited; grounding is `corroborated` when both an
+ * industry and structural skills back it, else `model`.
+ */
+async function runDomainAnalyzer(
+  knowDb: SqliteDb, codeDb: SqliteDb, cfg: CodeGpsConfig, industry?: string,
+): Promise<number> {
+  const skills = (knowDb.prepare(`SELECT title FROM k_nodes WHERE kind='skill' LIMIT 40`).all() as Array<{ title: string }>).map((r) => r.title);
+  const layers = (codeDb.prepare(`SELECT DISTINCT layer FROM file_analysis WHERE layer IS NOT NULL AND layer != 'other'`).all() as Array<{ layer: string }>).map((r) => r.layer);
+  const facts = (knowDb.prepare(`
+    SELECT title FROM k_nodes WHERE kind IN ('business_rule','decision','entity')
+    ORDER BY confidence DESC LIMIT 20
+  `).all() as Array<{ title: string }>).map((r) => r.title);
+
+  // Need at least two signal types to fuse anything meaningful.
+  const signals = [industry ? 1 : 0, skills.length ? 1 : 0, layers.length ? 1 : 0, facts.length ? 1 : 0]
+    .reduce((a, b) => a + b, 0);
+  if (signals < 2) return 0;
+
+  const rt = new AgentRuntime({ knowledgeDb: knowDb, config: cfg });
+  const out = await rt.run(DOMAIN_ANALYZER_AGENT, { payload: { industry, skills, layers, facts } });
+  if (out.output.highlights.length === 0) return 0;
+
+  let dedupe: DedupeAgent | undefined;
+  try { dedupe = new DedupeAgent(cfg); } catch { dedupe = undefined; }
+
+  const grounding: KNode['grounding'] = industry && skills.length ? 'corroborated' : 'model';
+  const now = Date.now();
+  let count = 0;
+  for (const h of out.output.highlights) {
+    const id = createHash('sha1').update(`highlight|${h.statement.toLowerCase()}`).digest('hex').slice(0, 16);
+    const node: KNode = {
+      id, kind: 'domain_highlight', title: h.statement,
+      summary: industry ? `Portfolio highlight (${industry})` : 'Portfolio highlight',
+      evidenceText: h.evidence,
+      confidence: out.confidence, source: 'agent:domainAnalyzer',
+      grounding, scope: 'industry', agentModel: out.model,
+      createdAt: now, updatedAt: now,
+    };
+    upsertKNode(knowDb, node);
+    await embedFact(dedupe, knowDb, node);
+    count++;
+  }
+  return count;
 }

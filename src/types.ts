@@ -178,6 +178,8 @@ export type KNodeKind =
   | 'dependency' | 'tool' | 'skill'
   // industry-profile kind:
   | 'industry'
+  // portfolio synthesis (technical x industry):
+  | 'domain_highlight'
   // syntax-source kinds (deterministic):
   | 'path_mention' | 'code_block' | 'shell_command'
   | 'error_message' | 'stack_trace' | 'ticket_id' | 'url';

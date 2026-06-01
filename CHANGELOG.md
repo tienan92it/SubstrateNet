@@ -6,6 +6,35 @@ All notable changes to CodeGps. Format loosely follows
 
 ## [Unreleased]
 
+### Added — Hybrid code graph + interactive dashboard
+
+Inspired by Understand-Anything's tree-sitter + LLM hybrid. The parser already
+resolved imports/defs/calls; now LLM agents read that structure to add a
+semantic overlay, a portfolio synthesis, and a shareable dashboard.
+
+- **Code analysis (L0.5)** — `codegps analyze [--full]` runs the FileAnalyzer
+  agent per file (batched, incremental via `content_hash`) over its
+  tree-sitter defs/imports/call-sites + a source slice, producing a summary,
+  architectural layer (`api|service|data|ui|utility|other`), tags, and language
+  concepts. Stored in `code.db.file_analysis`. Also runs inside `ingest`
+  (`--no-analyze` to skip). MCP: `codegps_analyze`.
+- **ArchitectureAnalyzer** — reconciles per-file layers into a coherent
+  per-directory architecture; backfills files left as `other`.
+- **DomainAnalyzer** — fuses technical skills + architectural layers +
+  classified industry + salient facts into evidence-cited `domain_highlight`
+  statements ("event-driven Go backend for a financial trading platform"),
+  not bare "knows Go". New `KNodeKind: domain_highlight`; exported to
+  `global.db.highlights`.
+- **ProfileWriter** — `codegps profile --prose [--out path]` (and
+  `codegps_profile {prose}`) generates portfolio/background markdown from the
+  global skill graph + highlights, respecting each input's grounding tier
+  (demonstrated vs. hedged). Global agents cache in a new `global.db.agent_runs`.
+- **Interactive dashboard** — `codegps dashboard [--open]` exports a bounded
+  file-level graph (nodes colored by layer), domains, concepts, and a search
+  index from SQLite, and emits a single self-contained `index.html` (graph
+  inlined, opens offline) plus a shareable `graph.json`. SPA is a Vite + React +
+  react-force-graph build under `dashboard/` (`npm run build:dashboard`).
+
 ### Fixed
 
 - **API key resolution** — backends now accept an inline `apiKey` field in

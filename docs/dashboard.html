@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard — CodeGps</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23b25a3c' d='M12 2 L14 12 L12 22 L10 12 Z M2 12 L12 14 L22 12 L12 10 Z'/%3E%3C/svg%3E">
+</head>
+<body>
+<div class="shell">
+  <header class="site-header">
+    <a class="brand" href="./">
+      <svg class="brand-mark" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 L14 12 L12 22 L10 12 Z M2 12 L12 14 L22 12 L12 10 Z"/></svg>
+      codegps
+    </a>
+    <nav class="site-nav">
+      <a href="./">overview</a>
+      <a href="getting-started.html">start</a>
+      <a href="architecture.html">architecture</a>
+      <a href="cli.html">cli</a>
+      <a href="mcp.html">mcp</a>
+      <a class="active" href="dashboard.html">dashboard</a>
+      <a href="configuration.html">config</a>
+      <a href="https://github.com/tienan92it/CodeGps">github →</a>
+    </nav>
+  </header>
+
+  <h1>Interactive dashboard</h1>
+  <p class="lede">
+    A self-contained, offline graph viewer built from your project's SQLite
+    databases. Tree-sitter structure on the structural side, LLM summaries and
+    architectural layers on the semantic side — rendered as a navigable graph.
+  </p>
+
+  <div class="toc">
+    <h4>on this page</h4>
+    <ul>
+      <li><a href="#build">build the viewer</a></li>
+      <li><a href="#generate">generate</a></li>
+      <li><a href="#views">views</a></li>
+      <li><a href="#snapshot">the snapshot</a></li>
+      <li><a href="#share">sharing</a></li>
+    </ul>
+  </div>
+
+  <h2 id="build">Build the viewer (once)</h2>
+  <p>
+    The dashboard SPA (Vite + React + react-force-graph) ships as source under
+    <code>dashboard/</code>. Build the bundle once; it compiles to a single
+    self-contained HTML the CLI reuses for every project.
+  </p>
+  <pre class="shell"><code>npm run build:dashboard     # installs + builds dashboard/ -> dashboard/dist
+# or build everything (dashboard + CLI):
+npm run build:all</code></pre>
+
+  <h2 id="generate">Generate for a project</h2>
+  <pre class="shell"><code>cd /path/to/your/project
+codegps dashboard            # writes .codegps/dashboard/index.html + graph.json
+codegps dashboard --open     # and open it in your browser</code></pre>
+  <p>
+    The graph snapshot is inlined into <code>index.html</code>, so it opens
+    directly from disk (<code>file://</code>) with no server. Run it again after
+    <code>sync</code> / <code>analyze</code> / <code>ingest</code> to refresh.
+  </p>
+
+  <h2 id="views">Views</h2>
+  <table>
+    <tr><th>View</th><th>What it shows</th></tr>
+    <tr><td><strong>Graph</strong></td><td>File-level dependency graph (imports + calls), nodes colored by architectural layer. Click a node for its summary and tags.</td></tr>
+    <tr><td><strong>Domains</strong></td><td>Classified industries, evidence-cited portfolio highlights, and domain entities.</td></tr>
+    <tr><td><strong>Layers</strong></td><td>Files grouped by architectural layer (api · service · data · ui · utility · other).</td></tr>
+    <tr><td><strong>Search</strong></td><td>Fuzzy search across files, concepts, entities, and highlights.</td></tr>
+  </table>
+
+  <h2 id="snapshot">The snapshot</h2>
+  <p>
+    <code>codegps dashboard</code> also writes a standalone
+    <code>graph.json</code> next to the HTML. It is a bounded export from
+    <code>code.db</code> + <code>knowledge.db</code>:
+  </p>
+  <ul>
+    <li><strong>nodes</strong> — files with language, layer, summary, tags</li>
+    <li><strong>edges</strong> — file→file dependencies derived from symbol-level imports/calls</li>
+    <li><strong>domains</strong> — industries, portfolio highlights, entities</li>
+    <li><strong>concepts</strong> — L3 concepts</li>
+    <li><strong>search</strong> — a prebuilt fuzzy index</li>
+  </ul>
+
+  <h2 id="share">Sharing</h2>
+  <p>
+    Both artifacts are self-contained. Commit <code>graph.json</code> for
+    teammates, or hand someone the single <code>index.html</code> — it renders
+    offline with no install. (Inspired by
+    <a href="https://github.com/Lum1104/Understand-Anything">Understand-Anything</a>'s
+    commit-the-graph workflow.)
+  </p>
+
+  <footer class="site-footer">
+    <span>v0.1.0 · MIT</span>
+    <span><a href="https://github.com/tienan92it/CodeGps">github.com/tienan92it/CodeGps</a></span>
+  </footer>
+</div>
+</body>
+</html>

@@ -18,11 +18,15 @@ import { listCrossProjectLinks } from '../link/cross-project.js';
 import { runVerify } from '../pipeline/verify.js';
 import { runEnrichment } from '../pipeline/enrich.js';
 import { listEntities, relationshipsFor, listGaps } from '../knowledge/domain-store.js';
-import { listSkills, listIndustries } from '../global/skills.js';
+import { listSkills, listIndustries, listHighlights } from '../global/skills.js';
 import { openGlobalDb } from '../db/connection.js';
 import { loadConfig } from '../config.js';
 import { ingestProject } from '../ingest/orchestrator.js';
 import { syncProject } from '../code/sync.js';
+import { analyzeProject } from '../pipeline/analyze-code.js';
+import { AgentRuntime } from '../agents/runtime.js';
+import { PROFILE_WRITER_AGENT } from '../agents/profile-writer.js';
+import '../agents/index.js';
 
 export async function startMcpServer(root: string): Promise<void> {
   const server = new McpServer(
@@ -373,11 +377,24 @@ export async function startMcpServer(root: string): Promise<void> {
 
   server.tool(
     'codegps_profile',
-    'Big-picture knowledge profile across all projects: industries, top technical skills, evidence mix. The "second brain" summary.',
-    {},
-    async () => {
+    'Big-picture knowledge profile across all projects: industries, top technical skills, evidence mix. Pass prose:true for ProfileWriter-generated portfolio markdown.',
+    { prose: z.boolean().optional() },
+    async ({ prose }) => {
       const gdb = openGlobalDb();
       try {
+        if (prose) {
+          const projectCount = (gdb.prepare(`SELECT COUNT(*) AS n FROM projects`).get() as any).n;
+          const industries = listIndustries(gdb).map((i) => ({ name: i.name, projectCount: i.projectCount }));
+          const skills = listSkills(gdb, { scope: 'technical', limit: 40 })
+            .map((s) => ({ name: s.name, grounding: s.grounding, projectCount: s.projectCount }));
+          const highlights = listHighlights(gdb).map((h) => ({ statement: h.statement, grounding: h.grounding }));
+          if (!industries.length && !skills.length && !highlights.length) {
+            return text('Nothing to write yet. Run `codegps enrich` then `codegps link` per project.');
+          }
+          const rt = new AgentRuntime({ knowledgeDb: gdb, config: loadConfig() });
+          const out = await rt.run(PROFILE_WRITER_AGENT, { payload: { projectCount, industries, skills, highlights } });
+          return text(out.output.markdown);
+        }
         const projects = (gdb.prepare(`SELECT COUNT(*) AS n FROM projects`).get() as any).n;
         const industries = listIndustries(gdb);
         const tech = listSkills(gdb, { scope: 'technical', limit: 25 });
@@ -416,6 +433,16 @@ export async function startMcpServer(root: string): Promise<void> {
     { full: z.boolean().optional() },
     async ({ full }) => {
       const stats = await syncProject(root, { full });
+      return text(JSON.stringify(stats, null, 2));
+    },
+  );
+
+  server.tool(
+    'codegps_analyze',
+    'Code-grounded analysis: per-file LLM summaries + architectural layers + tags, grounded in the tree-sitter graph (the hybrid L0 -> semantic pass).',
+    { full: z.boolean().optional() },
+    async ({ full }) => {
+      const stats = await analyzeProject(root, loadConfig(root), { full });
       return text(JSON.stringify(stats, null, 2));
     },
   );

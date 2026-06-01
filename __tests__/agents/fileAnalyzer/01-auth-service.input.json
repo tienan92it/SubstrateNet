@@ -1,0 +1,14 @@
+{
+  "payload": {
+    "path": "src/services/auth.ts",
+    "language": "typescript",
+    "defs": [
+      { "name": "login", "kind": "function", "signature": "(email: string, password: string): Promise<Session>" },
+      { "name": "verifyToken", "kind": "function", "signature": "(jwt: string): Claims" },
+      { "name": "AuthService", "kind": "class" }
+    ],
+    "imports": ["jsonwebtoken", "bcrypt", "../db/users", "../config"],
+    "calls": ["sign", "compare", "findUserByEmail"],
+    "sourceSlice": "export class AuthService {\n  async login(email: string, password: string) {\n    const user = await findUserByEmail(email);\n    if (!user || !(await bcrypt.compare(password, user.hash))) throw new Error('invalid');\n    return { token: jwt.sign({ sub: user.id }, this.secret) };\n  }\n}"
+  }
+}

@@ -19,6 +19,12 @@ graph. An agent pipeline triages noise, extracts decisions and business rules,
 clusters them into concepts, models the business domain, and aggregates what you
 know into a cross-project skill graph.
 
+It follows a tree-sitter + LLM hybrid: the parser resolves the exact imports,
+definitions, and call graph; the LLMs read that structure to produce summaries,
+architectural layers, and business-domain knowledge — fewer tokens, fewer
+hallucinations. An interactive local dashboard renders the whole graph from
+SQLite.
+
 The result is a queryable picture of your work along two axes: **technical**
 (what the architecture objectively says) and **industry** (the business domain
 your projects serve). Every node is tagged with its **grounding** — how it's
@@ -66,6 +72,7 @@ deterministic. Meaning is agent-driven.**
 | Layer | Content | How it's produced |
 |---|---|---|
 | **L0** Code structure | symbols, calls, imports, fields, SQL tables | deterministic (tree-sitter / regex DDL) |
+| **L0.5** Code analysis | per-file summaries, architectural layer, tags | tree-sitter structure → **agent** (FileAnalyzer · ArchitectureAnalyzer) |
 | **L1** Conversations | sessions, turns, tool calls | deterministic (file parsers) |
 | **L1.5** Triage | relevance / domain / quality / linkage per window | **agent** (Triage) |
 | **L2** Facts | decisions, business rules, intents, problems / solutions | **agents** (Decision · BusinessLogic · Intent · ProblemSolution) + syntax pass |
@@ -100,13 +107,15 @@ knowledge never gets mistaken for "what your project actually does."
 ```
 codegps init [path]                  # writes .codegps/{code.db,knowledge.db,config.json}
 codegps sync [path] [--full]         # re-index code (L0)
-codegps ingest [path]                # conversations + agent pipeline + enrichment (L1.5→L2.5)
-  [--agent X] [--no-triage] [--no-extract] [--no-enrich] [--reprocess]
+codegps analyze [path] [--full]      # code-grounded LLM pass: file summaries + layers + tags
+codegps ingest [path]                # conversations + agent pipeline + analyze + enrichment
+  [--agent X] [--no-triage] [--no-extract] [--no-analyze] [--no-enrich] [--reprocess]
 codegps enrich [path] [--no-agent]   # run the L2.5 enrichment pass on its own
 codegps link [path] [--rebuild]      # rebuild cross-project links (L4) + skill graph (L5)
 codegps skills [--scope X] [--cross] # global skill graph, weighted by evidence
-codegps profile                      # industries + top skills across all projects
+codegps profile [--prose] [--out p]  # industries + top skills; --prose writes a portfolio
 codegps learn [path]                 # industry-standard knowledge not yet in your work
+codegps dashboard [path] [--open]    # build a self-contained interactive graph dashboard
 codegps serve [path] --mcp           # MCP server over stdio
 codegps status [path]                # counts per layer, with scope + grounding breakdown
 codegps triage audit [path]          # show triaged windows with labels and rationale
@@ -115,6 +124,10 @@ codegps canvas <kind> [path]         # generate .canvas.tsx (triage-audit / proj
 codegps clean [path]                 # remove project data (--local-only / --global-only / --all)
 codegps agents list | eval | run     # inspect / test / debug agents
 ```
+
+The `dashboard` command needs the viewer bundle built once: `npm run build:dashboard`
+(or `npm run build:all`). It then emits a single self-contained `index.html` (graph
+inlined) plus a shareable `graph.json` to `<project>/.codegps/dashboard/`.
 
 `ingest` is incremental: it only processes newly pulled windows. Use
 `--reprocess` to re-run the pipeline over **all** existing windows after a model

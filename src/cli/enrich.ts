@@ -26,6 +26,7 @@ export function registerEnrich(program: Command): void {
         console.log(`  Agent relationships:      ${stats.agentRelationships}`);
         console.log(`  Industry:                 ${stats.industry ?? '(unclassified)'}`);
         console.log(`  Industry-standard items:  ${stats.industryConcepts} (${stats.externalUpgrades} web-cited)`);
+        console.log(`  Portfolio highlights:     ${stats.domainHighlights}`);
         console.log(`  Gaps (agent / detected):  ${stats.agentGaps} / ${stats.detectedGaps}`);
       } finally {
         codeDb.close();

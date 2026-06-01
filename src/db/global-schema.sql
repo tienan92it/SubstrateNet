@@ -78,3 +78,32 @@ CREATE TABLE IF NOT EXISTS industries (
     updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_industries_project ON industries(project_id);
+
+-- Composite portfolio highlights (technical x industry), per project.
+CREATE TABLE IF NOT EXISTS highlights (
+    id TEXT PRIMARY KEY,
+    statement TEXT NOT NULL,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    evidence TEXT,
+    grounding TEXT,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_highlights_project ON highlights(project_id);
+
+-- Agent run cache + audit for GLOBAL agents (ProfileWriter, etc.), mirroring
+-- knowledge.db's agent_runs so AgentRuntime can cache against global.db.
+CREATE TABLE IF NOT EXISTS agent_runs (
+    id TEXT PRIMARY KEY,
+    agent_name TEXT NOT NULL,
+    model TEXT NOT NULL,
+    input_hash TEXT NOT NULL,
+    output_json TEXT NOT NULL,
+    tokens_in INTEGER,
+    tokens_out INTEGER,
+    ms INTEGER,
+    ok INTEGER NOT NULL,
+    error TEXT,
+    produced_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_global_agent_cache
+    ON agent_runs(agent_name, model, input_hash);

@@ -20,6 +20,7 @@
       <a href="architecture.html">architecture</a>
       <a class="active" href="cli.html">cli</a>
       <a href="mcp.html">mcp</a>
+      <a href="dashboard.html">dashboard</a>
       <a href="configuration.html">config</a>
       <a href="https://github.com/tienan92it/CodeGps">github →</a>
     </nav>
@@ -31,8 +32,8 @@
   <div class="toc">
     <h4>commands</h4>
     <ul>
-      <li><a href="#init">init</a> · <a href="#sync">sync</a> · <a href="#ingest">ingest</a> · <a href="#enrich">enrich</a> · <a href="#status">status</a></li>
-      <li><a href="#link">link</a> · <a href="#skills">skills</a> · <a href="#profile">profile</a> · <a href="#learn">learn</a></li>
+      <li><a href="#init">init</a> · <a href="#sync">sync</a> · <a href="#analyze">analyze</a> · <a href="#ingest">ingest</a> · <a href="#enrich">enrich</a> · <a href="#status">status</a></li>
+      <li><a href="#link">link</a> · <a href="#skills">skills</a> · <a href="#profile">profile</a> · <a href="#learn">learn</a> · <a href="#dashboard">dashboard</a></li>
       <li><a href="#serve">serve</a> · <a href="#canvas">canvas</a> · <a href="#verify">verify</a> · <a href="#clean">clean</a></li>
       <li><a href="#triage">triage audit</a> · <a href="#agents">agents (list / eval / run)</a></li>
     </ul>
@@ -52,9 +53,26 @@
   <p>Output:</p>
   <pre><code>L0 sync complete: 142 files, 2041 nodes, 3177 edges</code></pre>
 
+  <h2 id="analyze">analyze</h2>
+  <pre><code>codegps analyze [path] [--full]</code></pre>
+  <p>
+    Code-grounded analysis (the tree-sitter + LLM hybrid). For each indexed file
+    it builds a deterministic payload from <code>code.db</code> — definitions,
+    resolved imports, call-sites — plus a bounded source slice, and runs the
+    FileAnalyzer agent to produce a plain-English summary, an architectural layer
+    (<code>api · service · data · ui · utility · other</code>), tags, and language
+    concepts. A directory-level ArchitectureAnalyzer pass then reconciles layers.
+    Results land in <code>code.db.file_analysis</code>.
+  </p>
+  <table>
+    <tr><th>Flag</th><th>Effect</th></tr>
+    <tr><td><code>--full</code></td><td>Re-analyze every file, ignoring content hashes.</td></tr>
+  </table>
+  <p class="small">Incremental: a file whose <code>content_hash</code> is unchanged since its last analysis is skipped. Also runs inside <code>ingest</code> (disable with <code>--no-analyze</code>).</p>
+
   <h2 id="ingest">ingest</h2>
-  <pre><code>codegps ingest [path] [--agent &lt;id&gt;] [--no-triage] [--no-extract] [--no-enrich] [--reprocess]</code></pre>
-  <p>Pulls new conversation data, runs the agent pipeline (L1.5→L3), then the enrichment pass (L2.5).</p>
+  <pre><code>codegps ingest [path] [--agent &lt;id&gt;] [--no-triage] [--no-extract] [--no-analyze] [--no-enrich] [--reprocess]</code></pre>
+  <p>Pulls new conversation data, runs the agent pipeline (L1.5→L3), the code-grounded analysis (L0.5), then the enrichment pass (L2.5).</p>
   <table>
     <tr><th>Flag</th><th>Effect</th></tr>
     <tr><td><code>--agent cursor|claude-code|codex|copilot</code></td><td>Limit to one adapter.</td></tr>
@@ -137,8 +155,14 @@
   </table>
 
   <h2 id="profile">profile</h2>
-  <pre><code>codegps profile</code></pre>
+  <pre><code>codegps profile [--prose] [--out &lt;path&gt;]</code></pre>
   <p>The big-picture second-brain summary across all projects: classified industries, top technical skills by evidence weight, and the grounding mix. Read-only over <code>global.db</code>.</p>
+  <table>
+    <tr><th>Flag</th><th>Effect</th></tr>
+    <tr><td><code>--prose</code></td><td>Generate portfolio/background markdown via the ProfileWriter agent (consumes domain highlights + skills + industries).</td></tr>
+    <tr><td><code>--out &lt;path&gt;</code></td><td>Where to write the prose (default <code>~/.codegps/profile.md</code>).</td></tr>
+  </table>
+  <p class="small">ProfileWriter respects grounding: <code>structural</code>/<code>corroborated</code> skills are stated as demonstrated; <code>stated</code> ones are hedged; nothing is invented.</p>
 
   <h2 id="learn">learn</h2>
   <pre><code>codegps learn [path] [--limit &lt;n&gt;]</code></pre>
@@ -152,6 +176,24 @@
     <li>For each cluster with multiple same-kind facts, pairwise verify (cap per cluster).</li>
     <li>Optionally invalidate triage cache entries older than N days so the next ingest re-triages them.</li>
   </ol>
+
+  <h2 id="dashboard">dashboard</h2>
+  <pre><code>codegps dashboard [path] [--open]</code></pre>
+  <p>
+    Builds a self-contained interactive graph dashboard from the project's SQLite
+    databases: a file-level dependency graph (nodes colored by architectural
+    layer), domain highlights/entities, L3 concepts, and a fuzzy search index.
+    Emits a single offline-openable <code>index.html</code> (graph inlined) plus a
+    shareable <code>graph.json</code> to <code>&lt;project&gt;/.codegps/dashboard/</code>.
+  </p>
+  <table>
+    <tr><th>Flag</th><th>Effect</th></tr>
+    <tr><td><code>--open</code></td><td>Open the generated dashboard in your browser.</td></tr>
+  </table>
+  <p class="small">
+    Build the viewer bundle once with <code>npm run build:dashboard</code> (or
+    <code>npm run build:all</code>). See <a href="dashboard.html">the dashboard guide</a>.
+  </p>
 
   <h2 id="clean">clean</h2>
   <pre><code>codegps clean [path] [--local-only] [--global-only] [--all] [--yes]</code></pre>
