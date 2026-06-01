@@ -10,7 +10,7 @@ import { AgentRuntime } from '../agents/runtime.js';
 import { LINKER_AGENT } from '../agents/linker.js';
 import { decodeVector, cosine } from '../knowledge/embeddings.js';
 import { openKnowledgeDb } from '../db/connection.js';
-import type { CodeGpsConfig } from '../config.js';
+import type { SubstrateNetConfig } from '../config.js';
 
 export interface SemanticStats {
   candidatePairs: number;
@@ -21,7 +21,7 @@ export interface SemanticStats {
 
 export async function runSemanticLinking(
   gdb: SqliteDb,
-  cfg: CodeGpsConfig,
+  cfg: SubstrateNetConfig,
   opts: { minSimilarity?: number; maxPairs?: number } = {},
 ): Promise<SemanticStats> {
   const minSim = opts.minSimilarity ?? 0.78;

@@ -1,5 +1,5 @@
 /**
- * `codegps ingest --reprocess` re-runs the agent pipeline over EXISTING
+ * `subnet ingest --reprocess` re-runs the agent pipeline over EXISTING
  * windows, not just newly-ingested ones. Verified with a stubbed agent runtime
  * and an isolated HOME (so no real transcripts are discovered → 0 new windows).
  */

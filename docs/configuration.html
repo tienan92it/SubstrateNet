@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Configuration — CodeGps</title>
+  <title>Configuration — Substrate Net</title>
   <link rel="stylesheet" href="assets/style.css">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23b25a3c' d='M12 2 L14 12 L12 22 L10 12 Z M2 12 L12 14 L22 12 L12 10 Z'/%3E%3C/svg%3E">
 </head>
@@ -12,7 +12,7 @@
   <header class="site-header">
     <a class="brand" href="./">
       <svg class="brand-mark" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 L14 12 L12 22 L10 12 Z M2 12 L12 14 L22 12 L12 10 Z"/></svg>
-      codegps
+      subnet
     </a>
     <nav class="site-nav">
       <a href="./">overview</a>
@@ -22,15 +22,15 @@
       <a href="mcp.html">mcp</a>
       <a href="dashboard.html">dashboard</a>
       <a class="active" href="configuration.html">config</a>
-      <a href="https://github.com/tienan92it/CodeGps">github →</a>
+      <a href="https://github.com/tienan92it/SubstrateNet">github →</a>
     </nav>
   </header>
 
   <h1>Configuration</h1>
   <p class="lede">
     Per-agent model selection lives in JSON. Global defaults at
-    <code>~/.codegps/config.json</code>; per-project overrides at
-    <code>&lt;project&gt;/.codegps/config.json</code>. Per-project values
+    <code>~/.substrate-net/config.json</code>; per-project overrides at
+    <code>&lt;project&gt;/.substrate-net/config.json</code>. Per-project values
     deep-merge over global.
   </p>
 
@@ -230,14 +230,14 @@
   </ul>
 
   <p>
-    Use <code>codegps verify --invalidate-triage-days 30</code> to invalidate
+    Use <code>subnet verify --invalidate-triage-days 30</code> to invalidate
     triage runs older than 30 days so the next ingest re-triages stale
     windows.
   </p>
 
   <footer class="site-footer">
     <span>v0.1.0 · MIT</span>
-    <span><a href="https://github.com/tienan92it/CodeGps">github.com/tienan92it/CodeGps</a></span>
+    <span><a href="https://github.com/tienan92it/SubstrateNet">github.com/tienan92it/SubstrateNet</a></span>
   </footer>
 </div>
 </body>

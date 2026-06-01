@@ -9,7 +9,7 @@ import { PROFILE_WRITER_AGENT } from '../agents/profile-writer.js';
 import '../agents/index.js';
 
 export function registerProfile(program: Command): void {
-  // codegps skills — the global technical skill graph.
+  // subnet skills — the global technical skill graph.
   program
     .command('skills')
     .description('Global skill graph: what you know, weighted by evidence across projects')
@@ -21,7 +21,7 @@ export function registerProfile(program: Command): void {
       try {
         const skills = listSkills(gdb, { scope: opts.scope, crossOnly: opts.cross, limit: parseInt(opts.limit, 10) });
         if (skills.length === 0) {
-          console.log('No skills yet. Run `codegps enrich` then `codegps link` in your projects.');
+          console.log('No skills yet. Run `subnet enrich` then `subnet link` in your projects.');
           return;
         }
         for (const s of skills) {
@@ -34,7 +34,7 @@ export function registerProfile(program: Command): void {
       } finally { gdb.close(); }
     });
 
-  // codegps profile — the big-picture second-brain summary.
+  // subnet profile — the big-picture second-brain summary.
   program
     .command('profile')
     .description('Big-picture knowledge profile across all projects')
@@ -71,7 +71,7 @@ export function registerProfile(program: Command): void {
       } finally { gdb.close(); }
     });
 
-  // codegps learn — industry-standard knowledge you have NOT demonstrated.
+  // subnet learn — industry-standard knowledge you have NOT demonstrated.
   program
     .command('learn')
     .description('Learning targets: industry-standard knowledge not yet grounded in your work')
@@ -88,7 +88,7 @@ export function registerProfile(program: Command): void {
           LIMIT ?
         `).all(parseInt(opts.limit, 10)) as Array<{ title: string; summary: string | null; grounding: string; source_url: string | null }>;
         if (rows.length === 0) {
-          console.log('No learning targets. Run `codegps enrich` (needs an LLM) to surface industry-standard knowledge.');
+          console.log('No learning targets. Run `subnet enrich` (needs an LLM) to surface industry-standard knowledge.');
           return;
         }
         console.log(`# Learning targets (industry-standard, not yet demonstrated)\n`);
@@ -113,7 +113,7 @@ async function writeProse(outPath: string): Promise<void> {
     const highlights = listHighlights(gdb).map((h) => ({ statement: h.statement, grounding: h.grounding }));
 
     if (industries.length === 0 && skills.length === 0 && highlights.length === 0) {
-      console.log('Nothing to write yet. Run `codegps enrich` then `codegps link` in your projects first.');
+      console.log('Nothing to write yet. Run `subnet enrich` then `subnet link` in your projects first.');
       return;
     }
 

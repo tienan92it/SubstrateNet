@@ -16,7 +16,7 @@ import { join } from 'path';
 import { AgentRuntime } from '../agents/runtime.js';
 import { FILE_ANALYZER_AGENT, type FileAnalyzerPayload } from '../agents/file-analyzer.js';
 import '../agents/index.js';
-import type { CodeGpsConfig } from '../config.js';
+import type { SubstrateNetConfig } from '../config.js';
 import { openCodeDb, openKnowledgeDb } from '../db/connection.js';
 import { mapPool } from '../util/pool.js';
 import { runArchitecturePass } from './architecture.js';
@@ -89,7 +89,7 @@ export interface AnalyzeOpts { full?: boolean; }
 /** Open code.db + knowledge.db (the latter hosts the agent_runs cache) and analyze. */
 export async function analyzeProject(
   root: string,
-  cfg: CodeGpsConfig,
+  cfg: SubstrateNetConfig,
   opts: AnalyzeOpts = {},
 ): Promise<AnalyzeStats> {
   const codeDb = openCodeDb(root);
@@ -107,7 +107,7 @@ export async function analyzeWithDbs(
   codeDb: SqliteDb,
   knowDb: SqliteDb,
   root: string,
-  cfg: CodeGpsConfig,
+  cfg: SubstrateNetConfig,
   opts: AnalyzeOpts = {},
 ): Promise<AnalyzeStats> {
   const stats: AnalyzeStats = { filesAnalyzed: 0, filesSkipped: 0, failed: 0, byLayer: {}, layersReassigned: 0 };

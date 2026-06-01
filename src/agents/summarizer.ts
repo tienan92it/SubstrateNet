@@ -2,7 +2,7 @@
  * Summarizer Agent.
  *
  * Given the member facts of a cluster, produces a canonical concept name + a
- * short structured summary suitable for the codegps_explain MCP tool.
+ * short structured summary suitable for the subnet_explain MCP tool.
  *
  * The summary follows a light "systematic thinking" shape:
  *   problem | constraints | options | decision | consequences | open_questions

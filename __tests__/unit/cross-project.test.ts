@@ -14,7 +14,7 @@ let tempHome: string;
 let origHome: string | undefined;
 
 beforeEach(() => {
-  tempHome = mkdtempSync(join(tmpdir(), 'codegps-home-'));
+  tempHome = mkdtempSync(join(tmpdir(), 'subnet-home-'));
   origHome = process.env.HOME;
   process.env.HOME = tempHome;
 });
@@ -26,7 +26,7 @@ afterEach(() => {
 });
 
 function seedProject(rootName: string, conceptName: string, summary: string): string {
-  const root = mkdtempSync(join(tmpdir(), `codegps-proj-${rootName}-`));
+  const root = mkdtempSync(join(tmpdir(), `subnet-proj-${rootName}-`));
   const db = openKnowledgeDb(root);
   db.prepare(`INSERT INTO concepts (id,name,summary,domain,member_count,embedding) VALUES (?,?,?,?,?,NULL)`)
     .run('c1', conceptName, summary, 'architecture', 1);

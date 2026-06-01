@@ -10,7 +10,7 @@
  */
 import type { Database as SqliteDb } from 'better-sqlite3';
 import { AgentRuntime, type Agent } from '../agents/runtime.js';
-import type { CodeGpsConfig } from '../config.js';
+import type { SubstrateNetConfig } from '../config.js';
 import '../agents/index.js';
 import { DECISION_AGENT } from '../agents/decision.js';
 import { BUSINESS_LOGIC_AGENT } from '../agents/business-logic.js';
@@ -77,7 +77,7 @@ export async function runExtractorsForKeptWindows(
   _root: string,
   knowDb: SqliteDb,
   codeDb: SqliteDb,
-  cfg: CodeGpsConfig,
+  cfg: SubstrateNetConfig,
   windowIds: string[],
 ): Promise<ExtractStats> {
   const rt = new AgentRuntime({ knowledgeDb: knowDb, config: cfg });

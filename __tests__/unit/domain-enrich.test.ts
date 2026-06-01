@@ -39,7 +39,7 @@ CREATE TABLE "public"."users_accounts" (
 `;
 
 async function setupWithSchema(): Promise<string> {
-  const root = mkdtempSync(join(tmpdir(), 'codegps-dom-'));
+  const root = mkdtempSync(join(tmpdir(), 'subnet-dom-'));
   writeFileSync(join(root, 'schema.sql'), SCHEMA);
   await syncProject(root);
   return root;

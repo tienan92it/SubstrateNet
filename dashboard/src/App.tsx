@@ -15,7 +15,7 @@ export function App({ snapshot }: { snapshot: DashboardSnapshot }) {
   return (
     <div className="app">
       <div className="topbar">
-        <span className="brand">codegps</span>
+        <span className="brand">subnet</span>
         <div className="tabs">
           {(['graph', 'domains', 'layers', 'search'] as Tab[]).map((t) => (
             <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>{t}</button>

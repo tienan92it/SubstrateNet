@@ -1,5 +1,5 @@
 /**
- * Cleanup core for `codegps clean`.
+ * Cleanup core for `subnet clean`.
  *
  * Separated from the CLI so it is testable without spawning the binary.
  * Global deletes rely on the FK cascade (the connection opens with

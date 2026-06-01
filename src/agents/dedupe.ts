@@ -12,7 +12,7 @@
  *   2. nearestKNode(...)                   (cosine over k_nodes embeddings)
  */
 import type { Database as SqliteDb } from 'better-sqlite3';
-import type { CodeGpsConfig } from '../config.js';
+import type { SubstrateNetConfig } from '../config.js';
 import { parseModelRef, resolveApiKey } from '../config.js';
 import { OllamaBackend } from './backends/ollama.js';
 import { OpenAIBackend } from './backends/openai.js';
@@ -33,7 +33,7 @@ export class DedupeAgent {
   readonly model: string;
   readonly modelRef: string;
 
-  constructor(cfg: CodeGpsConfig) {
+  constructor(cfg: SubstrateNetConfig) {
     const spec = cfg.agents[AGENT_KEY];
     if (!spec) throw new Error(`Agent "${AGENT_KEY}" missing in config.agents`);
     this.modelRef = spec.model;

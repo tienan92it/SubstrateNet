@@ -6,7 +6,7 @@ import { openCodeDb, openKnowledgeDb } from '../../src/db/connection';
 
 describe('db connection', () => {
   it('opens code.db and creates expected tables', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'codegps-test-'));
+    const dir = mkdtempSync(join(tmpdir(), 'subnet-test-'));
     try {
       const db = openCodeDb(dir);
       const tables = db
@@ -24,7 +24,7 @@ describe('db connection', () => {
   });
 
   it('opens knowledge.db with L1, L1.5, L2, L3, agent_runs tables', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'codegps-test-'));
+    const dir = mkdtempSync(join(tmpdir(), 'subnet-test-'));
     try {
       const db = openKnowledgeDb(dir);
       const tables = db

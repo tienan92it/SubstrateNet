@@ -1,19 +1,19 @@
 <div align="center">
 
-# CodeGps
+# Substrate Net
 
 **A local second brain: a layered knowledge graph across your code and your AI agent conversations.**
 
-[![CI](https://github.com/tienan92it/CodeGps/actions/workflows/ci.yml/badge.svg)](https://github.com/tienan92it/CodeGps/actions/workflows/ci.yml)
+[![CI](https://github.com/tienan92it/SubstrateNet/actions/workflows/ci.yml/badge.svg)](https://github.com/tienan92it/SubstrateNet/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)](https://nodejs.org/)
 [![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](./CHANGELOG.md)
 
-**[Documentation →](https://tienan92it.github.io/CodeGps/)**
+**[Documentation →](https://tienan92it.github.io/SubstrateNet/)**
 
 </div>
 
-CodeGps indexes your code structure *and* the conversations you have with AI
+Substrate Net indexes your code structure *and* the conversations you have with AI
 coding agents (Cursor, Claude Code, Codex, Copilot) into one local knowledge
 graph. An agent pipeline triages noise, extracts decisions and business rules,
 clusters them into concepts, models the business domain, and aggregates what you
@@ -39,8 +39,8 @@ OpenAI-compatible endpoint (OpenRouter, OpenAI, Together, Groq) works too.
 
 ```bash
 # 1. Install (Node 20+)
-git clone https://github.com/tienan92it/CodeGps && cd CodeGps
-npm install && npm run build && npm link        # exposes `codegps` on $PATH
+git clone https://github.com/tienan92it/SubstrateNet && cd SubstrateNet
+npm install && npm run build && npm link        # exposes `subnet` on $PATH
 
 # 2. Bring up a local LLM
 ollama pull qwen3:4b-instruct                    # triage / classifier
@@ -49,23 +49,23 @@ ollama pull qwen3-embedding:0.6b                 # dedupe / clustering
 
 # 3. Index a project
 cd /path/to/your/project
-codegps init                                     # creates .codegps/
-codegps sync                                     # L0 — code structure
-codegps ingest                                   # L1 → L3 + enrichment (L2.5)
-codegps status                                   # see what landed in each layer
+subnet init                                     # creates .substrate-net/
+subnet sync                                     # L0 — code structure
+subnet ingest                                   # L1 → L3 + enrichment (L2.5)
+subnet status                                   # see what landed in each layer
 
 # 4. Aggregate the second brain across projects
-codegps link                                     # L4 links + L5 skill graph
-codegps profile                                  # industries + top skills
+subnet link                                     # L4 links + L5 skill graph
+subnet profile                                  # industries + top skills
 ```
 
-To make CodeGps callable from your AI agents, see [MCP integration](#mcp-integration).
+To make Substrate Net callable from your AI agents, see [MCP integration](#mcp-integration).
 
 ---
 
 ## The model
 
-CodeGps splits "knowledge" into layers along the DIKW pyramid. Each layer is its
+Substrate Net splits "knowledge" into layers along the DIKW pyramid. Each layer is its
 own SQLite table family; edges cross layers explicitly. **Syntax is
 deterministic. Meaning is agent-driven.**
 
@@ -105,29 +105,29 @@ knowledge never gets mistaken for "what your project actually does."
 ## CLI
 
 ```
-codegps init [path]                  # writes .codegps/{code.db,knowledge.db,config.json}
-codegps sync [path] [--full]         # re-index code (L0)
-codegps analyze [path] [--full]      # code-grounded LLM pass: file summaries + layers + tags
-codegps ingest [path]                # conversations + agent pipeline + analyze + enrichment
+subnet init [path]                  # writes .substrate-net/{code.db,knowledge.db,config.json}
+subnet sync [path] [--full]         # re-index code (L0)
+subnet analyze [path] [--full]      # code-grounded LLM pass: file summaries + layers + tags
+subnet ingest [path]                # conversations + agent pipeline + analyze + enrichment
   [--agent X] [--no-triage] [--no-extract] [--no-analyze] [--no-enrich] [--reprocess]
-codegps enrich [path] [--no-agent]   # run the L2.5 enrichment pass on its own
-codegps link [path] [--rebuild]      # rebuild cross-project links (L4) + skill graph (L5)
-codegps skills [--scope X] [--cross] # global skill graph, weighted by evidence
-codegps profile [--prose] [--out p]  # industries + top skills; --prose writes a portfolio
-codegps learn [path]                 # industry-standard knowledge not yet in your work
-codegps dashboard [path] [--open]    # build a self-contained interactive graph dashboard
-codegps serve [path] --mcp           # MCP server over stdio
-codegps status [path]                # counts per layer, with scope + grounding breakdown
-codegps triage audit [path]          # show triaged windows with labels and rationale
-codegps verify [path]                # contradiction detection + low-confidence pruning
-codegps canvas <kind> [path]         # generate .canvas.tsx (triage-audit / project-map / ...)
-codegps clean [path]                 # remove project data (--local-only / --global-only / --all)
-codegps agents list | eval | run     # inspect / test / debug agents
+subnet enrich [path] [--no-agent]   # run the L2.5 enrichment pass on its own
+subnet link [path] [--rebuild]      # rebuild cross-project links (L4) + skill graph (L5)
+subnet skills [--scope X] [--cross] # global skill graph, weighted by evidence
+subnet profile [--prose] [--out p]  # industries + top skills; --prose writes a portfolio
+subnet learn [path]                 # industry-standard knowledge not yet in your work
+subnet dashboard [path] [--open]    # build a self-contained interactive graph dashboard
+subnet serve [path] --mcp           # MCP server over stdio
+subnet status [path]                # counts per layer, with scope + grounding breakdown
+subnet triage audit [path]          # show triaged windows with labels and rationale
+subnet verify [path]                # contradiction detection + low-confidence pruning
+subnet canvas <kind> [path]         # generate .canvas.tsx (triage-audit / project-map / ...)
+subnet clean [path]                 # remove project data (--local-only / --global-only / --all)
+subnet agents list | eval | run     # inspect / test / debug agents
 ```
 
 The `dashboard` command needs the viewer bundle built once: `npm run build:dashboard`
 (or `npm run build:all`). It then emits a single self-contained `index.html` (graph
-inlined) plus a shareable `graph.json` to `<project>/.codegps/dashboard/`.
+inlined) plus a shareable `graph.json` to `<project>/.substrate-net/dashboard/`.
 
 `ingest` is incremental: it only processes newly pulled windows. Use
 `--reprocess` to re-run the pipeline over **all** existing windows after a model
@@ -144,25 +144,25 @@ A single MCP server exposes 20 tools — code (L0), knowledge (L1.5–L3), domai
 // ~/.cursor/mcp.json  (or equivalent for Claude Code)
 {
   "mcpServers": {
-    "codegps": {
-      "command": "codegps",
+    "subnet": {
+      "command": "subnet",
       "args": ["serve", ".", "--mcp"]
     }
   }
 }
 ```
 
-Primary tools: `codegps_context` (facts + code for a topic), `codegps_recall`
-(semantic + FTS over conversations), `codegps_domain_model`, `codegps_gaps`,
-`codegps_skills`, `codegps_profile`, `codegps_learn`. Full catalogue in the
-[MCP docs](https://tienan92it.github.io/CodeGps/mcp.html).
+Primary tools: `subnet_context` (facts + code for a topic), `subnet_recall`
+(semantic + FTS over conversations), `subnet_domain_model`, `subnet_gaps`,
+`subnet_skills`, `subnet_profile`, `subnet_learn`. Full catalogue in the
+[MCP docs](https://tienan92it.github.io/SubstrateNet/mcp.html).
 
 ---
 
 ## Configuration
 
-Per-agent model selection lives in `~/.codegps/config.json` (auto-created on
-first `init`). Per-project overrides go in `<project>/.codegps/config.json` and
+Per-agent model selection lives in `~/.substrate-net/config.json` (auto-created on
+first `init`). Per-project overrides go in `<project>/.substrate-net/config.json` and
 deep-merge over global.
 
 ```jsonc
@@ -204,13 +204,13 @@ Bumping a model invalidates that agent's cache on the next run; old runs stay in
 ## Storage layout
 
 ```
-<project>/.codegps/
+<project>/.substrate-net/
 ├── code.db          # L0 — codegraph-compatible schema
 ├── knowledge.db     # L1, L1.5, L2, L2.5, L3 + agent_runs cache
 ├── canvas/          # generated .canvas.tsx files
 └── config.json      # per-project agent overrides
 
-~/.codegps/
+~/.substrate-net/
 ├── global.db        # L4 links + L5 skills / industries + project registry
 └── config.json      # global defaults
 ```

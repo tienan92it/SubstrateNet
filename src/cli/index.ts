@@ -19,7 +19,7 @@ import { registerDashboard } from './dashboard.js';
 const program = new Command();
 
 program
-  .name('codegps')
+  .name('subnet')
   .description('Local, layered knowledge graph across projects and AI conversations')
   .version('0.1.0');
 

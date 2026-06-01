@@ -31,7 +31,7 @@ type Add = (kind: KNodeKind, name: string, evidence: string) => void;
 
 const MAX_DEPTH = 4;
 const SKIP_DIRS = new Set([
-  'node_modules', '.git', 'dist', 'build', '.codegps', '.dart_tool',
+  'node_modules', '.git', 'dist', 'build', '.substrate-net', '.dart_tool',
   '.next', '.nuxt', 'vendor', 'Pods', 'target', '.venv', 'venv', '__pycache__',
 ]);
 

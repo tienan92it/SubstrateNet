@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CodeGps — local, layered knowledge graph</title>
+  <title>Substrate Net — local, layered knowledge graph</title>
   <meta name="description" content="A local, layered knowledge graph across your code and your AI agent conversations. SQLite, agent-driven, MCP-native.">
   <link rel="stylesheet" href="assets/style.css">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23b25a3c' d='M12 2 L14 12 L12 22 L10 12 Z M2 12 L12 14 L22 12 L12 10 Z'/%3E%3C/svg%3E">
@@ -13,7 +13,7 @@
   <header class="site-header">
     <a class="brand" href="./">
       <svg class="brand-mark" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 L14 12 L12 22 L10 12 Z M2 12 L12 14 L22 12 L12 10 Z"/></svg>
-      codegps
+      subnet
     </a>
     <nav class="site-nav">
       <a class="active" href="./">overview</a>
@@ -23,14 +23,14 @@
       <a href="mcp.html">mcp</a>
       <a href="dashboard.html">dashboard</a>
       <a href="configuration.html">config</a>
-      <a href="https://github.com/tienan92it/CodeGps">github →</a>
+      <a href="https://github.com/tienan92it/SubstrateNet">github →</a>
     </nav>
   </header>
 
   <section class="hero">
     <h1>A local second brain across code and AI agent conversations.</h1>
     <p class="tagline">
-      CodeGps indexes your code structure and the conversations you have with
+      Substrate Net indexes your code structure and the conversations you have with
       AI coding agents (Cursor, Claude Code, Codex, Copilot) into one local
       knowledge graph. An agent pipeline triages noise, extracts decisions and
       business rules, models the business domain, and aggregates what you know
@@ -38,9 +38,9 @@
       industry.
     </p>
     <div class="hero-actions">
-      <a class="primary" href="getting-started.html">$ codegps init →</a>
+      <a class="primary" href="getting-started.html">$ subnet init →</a>
       <a href="architecture.html">read the architecture</a>
-      <a href="https://github.com/tienan92it/CodeGps">source</a>
+      <a href="https://github.com/tienan92it/SubstrateNet">source</a>
     </div>
   </section>
 
@@ -73,7 +73,7 @@
     </div>
     <div class="feature">
       <h3>Local-first, SQLite throughout.</h3>
-      <p>Three databases: <code>code.db</code>, <code>knowledge.db</code>, and a global <code>~/.codegps/global.db</code>. Ollama is the default backend; any OpenAI-compatible endpoint works.</p>
+      <p>Three databases: <code>code.db</code>, <code>knowledge.db</code>, and a global <code>~/.substrate-net/global.db</code>. Ollama is the default backend; any OpenAI-compatible endpoint works.</p>
     </div>
     <div class="feature">
       <h3>MCP-native.</h3>
@@ -87,7 +87,7 @@
 
   <h2>Quickstart</h2>
   <pre class="shell"><code># 1. Install (Node 20+)
-git clone https://github.com/tienan92it/CodeGps && cd CodeGps
+git clone https://github.com/tienan92it/SubstrateNet && cd SubstrateNet
 npm install &amp;&amp; npm run build &amp;&amp; npm link
 
 # 2. Local LLM (one-time)
@@ -97,17 +97,17 @@ ollama pull qwen3-embedding:0.6b
 
 # 3. Index a project
 cd /path/to/your/project
-codegps init
-codegps sync
-codegps ingest
-codegps link        # cross-project links + skill graph
-codegps profile     # industries + top skills</code></pre>
+subnet init
+subnet sync
+subnet ingest
+subnet link        # cross-project links + skill graph
+subnet profile     # industries + top skills</code></pre>
 
   <p>
     Full walkthrough: <a href="getting-started.html">getting started →</a>
   </p>
 
-  <h2>Why CodeGps exists</h2>
+  <h2>Why Substrate Net exists</h2>
   <p>
     Pre-indexed code graphs (e.g. <a href="https://github.com/colbymchenry/codegraph">codegraph</a>)
     make agents cheaper and faster. But they only know what the AST says, never
@@ -115,7 +115,7 @@ codegps profile     # industries + top skills</code></pre>
     constraints, the trade-offs that never made it into a comment.
   </p>
   <p>
-    CodeGps adds the layers on top: raw conversation, triage, facts, domain
+    Substrate Net adds the layers on top: raw conversation, triage, facts, domain
     enrichment, concepts, cross-project links, and a global skill graph. Each
     layer is auditable, each agent's run is cached, and every semantic call is a
     model + prompt + schema you can swap.
@@ -124,7 +124,7 @@ codegps profile     # industries + top skills</code></pre>
   <footer class="site-footer">
     <span>v0.1.0 · MIT</span>
     <span>
-      <a href="https://github.com/tienan92it/CodeGps">github.com/tienan92it/CodeGps</a>
+      <a href="https://github.com/tienan92it/SubstrateNet">github.com/tienan92it/SubstrateNet</a>
     </span>
   </footer>
 </div>

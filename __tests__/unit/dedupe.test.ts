@@ -34,7 +34,7 @@ function seedWindow(db: any, id: string): string {
 
 describe('DedupeAgent', () => {
   it('finds the nearest window by cosine similarity', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'codegps-dd-'));
+    const dir = mkdtempSync(join(tmpdir(), 'subnet-dd-'));
     const db = openKnowledgeDb(dir);
     try {
       const dedupe = makeDedupeWithFakeBackend({
@@ -58,7 +58,7 @@ describe('DedupeAgent', () => {
   });
 
   it('stores and retrieves k_node embeddings', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'codegps-dd-'));
+    const dir = mkdtempSync(join(tmpdir(), 'subnet-dd-'));
     const db = openKnowledgeDb(dir);
     try {
       // need an actual k_node row for FK

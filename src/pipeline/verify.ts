@@ -8,12 +8,12 @@
  *   3. Re-trigger triage for windows whose labels are older than `staleDays`
  *      and whose backing turn text has changed (rare; mostly a hook).
  *
- * Run via `codegps verify` (CLI subcommand) or `codegps_verify` MCP tool.
+ * Run via `subnet verify` (CLI subcommand) or `subnet_verify` MCP tool.
  */
 import type { Database as SqliteDb } from 'better-sqlite3';
 import { AgentRuntime } from '../agents/runtime.js';
 import { VERIFIER_AGENT } from '../agents/verifier.js';
-import type { CodeGpsConfig } from '../config.js';
+import type { SubstrateNetConfig } from '../config.js';
 
 export interface VerifyStats {
   pruned: number;
@@ -28,7 +28,7 @@ export interface VerifyOpts {
 }
 
 export async function runVerify(
-  knowDb: SqliteDb, cfg: CodeGpsConfig, opts: VerifyOpts = {},
+  knowDb: SqliteDb, cfg: SubstrateNetConfig, opts: VerifyOpts = {},
 ): Promise<VerifyStats> {
   const minConf = opts.pruneBelowConfidence ?? 0.25;
   const maxPairs = opts.maxPairsPerCluster ?? 5;

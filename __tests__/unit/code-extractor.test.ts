@@ -7,7 +7,7 @@ import { openCodeDb } from '../../src/db/connection';
 
 describe('L0 code extractor', () => {
   it('indexes a TypeScript file with classes, methods, and functions', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'codegps-ext-'));
+    const root = mkdtempSync(join(tmpdir(), 'subnet-ext-'));
     try {
       mkdirSync(join(root, 'src'));
       writeFileSync(
@@ -55,7 +55,7 @@ const helper = () => makeCalc();
   });
 
   it('indexes Python classes and functions', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'codegps-py-'));
+    const root = mkdtempSync(join(tmpdir(), 'subnet-py-'));
     try {
       writeFileSync(
         join(root, 'mod.py'),
@@ -82,7 +82,7 @@ def make_greeter() -> Greeter:
   });
 
   it('indexes Dart / Flutter files: classes, mixins, methods, fields, imports', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'codegps-dart-'));
+    const root = mkdtempSync(join(tmpdir(), 'subnet-dart-'));
     try {
       mkdirSync(join(root, 'lib'));
       writeFileSync(
@@ -137,7 +137,7 @@ void main() {
   });
 
   it('indexes Dart enums, extensions, and typedefs', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'codegps-dart2-'));
+    const root = mkdtempSync(join(tmpdir(), 'subnet-dart2-'));
     try {
       writeFileSync(
         join(root, 'lib.dart'),
@@ -193,7 +193,7 @@ typedef Predicate<T> = bool Function(T value);
   });
 
   it('indexes Go: package, imports, funcs, methods, structs, interfaces, enums, type aliases', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'codegps-go-'));
+    const root = mkdtempSync(join(tmpdir(), 'subnet-go-'));
     try {
       writeFileSync(
         join(root, 'main.go'),
@@ -256,7 +256,7 @@ type Handler = func(ctx context.Context) error
   });
 
   it('indexes Rust: structs, enums, traits, impls, fns, methods, consts, uses', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'codegps-rs-'));
+    const root = mkdtempSync(join(tmpdir(), 'subnet-rs-'));
     try {
       writeFileSync(
         join(root, 'lib.rs'),
@@ -316,7 +316,7 @@ fn main() { let u = make_user("x".into()); println!("{}", u.greet()); }
   });
 
   it('indexes Java: package, imports, classes, interfaces, enums, fields, methods, records', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'codegps-java-'));
+    const root = mkdtempSync(join(tmpdir(), 'subnet-java-'));
     try {
       mkdirSync(join(root, 'src'), { recursive: true });
       writeFileSync(
@@ -371,7 +371,7 @@ record Point(int x, int y) {}
   });
 
   it('indexes SQL DDL: tables, columns, FK refs, views, indexes, functions, sequences', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'codegps-sql-'));
+    const root = mkdtempSync(join(tmpdir(), 'subnet-sql-'));
     try {
       writeFileSync(
         join(root, 'schema.sql'),
@@ -460,7 +460,7 @@ ALTER TABLE users ADD COLUMN created_at timestamptz DEFAULT now();
   });
 
   it('indexes C#: usings, namespace, classes, structs, interfaces, enums, records, properties, methods', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'codegps-cs-'));
+    const root = mkdtempSync(join(tmpdir(), 'subnet-cs-'));
     try {
       mkdirSync(join(root, 'src'), { recursive: true });
       writeFileSync(
@@ -527,7 +527,7 @@ namespace MyApp.Services {
   });
 
   it('is incremental: second sync with no changes skips files', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'codegps-inc-'));
+    const root = mkdtempSync(join(tmpdir(), 'subnet-inc-'));
     try {
       writeFileSync(join(root, 'a.ts'), `export function f(): number { return 1; }`);
       const s1 = await syncProject(root);

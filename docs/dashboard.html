@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Dashboard — CodeGps</title>
+  <title>Dashboard — Substrate Net</title>
   <link rel="stylesheet" href="assets/style.css">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23b25a3c' d='M12 2 L14 12 L12 22 L10 12 Z M2 12 L12 14 L22 12 L12 10 Z'/%3E%3C/svg%3E">
 </head>
@@ -12,7 +12,7 @@
   <header class="site-header">
     <a class="brand" href="./">
       <svg class="brand-mark" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 L14 12 L12 22 L10 12 Z M2 12 L12 14 L22 12 L12 10 Z"/></svg>
-      codegps
+      subnet
     </a>
     <nav class="site-nav">
       <a href="./">overview</a>
@@ -22,7 +22,7 @@
       <a href="mcp.html">mcp</a>
       <a class="active" href="dashboard.html">dashboard</a>
       <a href="configuration.html">config</a>
-      <a href="https://github.com/tienan92it/CodeGps">github →</a>
+      <a href="https://github.com/tienan92it/SubstrateNet">github →</a>
     </nav>
   </header>
 
@@ -56,8 +56,8 @@ npm run build:all</code></pre>
 
   <h2 id="generate">Generate for a project</h2>
   <pre class="shell"><code>cd /path/to/your/project
-codegps dashboard            # writes .codegps/dashboard/index.html + graph.json
-codegps dashboard --open     # and open it in your browser</code></pre>
+subnet dashboard            # writes .substrate-net/dashboard/index.html + graph.json
+subnet dashboard --open     # and open it in your browser</code></pre>
   <p>
     The graph snapshot is inlined into <code>index.html</code>, so it opens
     directly from disk (<code>file://</code>) with no server. Run it again after
@@ -75,7 +75,7 @@ codegps dashboard --open     # and open it in your browser</code></pre>
 
   <h2 id="snapshot">The snapshot</h2>
   <p>
-    <code>codegps dashboard</code> also writes a standalone
+    <code>subnet dashboard</code> also writes a standalone
     <code>graph.json</code> next to the HTML. It is a bounded export from
     <code>code.db</code> + <code>knowledge.db</code>:
   </p>
@@ -98,7 +98,7 @@ codegps dashboard --open     # and open it in your browser</code></pre>
 
   <footer class="site-footer">
     <span>v0.1.0 · MIT</span>
-    <span><a href="https://github.com/tienan92it/CodeGps">github.com/tienan92it/CodeGps</a></span>
+    <span><a href="https://github.com/tienan92it/SubstrateNet">github.com/tienan92it/SubstrateNet</a></span>
   </footer>
 </div>
 </body>

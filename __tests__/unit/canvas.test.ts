@@ -22,7 +22,7 @@ function seed(know: any, code: any): void {
 
 describe('canvas generator', () => {
   it('writes all four canvas kinds with the inlined data placeholder replaced', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'codegps-canvas-'));
+    const root = mkdtempSync(join(tmpdir(), 'subnet-canvas-'));
     const know = openKnowledgeDb(root);
     const code = openCodeDb(root);
     seed(know, code);
@@ -32,10 +32,10 @@ describe('canvas generator', () => {
       for (const kind of ['triage-audit', 'project-map', 'decision-timeline', 'business-logic']) {
         const path = await generateCanvas(root, kind);
         const content = readFileSync(path, 'utf8');
-        expect(content).not.toContain('__CODEGPS_'); // placeholder substituted
+        expect(content).not.toContain('__SUBNET_'); // placeholder substituted
         expect(content).toContain('export default function');
       }
-      const projectMap = readFileSync(join(root, '.codegps', 'canvas', 'project-map.canvas.tsx'), 'utf8');
+      const projectMap = readFileSync(join(root, '.substrate-net', 'canvas', 'project-map.canvas.tsx'), 'utf8');
       // session caching concept name should be inlined
       expect(projectMap).toContain('session caching');
       expect(projectMap).toContain('pick redis');
@@ -46,7 +46,7 @@ describe('canvas generator', () => {
   });
 
   it('throws for unknown canvas kind', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'codegps-canvas-'));
+    const root = mkdtempSync(join(tmpdir(), 'subnet-canvas-'));
     try {
       await expect(generateCanvas(root, 'nonsense')).rejects.toThrow();
     } finally {

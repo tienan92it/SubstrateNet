@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MCP — CodeGps</title>
+  <title>MCP — Substrate Net</title>
   <link rel="stylesheet" href="assets/style.css">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23b25a3c' d='M12 2 L14 12 L12 22 L10 12 Z M2 12 L12 14 L22 12 L12 10 Z'/%3E%3C/svg%3E">
 </head>
@@ -12,7 +12,7 @@
   <header class="site-header">
     <a class="brand" href="./">
       <svg class="brand-mark" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 L14 12 L12 22 L10 12 Z M2 12 L12 14 L22 12 L12 10 Z"/></svg>
-      codegps
+      subnet
     </a>
     <nav class="site-nav">
       <a href="./">overview</a>
@@ -22,7 +22,7 @@
       <a class="active" href="mcp.html">mcp</a>
       <a href="dashboard.html">dashboard</a>
       <a href="configuration.html">config</a>
-      <a href="https://github.com/tienan92it/CodeGps">github →</a>
+      <a href="https://github.com/tienan92it/SubstrateNet">github →</a>
     </nav>
   </header>
 
@@ -37,8 +37,8 @@
   <p>Add to <code>~/.cursor/mcp.json</code>:</p>
   <pre><code>{
   "mcpServers": {
-    "codegps": {
-      "command": "codegps",
+    "subnet": {
+      "command": "subnet",
       "args": ["serve", ".", "--mcp"]
     }
   }
@@ -52,8 +52,8 @@
   <p>Add to <code>~/.claude/claude_desktop_config.json</code> (macOS path may vary):</p>
   <pre><code>{
   "mcpServers": {
-    "codegps": {
-      "command": "codegps",
+    "subnet": {
+      "command": "subnet",
       "args": ["serve", "--mcp"]
     }
   }
@@ -62,7 +62,7 @@
   <h2 id="codex">Codex CLI / other</h2>
   <p>
     Any MCP-compatible client that supports the stdio transport works the
-    same way. The command is <code>codegps serve [path] --mcp</code>; no
+    same way. The command is <code>subnet serve [path] --mcp</code>; no
     flags beyond <code>--mcp</code>.
   </p>
 
@@ -70,39 +70,39 @@
   <p class="small">Code (L0)</p>
   <table>
     <tr><th>Tool</th><th>Purpose</th><th>Key args</th></tr>
-    <tr><td><code>codegps_search</code></td><td>Symbol search across code by name + kind.</td><td><code>query, kind?, limit?</code></td></tr>
-    <tr><td><code>codegps_node</code></td><td>One symbol's details — signature, docstring, location.</td><td><code>name</code></td></tr>
-    <tr><td><code>codegps_sync</code></td><td>Trigger code re-index.</td><td><code>full?</code></td></tr>
-    <tr><td><code>codegps_analyze</code></td><td>Code-grounded analysis: per-file LLM summaries + architectural layers + tags (the hybrid L0 → semantic pass).</td><td><code>full?</code></td></tr>
+    <tr><td><code>subnet_search</code></td><td>Symbol search across code by name + kind.</td><td><code>query, kind?, limit?</code></td></tr>
+    <tr><td><code>subnet_node</code></td><td>One symbol's details — signature, docstring, location.</td><td><code>name</code></td></tr>
+    <tr><td><code>subnet_sync</code></td><td>Trigger code re-index.</td><td><code>full?</code></td></tr>
+    <tr><td><code>subnet_analyze</code></td><td>Code-grounded analysis: per-file LLM summaries + architectural layers + tags (the hybrid L0 → semantic pass).</td><td><code>full?</code></td></tr>
   </table>
   <p class="small">Knowledge (L1.5–L3)</p>
   <table>
     <tr><th>Tool</th><th>Purpose</th><th>Key args</th></tr>
-    <tr><td><code>codegps_context</code></td><td>Primary tool. Builds context for a topic — facts + related code in one call.</td><td><code>task, limit?</code></td></tr>
-    <tr><td><code>codegps_recall</code></td><td>Semantic + FTS query across conversations and facts; filterable by scope and grounding.</td><td><code>query, kinds?, scope?, includeEnrichment?, limit?</code></td></tr>
-    <tr><td><code>codegps_decisions</code></td><td>List decisions / constraints / patterns for a topic or file.</td><td><code>topic?, file?, limit?</code></td></tr>
-    <tr><td><code>codegps_business_logic</code></td><td>List business rules / invariants / entities.</td><td><code>topic?, file?, limit?</code></td></tr>
-    <tr><td><code>codegps_concepts</code></td><td>List or inspect L3 concepts. Pass a conceptId for members + summary.</td><td><code>conceptId?, domain?, limit?</code></td></tr>
-    <tr><td><code>codegps_explain</code></td><td>Structured systematic-thinking view of a concept (problem / constraints / options / decision / consequences).</td><td><code>conceptId</code></td></tr>
-    <tr><td><code>codegps_triage_audit</code></td><td>Inspect kept vs dropped windows with rationale.</td><td><code>droppedOnly?, limit?</code></td></tr>
-    <tr><td><code>codegps_verify</code></td><td>Run Verifier sweep on demand.</td><td><code>pruneBelow?</code></td></tr>
-    <tr><td><code>codegps_ingest</code></td><td>Trigger incremental ingest + agent pipeline.</td><td><code>runTriage?, runExtract?</code></td></tr>
-    <tr><td><code>codegps_status</code></td><td>Counts per layer.</td><td>—</td></tr>
+    <tr><td><code>subnet_context</code></td><td>Primary tool. Builds context for a topic — facts + related code in one call.</td><td><code>task, limit?</code></td></tr>
+    <tr><td><code>subnet_recall</code></td><td>Semantic + FTS query across conversations and facts; filterable by scope and grounding.</td><td><code>query, kinds?, scope?, includeEnrichment?, limit?</code></td></tr>
+    <tr><td><code>subnet_decisions</code></td><td>List decisions / constraints / patterns for a topic or file.</td><td><code>topic?, file?, limit?</code></td></tr>
+    <tr><td><code>subnet_business_logic</code></td><td>List business rules / invariants / entities.</td><td><code>topic?, file?, limit?</code></td></tr>
+    <tr><td><code>subnet_concepts</code></td><td>List or inspect L3 concepts. Pass a conceptId for members + summary.</td><td><code>conceptId?, domain?, limit?</code></td></tr>
+    <tr><td><code>subnet_explain</code></td><td>Structured systematic-thinking view of a concept (problem / constraints / options / decision / consequences).</td><td><code>conceptId</code></td></tr>
+    <tr><td><code>subnet_triage_audit</code></td><td>Inspect kept vs dropped windows with rationale.</td><td><code>droppedOnly?, limit?</code></td></tr>
+    <tr><td><code>subnet_verify</code></td><td>Run Verifier sweep on demand.</td><td><code>pruneBelow?</code></td></tr>
+    <tr><td><code>subnet_ingest</code></td><td>Trigger incremental ingest + agent pipeline.</td><td><code>runTriage?, runExtract?</code></td></tr>
+    <tr><td><code>subnet_status</code></td><td>Counts per layer.</td><td>—</td></tr>
   </table>
   <p class="small">Domain (L2.5)</p>
   <table>
     <tr><th>Tool</th><th>Purpose</th><th>Key args</th></tr>
-    <tr><td><code>codegps_domain_model</code></td><td>The business-domain graph — entities + evidence-grounded relationships, each showing its grounding.</td><td><code>entity?, limit?</code></td></tr>
-    <tr><td><code>codegps_gaps</code></td><td>Open questions / knowledge gaps; names the gap and cites the evidence, never fabricates the answer.</td><td><code>limit?</code></td></tr>
-    <tr><td><code>codegps_enrich</code></td><td>Run the enrichment pass — skills, entities/relationships, industry, gaps.</td><td><code>noAgent?</code></td></tr>
+    <tr><td><code>subnet_domain_model</code></td><td>The business-domain graph — entities + evidence-grounded relationships, each showing its grounding.</td><td><code>entity?, limit?</code></td></tr>
+    <tr><td><code>subnet_gaps</code></td><td>Open questions / knowledge gaps; names the gap and cites the evidence, never fabricates the answer.</td><td><code>limit?</code></td></tr>
+    <tr><td><code>subnet_enrich</code></td><td>Run the enrichment pass — skills, entities/relationships, industry, gaps.</td><td><code>noAgent?</code></td></tr>
   </table>
   <p class="small">Second brain (L4–L5)</p>
   <table>
     <tr><th>Tool</th><th>Purpose</th><th>Key args</th></tr>
-    <tr><td><code>codegps_link</code></td><td>Cross-project — where else this concept appears, with relation kind and score.</td><td><code>conceptId</code></td></tr>
-    <tr><td><code>codegps_skills</code></td><td>Global skill graph — technical + industry skills aggregated across projects, weighted by evidence.</td><td><code>scope?, cross?, limit?</code></td></tr>
-    <tr><td><code>codegps_profile</code></td><td>Big-picture knowledge profile — industries, top technical skills, evidence mix. Pass <code>prose</code> for ProfileWriter-generated portfolio markdown.</td><td><code>prose?</code></td></tr>
-    <tr><td><code>codegps_learn</code></td><td>Learning targets — industry-standard knowledge not yet grounded in your work.</td><td><code>limit?</code></td></tr>
+    <tr><td><code>subnet_link</code></td><td>Cross-project — where else this concept appears, with relation kind and score.</td><td><code>conceptId</code></td></tr>
+    <tr><td><code>subnet_skills</code></td><td>Global skill graph — technical + industry skills aggregated across projects, weighted by evidence.</td><td><code>scope?, cross?, limit?</code></td></tr>
+    <tr><td><code>subnet_profile</code></td><td>Big-picture knowledge profile — industries, top technical skills, evidence mix. Pass <code>prose</code> for ProfileWriter-generated portfolio markdown.</td><td><code>prose?</code></td></tr>
+    <tr><td><code>subnet_learn</code></td><td>Learning targets — industry-standard knowledge not yet grounded in your work.</td><td><code>limit?</code></td></tr>
   </table>
 
   <h2 id="usage-patterns">Usage patterns</h2>
@@ -113,22 +113,22 @@
     decisions before writing code:
   </p>
   <blockquote>
-    "Before designing the payment retry flow, call <code>codegps_decisions</code>
+    "Before designing the payment retry flow, call <code>subnet_decisions</code>
     with topic 'retry' and tell me what we've already decided. Then call
-    <code>codegps_business_logic</code> for 'payment' to surface invariants."
+    <code>subnet_business_logic</code> for 'payment' to surface invariants."
   </blockquote>
 
   <h3>Onboarding a teammate</h3>
   <p>
-    <code>codegps_concepts</code> with no arguments lists the top concepts in
-    a project ranked by member count. <code>codegps_explain conceptId</code>
+    <code>subnet_concepts</code> with no arguments lists the top concepts in
+    a project ranked by member count. <code>subnet_explain conceptId</code>
     expands one into a structured brief.
   </p>
 
   <h3>Auditing what the system kept</h3>
   <p>
     If a decision you remember discussing didn't surface, run
-    <code>codegps_triage_audit droppedOnly:true</code> to see what got filtered
+    <code>subnet_triage_audit droppedOnly:true</code> to see what got filtered
     and why. The rationale string captures the Triage Agent's reasoning;
     if the filter was wrong, retune triage (bump prompt version or swap model).
   </p>
@@ -142,11 +142,11 @@
     Verify the server independently:
   </p>
   <pre class="shell"><code>printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"0"}}}\n{"jsonrpc":"2.0","id":2,"method":"tools/list"}\n' \
-  | codegps serve . --mcp</code></pre>
+  | subnet serve . --mcp</code></pre>
 
   <footer class="site-footer">
     <span>v0.1.0 · MIT</span>
-    <span><a href="https://github.com/tienan92it/CodeGps">github.com/tienan92it/CodeGps</a></span>
+    <span><a href="https://github.com/tienan92it/SubstrateNet">github.com/tienan92it/SubstrateNet</a></span>
   </footer>
 </div>
 </body>

@@ -17,7 +17,7 @@ function insertFact(db: any, id: string, kind: string, title: string, summary: s
 
 describe('MCP query helpers', () => {
   it('recallByQuery filters by FTS query and kind', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'codegps-mcpq-'));
+    const dir = mkdtempSync(join(tmpdir(), 'subnet-mcpq-'));
     const db = openKnowledgeDb(dir);
     try {
       insertFact(db, '1', 'decision', 'use redis for sessions', 'cross-instance sharing required');
@@ -36,7 +36,7 @@ describe('MCP query helpers', () => {
   });
 
   it('triageAuditRows returns kept and dropped flag', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'codegps-mcpq-'));
+    const dir = mkdtempSync(join(tmpdir(), 'subnet-mcpq-'));
     const db = openKnowledgeDb(dir);
     try {
       // seed a window
@@ -59,7 +59,7 @@ describe('MCP query helpers', () => {
   });
 
   it('factsForFile joins k_nodes via k_to_code', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'codegps-mcpq-'));
+    const dir = mkdtempSync(join(tmpdir(), 'subnet-mcpq-'));
     const db = openKnowledgeDb(dir);
     try {
       insertFact(db, '1', 'decision', 'use feature flag', 'rollout strategy');

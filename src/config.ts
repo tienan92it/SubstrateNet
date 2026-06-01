@@ -40,7 +40,7 @@ export interface ResearchConfig {
   apiKeyEnv?: string;
 }
 
-export interface CodeGpsConfig {
+export interface SubstrateNetConfig {
   agentBackends: Record<string, AgentBackend>;
   agents: Record<string, AgentSpec>;
   /** Max concurrent agent (LLM) calls in the pipeline. 1 = serial. Default 4. */
@@ -56,7 +56,7 @@ export interface CodeGpsConfig {
   };
 }
 
-export const DEFAULT_CONFIG: CodeGpsConfig = {
+export const DEFAULT_CONFIG: SubstrateNetConfig = {
   agentBackends: {
     default: { kind: 'ollama', endpoint: 'http://localhost:11434' },
   },
@@ -97,7 +97,7 @@ export function expandHome(p: string): string {
 }
 
 export function globalConfigDir(): string {
-  return join(homedir(), '.codegps');
+  return join(homedir(), '.substrate-net');
 }
 
 export function globalConfigPath(): string {
@@ -105,7 +105,7 @@ export function globalConfigPath(): string {
 }
 
 export function projectConfigDir(projectRoot: string): string {
-  return join(resolve(projectRoot), '.codegps');
+  return join(resolve(projectRoot), '.substrate-net');
 }
 
 export function projectConfigPath(projectRoot: string): string {
@@ -116,8 +116,8 @@ export function projectConfigPath(projectRoot: string): string {
  * Load merged config (global + per-project override). Returns DEFAULT_CONFIG
  * if neither file exists. Per-project keys deep-merge over global keys.
  */
-export function loadConfig(projectRoot?: string): CodeGpsConfig {
-  const merged: CodeGpsConfig = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+export function loadConfig(projectRoot?: string): SubstrateNetConfig {
+  const merged: SubstrateNetConfig = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
   const gp = globalConfigPath();
   if (existsSync(gp)) deepMerge(merged, readJson(gp));
   if (projectRoot) {

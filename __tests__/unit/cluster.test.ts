@@ -20,7 +20,7 @@ function insertFact(db: any, id: string, kind: string, title: string) {
 
 describe('Cluster pipeline', () => {
   it('creates new concepts when no candidates exist; attaches similar facts to the same concept', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'codegps-cl-'));
+    const dir = mkdtempSync(join(tmpdir(), 'subnet-cl-'));
     const db = openKnowledgeDb(dir);
     try {
       insertFact(db, 'f1', 'decision', 'use redis for sessions');
@@ -85,7 +85,7 @@ describe('Cluster pipeline', () => {
   });
 
   it('uses uncategorized concept for facts without embeddings', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'codegps-cl-'));
+    const dir = mkdtempSync(join(tmpdir(), 'subnet-cl-'));
     const db = openKnowledgeDb(dir);
     try {
       insertFact(db, 'f1', 'todo', 'add login tests');

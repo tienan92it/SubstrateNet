@@ -8,10 +8,10 @@ import { cleanGlobalProject, countGlobalProject, listProjectPaths } from '../glo
 export function registerClean(program: Command): void {
   program
     .command('clean')
-    .description('Remove a project\'s knowledge: local .codegps/ and/or its rows in the global brain')
+    .description('Remove a project\'s knowledge: local .substrate-net/ and/or its rows in the global brain')
     .argument('[path]', 'Project root path', '.')
-    .option('--local-only', 'Only delete the local .codegps/ directory', false)
-    .option('--global-only', 'Only delete this project\'s rows in ~/.codegps/global.db', false)
+    .option('--local-only', 'Only delete the local .substrate-net/ directory', false)
+    .option('--global-only', 'Only delete this project\'s rows in ~/.substrate-net/global.db', false)
     .option('--all', 'Reset everything: every registered project\'s local data + the global brain (keeps config.json)', false)
     .option('-y, --yes', 'Skip the confirmation dry-run and actually delete', false)
     .action(async (path: string, opts: { localOnly: boolean; globalOnly: boolean; all: boolean; yes: boolean }) => {
@@ -31,7 +31,7 @@ export function registerClean(program: Command): void {
       }
 
       console.log(`Clean plan for ${root}:`);
-      if (doLocal) console.log(`  local:  ${localExists ? `remove ${localDir}` : '(no .codegps/ — nothing to remove)'}`);
+      if (doLocal) console.log(`  local:  ${localExists ? `remove ${localDir}` : '(no .substrate-net/ — nothing to remove)'}`);
       if (doGlobal && counts) {
         console.log(`  global: ${counts.found ? `remove project ${counts.projectId}` : '(not registered globally)'}`);
         console.log(`            concepts=${counts.conceptsGlobal} links=${counts.conceptLinks} skillEvidence=${counts.skillEvidence} industries=${counts.industries}`);
@@ -67,7 +67,7 @@ function cleanAll(yes: boolean): void {
   console.log('Clean plan: FULL RESET');
   console.log(`  global brain: remove ${globalFiles.filter(existsSync).join(', ') || '(none)'}`);
   console.log(`  local dirs:   ${projects.length} registered project(s)`);
-  for (const p of projects) console.log(`    - ${join(p.path, '.codegps')}`);
+  for (const p of projects) console.log(`    - ${join(p.path, '.substrate-net')}`);
   console.log(`  config.json is preserved.`);
 
   if (!yes) {
@@ -76,7 +76,7 @@ function cleanAll(yes: boolean): void {
   }
 
   for (const p of projects) {
-    const dir = join(p.path, '.codegps');
+    const dir = join(p.path, '.substrate-net');
     if (existsSync(dir)) { rmSync(dir, { recursive: true, force: true }); console.log(`Removed ${dir}`); }
   }
   for (const f of globalFiles) if (existsSync(f)) rmSync(f, { force: true });

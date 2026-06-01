@@ -8,7 +8,7 @@ import { registerProject } from '../global/registry.js';
 export function registerInit(program: Command): void {
   program
     .command('init')
-    .description('Initialize .codegps/ in the current (or specified) project')
+    .description('Initialize .substrate-net/ in the current (or specified) project')
     .argument('[path]', 'Project root path', '.')
     .action(async (path: string) => {
       const root = resolve(path);
@@ -37,6 +37,6 @@ export function registerInit(program: Command): void {
       registerProject(gdb, root);
       gdb.close();
 
-      console.log(`Initialized CodeGps at ${cfgDir}`);
+      console.log(`Initialized Substrate Net at ${cfgDir}`);
     });
 }

@@ -1,5 +1,5 @@
 /**
- * CodeGps core type definitions.
+ * Substrate Net core type definitions.
  *
  * Mirrors the layered model (L0..L4) described in the plan.
  */

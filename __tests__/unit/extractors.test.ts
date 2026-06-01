@@ -60,7 +60,7 @@ describe('extractor agents', () => {
 
 describe('extract pipeline', () => {
   it('routes domain to correct agents and persists facts', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'codegps-ex-'));
+    const dir = mkdtempSync(join(tmpdir(), 'subnet-ex-'));
     const knowDb = openKnowledgeDb(dir);
     const codeDb = openCodeDb(dir);
     try {
@@ -124,7 +124,7 @@ describe('extract pipeline', () => {
   });
 
   it('skips windows marked as duplicates by dedupe', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'codegps-ex-'));
+    const dir = mkdtempSync(join(tmpdir(), 'subnet-ex-'));
     const knowDb = openKnowledgeDb(dir);
     const codeDb = openCodeDb(dir);
     try {

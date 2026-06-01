@@ -5,7 +5,7 @@ import { spawn } from 'child_process';
 import { projectConfigDir } from '../config.js';
 import { buildSnapshot } from '../dashboard/snapshot.js';
 
-const DATA_MARKER = '/*__CODEGPS_DATA__*/null';
+const DATA_MARKER = '/*__SUBNET_DATA__*/null';
 
 export function registerDashboard(program: Command): void {
   program

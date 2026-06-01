@@ -12,7 +12,7 @@
  * evidence citation; nothing is fabricated.
  */
 import type { Database as SqliteDb } from 'better-sqlite3';
-import type { CodeGpsConfig } from '../config.js';
+import type { SubstrateNetConfig } from '../config.js';
 import type { KNode } from '../types.js';
 import { createHash } from 'crypto';
 import { AgentRuntime } from '../agents/runtime.js';
@@ -61,7 +61,7 @@ export interface EnrichOpts {
 }
 
 export async function runEnrichment(
-  root: string, knowDb: SqliteDb, codeDb: SqliteDb, cfg: CodeGpsConfig, opts: EnrichOpts = {},
+  root: string, knowDb: SqliteDb, codeDb: SqliteDb, cfg: SubstrateNetConfig, opts: EnrichOpts = {},
 ): Promise<EnrichStats> {
   const stats: EnrichStats = {
     dependencies: 0, tools: 0, technicalSkills: 0,
@@ -144,7 +144,7 @@ async function embedFact(dedupe: DedupeAgent | undefined, knowDb: SqliteDb, node
   } catch { /* ignore */ }
 }
 
-async function runTechnicalProfiler(knowDb: SqliteDb, codeDb: SqliteDb, cfg: CodeGpsConfig): Promise<number> {
+async function runTechnicalProfiler(knowDb: SqliteDb, codeDb: SqliteDb, cfg: SubstrateNetConfig): Promise<number> {
   const languages = (codeDb.prepare(`
     SELECT language AS name, COUNT(*) AS files FROM files GROUP BY language ORDER BY files DESC
   `).all() as Array<{ name: string; files: number }>).filter((l) => l.name && l.name !== 'unknown');
@@ -180,7 +180,7 @@ async function runTechnicalProfiler(knowDb: SqliteDb, codeDb: SqliteDb, cfg: Cod
 }
 
 async function runDomainModeler(
-  knowDb: SqliteDb, cfg: CodeGpsConfig, opts: EnrichOpts,
+  knowDb: SqliteDb, cfg: SubstrateNetConfig, opts: EnrichOpts,
 ): Promise<{ relationships: number; gaps: number }> {
   const maxEntities = opts.maxEntities ?? 60;
   const maxFacts = opts.maxFacts ?? 40;
@@ -249,7 +249,7 @@ async function runDomainModeler(
 }
 
 async function runIndustryClassifier(
-  knowDb: SqliteDb, codeDb: SqliteDb, root: string, cfg: CodeGpsConfig,
+  knowDb: SqliteDb, codeDb: SqliteDb, root: string, cfg: SubstrateNetConfig,
 ): Promise<{ industry?: string }> {
   const entities = (knowDb.prepare(`SELECT DISTINCT title FROM k_nodes WHERE kind='entity' LIMIT 80`).all() as Array<{ title: string }>).map((r) => r.title);
   const rules = (knowDb.prepare(`SELECT title, summary FROM k_nodes WHERE kind IN ('business_rule','constraint') LIMIT 40`).all() as Array<{ title: string; summary: string | null }>).map((r) => r.summary ? `${r.title}: ${r.summary}` : r.title);
@@ -320,7 +320,7 @@ async function runIndustryClassifier(
 }
 
 async function runIndustryEnricher(
-  knowDb: SqliteDb, cfg: CodeGpsConfig, industry: string,
+  knowDb: SqliteDb, cfg: SubstrateNetConfig, industry: string,
 ): Promise<{ produced: number; upgraded: number }> {
   const known = (knowDb.prepare(`
     SELECT title FROM k_nodes
@@ -377,7 +377,7 @@ async function runIndustryEnricher(
  * industry and structural skills back it, else `model`.
  */
 async function runDomainAnalyzer(
-  knowDb: SqliteDb, codeDb: SqliteDb, cfg: CodeGpsConfig, industry?: string,
+  knowDb: SqliteDb, codeDb: SqliteDb, cfg: SubstrateNetConfig, industry?: string,
 ): Promise<number> {
   const skills = (knowDb.prepare(`SELECT title FROM k_nodes WHERE kind='skill' LIMIT 40`).all() as Array<{ title: string }>).map((r) => r.title);
   const layers = (codeDb.prepare(`SELECT DISTINCT layer FROM file_analysis WHERE layer IS NOT NULL AND layer != 'other'`).all() as Array<{ layer: string }>).map((r) => r.layer);

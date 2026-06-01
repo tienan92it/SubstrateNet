@@ -11,7 +11,7 @@
  *     an embedding (downstream falls back to lexical similarity).
  */
 import type { Database as SqliteDb } from 'better-sqlite3';
-import type { CodeGpsConfig } from '../config.js';
+import type { SubstrateNetConfig } from '../config.js';
 import { AgentRuntime } from '../agents/runtime.js';
 // Ensure agents register themselves.
 import '../agents/index.js';
@@ -30,7 +30,7 @@ export interface TriageRunResult {
 }
 
 export async function runTriageForWindows(
-  _root: string, db: SqliteDb, cfg: CodeGpsConfig, windowIds: string[],
+  _root: string, db: SqliteDb, cfg: SubstrateNetConfig, windowIds: string[],
 ): Promise<TriageRunResult> {
   const rt = new AgentRuntime({ knowledgeDb: db, config: cfg });
   const result: TriageRunResult = {

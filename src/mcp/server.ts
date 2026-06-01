@@ -30,7 +30,7 @@ import '../agents/index.js';
 
 export async function startMcpServer(root: string): Promise<void> {
   const server = new McpServer(
-    { name: 'codegps', version: '0.1.0' },
+    { name: 'subnet', version: '0.1.0' },
     { capabilities: { tools: {} } },
   );
 
@@ -39,7 +39,7 @@ export async function startMcpServer(root: string): Promise<void> {
   // --------------------------------------------------------------------
 
   server.tool(
-    'codegps_search',
+    'subnet_search',
     'Quick symbol search by name. Returns name + kind + file:line.',
     { query: z.string(), kind: z.string().optional(), limit: z.number().optional() },
     async ({ query, kind, limit }) => {
@@ -52,7 +52,7 @@ export async function startMcpServer(root: string): Promise<void> {
   );
 
   server.tool(
-    'codegps_node',
+    'subnet_node',
     'Get one symbol\'s details (kind, file:line, signature, docstring).',
     { name: z.string() },
     async ({ name }) => {
@@ -66,7 +66,7 @@ export async function startMcpServer(root: string): Promise<void> {
   );
 
   server.tool(
-    'codegps_status',
+    'subnet_status',
     'Counts per layer (files, nodes, edges, sessions, turns, facts, concepts).',
     {},
     async () => {
@@ -100,7 +100,7 @@ export async function startMcpServer(root: string): Promise<void> {
   // --------------------------------------------------------------------
 
   server.tool(
-    'codegps_context',
+    'subnet_context',
     'Primary tool. Builds context for a topic: matching facts + related code.',
     { task: z.string(), limit: z.number().optional() },
     async ({ task, limit }) => {
@@ -121,7 +121,7 @@ export async function startMcpServer(root: string): Promise<void> {
   );
 
   server.tool(
-    'codegps_recall',
+    'subnet_recall',
     'Semantic + FTS query across past conversations. Returns matching facts. Defaults to project-truth grounding (structural/stated/corroborated); set includeEnrichment to also surface model/web-sourced knowledge.',
     {
       query: z.string(),
@@ -140,7 +140,7 @@ export async function startMcpServer(root: string): Promise<void> {
   );
 
   server.tool(
-    'codegps_decisions',
+    'subnet_decisions',
     'List decisions / constraints / patterns recorded for a topic.',
     { topic: z.string().optional(), file: z.string().optional(), limit: z.number().optional() },
     async ({ topic, file, limit }) => {
@@ -157,7 +157,7 @@ export async function startMcpServer(root: string): Promise<void> {
   );
 
   server.tool(
-    'codegps_business_logic',
+    'subnet_business_logic',
     'List business rules / invariants / entities for a topic or file.',
     { topic: z.string().optional(), file: z.string().optional(), limit: z.number().optional() },
     async ({ topic, file, limit }) => {
@@ -174,7 +174,7 @@ export async function startMcpServer(root: string): Promise<void> {
   );
 
   server.tool(
-    'codegps_concepts',
+    'subnet_concepts',
     'List or inspect L3 concepts. Without conceptId: lists top concepts by size. With conceptId: returns members + summary.',
     { conceptId: z.string().optional(), domain: z.string().optional(), limit: z.number().optional() },
     async ({ conceptId, domain, limit }) => {
@@ -204,7 +204,7 @@ export async function startMcpServer(root: string): Promise<void> {
   );
 
   server.tool(
-    'codegps_explain',
+    'subnet_explain',
     'Produce a structured "systematic thinking" view (problem / constraints / options / decision / consequences) for a concept.',
     { conceptId: z.string() },
     async ({ conceptId }) => {
@@ -234,7 +234,7 @@ export async function startMcpServer(root: string): Promise<void> {
   );
 
   server.tool(
-    'codegps_link',
+    'subnet_link',
     'Cross-project: list related concepts in OTHER projects.',
     { conceptId: z.string() },
     async ({ conceptId }) => {
@@ -248,7 +248,7 @@ export async function startMcpServer(root: string): Promise<void> {
   );
 
   server.tool(
-    'codegps_triage_audit',
+    'subnet_triage_audit',
     'List triaged windows with their labels. Useful for inspecting dropped content.',
     { droppedOnly: z.boolean().optional(), limit: z.number().optional() },
     async ({ droppedOnly, limit }) => {
@@ -271,7 +271,7 @@ export async function startMcpServer(root: string): Promise<void> {
   // --------------------------------------------------------------------
 
   server.tool(
-    'codegps_ingest',
+    'subnet_ingest',
     'Ingest new conversation data and run the agent pipeline (L1.5 → L2).',
     { runTriage: z.boolean().optional(), runExtract: z.boolean().optional() },
     async ({ runTriage, runExtract }) => {
@@ -284,7 +284,7 @@ export async function startMcpServer(root: string): Promise<void> {
   );
 
   server.tool(
-    'codegps_verify',
+    'subnet_verify',
     'Run the Verifier sweep: prune low-confidence facts, detect contradictions, mark supersessions.',
     { pruneBelow: z.number().optional() },
     async ({ pruneBelow }) => {
@@ -297,7 +297,7 @@ export async function startMcpServer(root: string): Promise<void> {
   );
 
   server.tool(
-    'codegps_domain_model',
+    'subnet_domain_model',
     'The business-domain graph: entities + their evidence-grounded relationships. Every item shows its grounding (stated | structural | corroborated).',
     { entity: z.string().optional(), limit: z.number().optional() },
     async ({ entity, limit }) => {
@@ -305,7 +305,7 @@ export async function startMcpServer(root: string): Promise<void> {
       try {
         const entities = listEntities(db, { query: entity, limit: limit ?? 60 });
         if (entities.length === 0) {
-          return text('No domain entities yet. Run `codegps sync` then `codegps enrich`.');
+          return text('No domain entities yet. Run `subnet sync` then `subnet enrich`.');
         }
         const lines: string[] = [`# Domain model (${entities.length} entit${entities.length === 1 ? 'y' : 'ies'})`];
         for (const e of entities) {
@@ -325,7 +325,7 @@ export async function startMcpServer(root: string): Promise<void> {
   );
 
   server.tool(
-    'codegps_gaps',
+    'subnet_gaps',
     'Open questions / knowledge gaps in the domain graph. Each names a gap and cites the evidence that revealed it — it never fabricates the missing answer.',
     { limit: z.number().optional() },
     async ({ limit }) => {
@@ -346,7 +346,7 @@ export async function startMcpServer(root: string): Promise<void> {
   );
 
   server.tool(
-    'codegps_enrich',
+    'subnet_enrich',
     'Run the enrichment pass: technical skills + structural domain entities/relationships + industry classification + evidence-grounded gaps.',
     { noAgent: z.boolean().optional() },
     async ({ noAgent }) => {
@@ -360,14 +360,14 @@ export async function startMcpServer(root: string): Promise<void> {
   );
 
   server.tool(
-    'codegps_skills',
+    'subnet_skills',
     'Global skill graph: technical + industry skills aggregated across all projects, weighted by evidence and grounding. project_count > 1 means cross-project.',
     { scope: z.enum(['technical', 'industry']).optional(), cross: z.boolean().optional(), limit: z.number().optional() },
     async ({ scope, cross, limit }) => {
       const gdb = openGlobalDb();
       try {
         const skills = listSkills(gdb, { scope, crossOnly: cross, limit: limit ?? 80 });
-        if (skills.length === 0) return text('No skills yet. Run `codegps enrich` then `codegps link` per project.');
+        if (skills.length === 0) return text('No skills yet. Run `subnet enrich` then `subnet link` per project.');
         return text(skills.map((s) =>
           `- ${s.name}  · w=${s.evidenceWeight.toFixed(1)} · ×${s.projectCount} · ${s.grounding}`,
         ).join('\n'));
@@ -376,7 +376,7 @@ export async function startMcpServer(root: string): Promise<void> {
   );
 
   server.tool(
-    'codegps_profile',
+    'subnet_profile',
     'Big-picture knowledge profile across all projects: industries, top technical skills, evidence mix. Pass prose:true for ProfileWriter-generated portfolio markdown.',
     { prose: z.boolean().optional() },
     async ({ prose }) => {
@@ -389,7 +389,7 @@ export async function startMcpServer(root: string): Promise<void> {
             .map((s) => ({ name: s.name, grounding: s.grounding, projectCount: s.projectCount }));
           const highlights = listHighlights(gdb).map((h) => ({ statement: h.statement, grounding: h.grounding }));
           if (!industries.length && !skills.length && !highlights.length) {
-            return text('Nothing to write yet. Run `codegps enrich` then `codegps link` per project.');
+            return text('Nothing to write yet. Run `subnet enrich` then `subnet link` per project.');
           }
           const rt = new AgentRuntime({ knowledgeDb: gdb, config: loadConfig() });
           const out = await rt.run(PROFILE_WRITER_AGENT, { payload: { projectCount, industries, skills, highlights } });
@@ -408,7 +408,7 @@ export async function startMcpServer(root: string): Promise<void> {
   );
 
   server.tool(
-    'codegps_learn',
+    'subnet_learn',
     'Learning targets: industry-standard knowledge (grounding model/external) not yet grounded in your own work. General knowledge, NOT facts about this project.',
     { limit: z.number().optional() },
     async ({ limit }) => {
@@ -419,7 +419,7 @@ export async function startMcpServer(root: string): Promise<void> {
           WHERE scope='industry' AND COALESCE(grounding,'stated') IN ('model','external')
           ORDER BY grounding DESC, title LIMIT ?
         `).all(limit ?? 40) as Array<{ title: string; summary: string | null; grounding: string; source_url: string | null }>;
-        if (rows.length === 0) return text('No learning targets. Run `codegps enrich` (needs an LLM) to surface industry-standard knowledge.');
+        if (rows.length === 0) return text('No learning targets. Run `subnet enrich` (needs an LLM) to surface industry-standard knowledge.');
         return text(rows.map((r) =>
           `- [${r.grounding}] ${r.title}` + (r.summary ? `\n    ${r.summary}` : '') + (r.source_url ? `\n    source: ${r.source_url}` : ''),
         ).join('\n'));
@@ -428,7 +428,7 @@ export async function startMcpServer(root: string): Promise<void> {
   );
 
   server.tool(
-    'codegps_sync',
+    'subnet_sync',
     'Re-index the project\'s code (L0).',
     { full: z.boolean().optional() },
     async ({ full }) => {
@@ -438,7 +438,7 @@ export async function startMcpServer(root: string): Promise<void> {
   );
 
   server.tool(
-    'codegps_analyze',
+    'subnet_analyze',
     'Code-grounded analysis: per-file LLM summaries + architectural layers + tags, grounded in the tree-sitter graph (the hybrid L0 -> semantic pass).',
     { full: z.boolean().optional() },
     async ({ full }) => {

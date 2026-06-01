@@ -11,7 +11,7 @@
 import Ajv, { type ValidateFunction } from 'ajv';
 import { createHash, randomUUID } from 'crypto';
 import type { Database as SqliteDb } from 'better-sqlite3';
-import type { CodeGpsConfig } from '../config.js';
+import type { SubstrateNetConfig } from '../config.js';
 import { parseModelRef } from '../config.js';
 import { type AgentBackend as BackendSpec, resolveApiKey } from '../config.js';
 import type { Backend, ChatMessage } from './backends/base.js';
@@ -49,12 +49,12 @@ export interface Agent<I, O> {
 
 export interface AgentRuntimeOpts {
   knowledgeDb: SqliteDb;
-  config: CodeGpsConfig;
+  config: SubstrateNetConfig;
 }
 
 export class AgentRuntime {
   private readonly db: SqliteDb;
-  private readonly config: CodeGpsConfig;
+  private readonly config: SubstrateNetConfig;
   private readonly ajv: Ajv;
   private readonly validators = new Map<string, ValidateFunction>();
   private readonly backendCache = new Map<string, Backend>();

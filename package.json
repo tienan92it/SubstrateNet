@@ -1,18 +1,18 @@
 {
-  "name": "@codegps/cli",
+  "name": "@substrate-net/cli",
   "version": "0.1.0",
   "description": "Local, layered knowledge graph across projects and AI agent conversations. Code + decisions + business logic + cross-project links, all local SQLite.",
-  "homepage": "https://tienan92it.github.io/CodeGps/",
+  "homepage": "https://tienan92it.github.io/SubstrateNet/",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tienan92it/CodeGps.git"
+    "url": "git+https://github.com/tienan92it/SubstrateNet.git"
   },
-  "bugs": "https://github.com/tienan92it/CodeGps/issues",
+  "bugs": "https://github.com/tienan92it/SubstrateNet/issues",
   "author": "An Tran",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "codegps": "./dist/cli/index.js"
+    "subnet": "./dist/cli/index.js"
   },
   "files": [
     "dist",

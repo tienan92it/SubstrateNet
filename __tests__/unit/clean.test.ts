@@ -1,5 +1,5 @@
 /**
- * `codegps clean` cleanup core tests (no LLM).
+ * `subnet clean` cleanup core tests (no LLM).
  *   - global rows for a project are removed via cascade
  *   - the shared skill graph re-aggregates: a skill shared with another
  *     project survives (with reduced count); a skill unique to the removed

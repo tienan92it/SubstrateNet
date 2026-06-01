@@ -49,7 +49,7 @@ function seedWindow(db: any, windowId: string): void {
 
 describe('Triage agent + runtime', () => {
   it('validates output and caches on repeat input', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'codegps-tri-'));
+    const dir = mkdtempSync(join(tmpdir(), 'subnet-tri-'));
     const db = openKnowledgeDb(dir);
     try {
       const { runtime, backend } = rt(db, {
@@ -77,7 +77,7 @@ describe('Triage agent + runtime', () => {
   });
 
   it('drops chitchat windows with high-confidence labels', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'codegps-tri-'));
+    const dir = mkdtempSync(join(tmpdir(), 'subnet-tri-'));
     const db = openKnowledgeDb(dir);
     try {
       const { runtime } = rt(db, {
@@ -105,7 +105,7 @@ describe('Triage agent + runtime', () => {
   });
 
   it('keeps decision-grade content even with non-business domain', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'codegps-tri-'));
+    const dir = mkdtempSync(join(tmpdir(), 'subnet-tri-'));
     const db = openKnowledgeDb(dir);
     try {
       const { runtime } = rt(db, {
@@ -127,7 +127,7 @@ describe('Triage agent + runtime', () => {
   });
 
   it('repairs malformed JSON via retry', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'codegps-tri-'));
+    const dir = mkdtempSync(join(tmpdir(), 'subnet-tri-'));
     const db = openKnowledgeDb(dir);
     try {
       const cfg = JSON.parse(JSON.stringify(DEFAULT_CONFIG));

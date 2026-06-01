@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Getting started — CodeGps</title>
+  <title>Getting started — Substrate Net</title>
   <link rel="stylesheet" href="assets/style.css">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23b25a3c' d='M12 2 L14 12 L12 22 L10 12 Z M2 12 L12 14 L22 12 L12 10 Z'/%3E%3C/svg%3E">
 </head>
@@ -12,7 +12,7 @@
   <header class="site-header">
     <a class="brand" href="./">
       <svg class="brand-mark" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 L14 12 L12 22 L10 12 Z M2 12 L12 14 L22 12 L12 10 Z"/></svg>
-      codegps
+      subnet
     </a>
     <nav class="site-nav">
       <a href="./">overview</a>
@@ -22,7 +22,7 @@
       <a href="mcp.html">mcp</a>
       <a href="dashboard.html">dashboard</a>
       <a href="configuration.html">config</a>
-      <a href="https://github.com/tienan92it/CodeGps">github →</a>
+      <a href="https://github.com/tienan92it/SubstrateNet">github →</a>
     </nav>
   </header>
 
@@ -50,16 +50,16 @@
   </ul>
 
   <h2 id="install">1. Install</h2>
-  <pre class="shell"><code>git clone https://github.com/tienan92it/CodeGps
-cd CodeGps
+  <pre class="shell"><code>git clone https://github.com/tienan92it/SubstrateNet
+cd SubstrateNet
 npm install
 npm run build
-npm link              # exposes `codegps` on $PATH</code></pre>
+npm link              # exposes `subnet` on $PATH</code></pre>
   <p>
     Verify:
   </p>
-  <pre class="shell"><code>codegps --version     # 0.1.0
-codegps agents list   # 14 chat agents + dedupe</code></pre>
+  <pre class="shell"><code>subnet --version     # 0.1.0
+subnet agents list   # 14 chat agents + dedupe</code></pre>
 
   <h2 id="llm">2. Local LLM</h2>
   <p>
@@ -82,20 +82,20 @@ launchctl setenv OLLAMA_MAX_LOADED_MODELS 3
 
   <h2 id="init">3. Init a project</h2>
   <pre class="shell"><code>cd /path/to/your/project
-codegps init</code></pre>
+subnet init</code></pre>
   <p>This creates:</p>
-  <pre><code>your-project/.codegps/
+  <pre><code>your-project/.substrate-net/
 ├── code.db          # L0 — code structure
 ├── knowledge.db     # L1 → L3 + L2.5 — conversations, facts, domain, concepts
 └── config.json      # per-project agent overrides (empty by default)
 
-~/.codegps/
+~/.substrate-net/
 ├── global.db        # L4 links + L5 skill graph + project registry
 └── config.json      # global defaults</code></pre>
 
   <h2 id="index">4. Index code + ingest conversations</h2>
   <p><strong>L0 — code structure</strong></p>
-  <pre class="shell"><code>codegps sync</code></pre>
+  <pre class="shell"><code>subnet sync</code></pre>
   <p>
     Walks the project honoring <code>.gitignore</code>, parses every supported
     file with tree-sitter (or the SQL DDL regex parser), writes symbols + edges
@@ -104,7 +104,7 @@ codegps init</code></pre>
   </p>
 
   <p><strong>L1 → L3 + L2.5 — conversations through concepts and domain</strong></p>
-  <pre class="shell"><code>codegps ingest</code></pre>
+  <pre class="shell"><code>subnet ingest</code></pre>
   <p>This runs the full pipeline:</p>
   <ol>
     <li><em>Discover</em> sessions from every configured adapter (Cursor / Claude Code / Codex / Copilot)</li>
@@ -119,19 +119,19 @@ codegps init</code></pre>
   </ol>
   <p class="small">
     <code>ingest</code> is incremental — only new windows are processed. Use
-    <code>codegps ingest --reprocess</code> after a model swap or interrupted run
+    <code>subnet ingest --reprocess</code> after a model swap or interrupted run
     to re-pass every window; <code>--no-enrich</code> skips step 9.
   </p>
 
   <p><strong>L4 → L5 — cross-project links + the second brain</strong></p>
-  <pre class="shell"><code>codegps link          # export concepts + skills to global.db, link across repos
-codegps profile       # industries + top skills across all projects
-codegps skills --cross # skills demonstrated in more than one project</code></pre>
+  <pre class="shell"><code>subnet link          # export concepts + skills to global.db, link across repos
+subnet profile       # industries + top skills across all projects
+subnet skills --cross # skills demonstrated in more than one project</code></pre>
 
   <h2 id="inspect">5. Inspect the result</h2>
-  <pre class="shell"><code>codegps status .
+  <pre class="shell"><code>subnet status .
 
-# CodeGps status
+# Substrate Net status
 #   Project: /your/project
 #   L0 code:
 #     files:   142
@@ -154,16 +154,16 @@ codegps skills --cross # skills demonstrated in more than one project</code></pr
 #   Agent runs:   254</code></pre>
 
   <p>Inspect what got dropped vs kept and why:</p>
-  <pre class="shell"><code>codegps triage audit --dropped</code></pre>
+  <pre class="shell"><code>subnet triage audit --dropped</code></pre>
 
   <p>Generate canvases (open in Cursor's canvas pane):</p>
-  <pre class="shell"><code>codegps canvas triage-audit
-codegps canvas project-map
-codegps canvas decision-timeline
-codegps canvas business-logic</code></pre>
+  <pre class="shell"><code>subnet canvas triage-audit
+subnet canvas project-map
+subnet canvas decision-timeline
+subnet canvas business-logic</code></pre>
 
   <p>Or query the graph directly:</p>
-  <pre class="shell"><code>sqlite3 .codegps/knowledge.db \
+  <pre class="shell"><code>sqlite3 .substrate-net/knowledge.db \
   "SELECT kind, title FROM k_nodes WHERE kind='decision' ORDER BY confidence DESC LIMIT 10;"</code></pre>
 
   <h2 id="troubleshooting">Troubleshooting</h2>
@@ -179,7 +179,7 @@ codegps canvas business-logic</code></pre>
     </tr>
     <tr>
       <td><code>L3 concepts: 0</code> while facts &gt; 0</td>
-      <td>Embedding model not reachable. Check <code>ollama list</code> and that <code>~/.codegps/config.json</code> points at it.</td>
+      <td>Embedding model not reachable. Check <code>ollama list</code> and that <code>~/.substrate-net/config.json</code> points at it.</td>
     </tr>
     <tr>
       <td><code>triage</code> labels everything <code>unknown</code> with confidence 0.1</td>
@@ -191,14 +191,14 @@ codegps canvas business-logic</code></pre>
     </tr>
     <tr>
       <td><code>enrich</code> reports zeros on a re-run</td>
-      <td>Expected — the report counts rows added <em>this run</em>. The data already exists; check <code>codegps status</code> for totals. Use <code>codegps ingest --reprocess</code> to force a full re-pass.</td>
+      <td>Expected — the report counts rows added <em>this run</em>. The data already exists; check <code>subnet status</code> for totals. Use <code>subnet ingest --reprocess</code> to force a full re-pass.</td>
     </tr>
     <tr>
       <td><code>Dependencies: 0</code> in a monorepo</td>
       <td>Manifests live in subdirectories — the parser walks nested folders (skipping <code>node_modules</code> / <code>build</code> / …). If still zero, the manifest format may be unsupported; open an issue.</td>
     </tr>
     <tr>
-      <td><code>codegps: command not found</code></td>
+      <td><code>subnet: command not found</code></td>
       <td>You skipped <code>npm link</code>. Either run it now, or invoke <code>node dist/cli/index.js</code> directly.</td>
     </tr>
   </table>
@@ -210,7 +210,7 @@ codegps canvas business-logic</code></pre>
 
   <footer class="site-footer">
     <span>v0.1.0 · MIT</span>
-    <span><a href="https://github.com/tienan92it/CodeGps">github.com/tienan92it/CodeGps</a></span>
+    <span><a href="https://github.com/tienan92it/SubstrateNet">github.com/tienan92it/SubstrateNet</a></span>
   </footer>
 </div>
 </body>

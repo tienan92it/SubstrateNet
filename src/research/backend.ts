@@ -1,7 +1,7 @@
 /**
  * Pluggable research backend for opt-in external (web) enrichment.
  *
- * Default is `none` — CodeGps stays 100% offline unless a backend is
+ * Default is `none` — Substrate Net stays 100% offline unless a backend is
  * configured. When enabled, results are cached in knowledge.db `research_cache`
  * so repeat runs don't re-hit the network and stay reproducible.
  *
@@ -11,7 +11,7 @@
  */
 import type { Database as SqliteDb } from 'better-sqlite3';
 import { createHash } from 'crypto';
-import type { CodeGpsConfig } from '../config.js';
+import type { SubstrateNetConfig } from '../config.js';
 
 export interface ResearchResult {
   summary: string;
@@ -65,7 +65,7 @@ class SearchApiBackend implements ResearchBackend {
   }
 }
 
-export function createResearchBackend(cfg: CodeGpsConfig): ResearchBackend {
+export function createResearchBackend(cfg: SubstrateNetConfig): ResearchBackend {
   const rc = (cfg as any).research as ResearchConfig | undefined;
   if (!rc || !rc.kind || rc.kind === 'none' || !rc.endpoint) return new NoneBackend();
   if (rc.kind === 'search-api') {

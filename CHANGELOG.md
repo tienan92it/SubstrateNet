@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to CodeGps. Format loosely follows
+All notable changes to Substrate Net. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/spec/v2.0.0.html).
 
@@ -12,12 +12,12 @@ Inspired by Understand-Anything's tree-sitter + LLM hybrid. The parser already
 resolved imports/defs/calls; now LLM agents read that structure to add a
 semantic overlay, a portfolio synthesis, and a shareable dashboard.
 
-- **Code analysis (L0.5)** — `codegps analyze [--full]` runs the FileAnalyzer
+- **Code analysis (L0.5)** — `subnet analyze [--full]` runs the FileAnalyzer
   agent per file (batched, incremental via `content_hash`) over its
   tree-sitter defs/imports/call-sites + a source slice, producing a summary,
   architectural layer (`api|service|data|ui|utility|other`), tags, and language
   concepts. Stored in `code.db.file_analysis`. Also runs inside `ingest`
-  (`--no-analyze` to skip). MCP: `codegps_analyze`.
+  (`--no-analyze` to skip). MCP: `subnet_analyze`.
 - **ArchitectureAnalyzer** — reconciles per-file layers into a coherent
   per-directory architecture; backfills files left as `other`.
 - **DomainAnalyzer** — fuses technical skills + architectural layers +
@@ -25,11 +25,11 @@ semantic overlay, a portfolio synthesis, and a shareable dashboard.
   statements ("event-driven Go backend for a financial trading platform"),
   not bare "knows Go". New `KNodeKind: domain_highlight`; exported to
   `global.db.highlights`.
-- **ProfileWriter** — `codegps profile --prose [--out path]` (and
-  `codegps_profile {prose}`) generates portfolio/background markdown from the
+- **ProfileWriter** — `subnet profile --prose [--out path]` (and
+  `subnet_profile {prose}`) generates portfolio/background markdown from the
   global skill graph + highlights, respecting each input's grounding tier
   (demonstrated vs. hedged). Global agents cache in a new `global.db.agent_runs`.
-- **Interactive dashboard** — `codegps dashboard [--open]` exports a bounded
+- **Interactive dashboard** — `subnet dashboard [--open]` exports a bounded
   file-level graph (nodes colored by layer), domains, concepts, and a search
   index from SQLite, and emits a single self-contained `index.html` (graph
   inlined, opens offline) plus a shareable `graph.json`. SPA is a Vite + React +
@@ -53,16 +53,16 @@ semantic overlay, a portfolio synthesis, and a shareable dashboard.
 
 ### Added — Second brain (L2.5 + L5)
 
-Turns CodeGps from a fact store into a business-domain graph and a cross-project
+Turns Substrate Net from a fact store into a business-domain graph and a cross-project
 skill graph. Knowledge is tagged on two axes — `scope` (`technical` | `industry`
 | `meta`) and `grounding` (`structural` | `stated` | `corroborated` | `external`
 | `model`) — and every enriched node carries an evidence citation; nothing is
 fabricated.
 
-- **Skill graph (L5)** — `codegps skills` / `codegps profile` / `codegps learn`
+- **Skill graph (L5)** — `subnet skills` / `subnet profile` / `subnet learn`
   aggregate per-project technical and industry evidence into weighted skills in
-  `~/.codegps/global.db`, with cross-project counts. `codegps link` synthesizes
-  it. MCP: `codegps_skills`, `codegps_profile`, `codegps_learn`.
+  `~/.substrate-net/global.db`, with cross-project counts. `subnet link` synthesizes
+  it. MCP: `subnet_skills`, `subnet_profile`, `subnet_learn`.
 - **Technical profile** (`agents/technical-profiler.ts`) — synthesizes higher-
   level skills from languages + declared dependencies (manifests).
 - **Manifest / infra parser** (`pipeline/manifests.ts`) — deterministic
@@ -75,10 +75,10 @@ fabricated.
   business domain; IndustryEnricher proposes industry-standard concepts as
   `model` / `external` learning targets (never confused with project truth).
 - **Scope × grounding** — `scope` and `grounding` columns on `k_nodes` and
-  `concepts` (additive migrations); `codegps status` breaks counts down by both.
-- **Incremental control** — `codegps ingest --reprocess` re-runs the pipeline
+  `concepts` (additive migrations); `subnet status` breaks counts down by both.
+- **Incremental control** — `subnet ingest --reprocess` re-runs the pipeline
   over all existing windows; `--no-enrich` skips the L2.5 pass.
-- **Cleanup** — `codegps clean` removes project data locally and/or globally
+- **Cleanup** — `subnet clean` removes project data locally and/or globally
   (`--local-only` / `--global-only` / `--all`) and re-aggregates the skill graph.
 
 ### Added — Domain enrichment (L2.5)
@@ -99,9 +99,9 @@ Every enriched node and edge carries a `grounding` tier (`stated` |
   `knowledge_gap` nodes: external FK targets and ungoverned central entities.
   Names the gap, never the answer.
 - **Pipeline** — `runEnrichment` runs as ingest step 8 and standalone via
-  `codegps enrich [--no-agent]`.
-- **MCP** — `codegps_domain_model`, `codegps_gaps`, `codegps_enrich`.
-- **Status** — `codegps status` now reports L2.5 entities / relationships / gaps.
+  `subnet enrich [--no-agent]`.
+- **MCP** — `subnet_domain_model`, `subnet_gaps`, `subnet_enrich`.
+- **Status** — `subnet status` now reports L2.5 entities / relationships / gaps.
 - New node kinds: `actor`, `process`, `metric`, `glossary_term`, `knowledge_gap`.
   New edge kinds: `relates_to`, `has_state`, `transitions_to`, `governed_by`,
   `owned_by`, `part_of`, `gap_in`.
@@ -138,13 +138,13 @@ a single `AgentRuntime` with cached, schema-validated outputs.
 - **L3 Clusterer + Summarizer Agents** — incremental cluster assignment
   (attach / create / merge) with centroid embeddings; concept names and
   short structured summaries assigned by the Summarizer
-- **L4 cross-project** — global registry in `~/.codegps/global.db`;
+- **L4 cross-project** — global registry in `~/.substrate-net/global.db`;
   mechanical pass (exact-name + domain agreement) plus Linker Agent for
   semantic similarity across projects
 - **Verifier Agent** — pairwise contradiction / supersession detection
   within clusters; low-confidence orphan pruning; stale-triage cache
   invalidation
-- **MCP server** (`codegps serve --mcp`) — 14 tools spanning code (search,
+- **MCP server** (`subnet serve --mcp`) — 14 tools spanning code (search,
   context, node, status) and knowledge (recall, decisions, business_logic,
   concepts, explain, link, triage_audit, verify, ingest, sync)
 - **Cursor Canvases** — `triage-audit`, `project-map`, `decision-timeline`,
@@ -164,5 +164,5 @@ a single `AgentRuntime` with cached, schema-validated outputs.
 - Local-first. Default LLM backend is Ollama; OpenAI-compatible and Anthropic
   backends are pluggable per agent.
 
-[Unreleased]: https://github.com/tienan92it/CodeGps/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/tienan92it/CodeGps/releases/tag/v0.1.0
+[Unreleased]: https://github.com/tienan92it/SubstrateNet/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/tienan92it/SubstrateNet/releases/tag/v0.1.0

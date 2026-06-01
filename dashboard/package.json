@@ -1,5 +1,5 @@
 {
-  "name": "@codegps/dashboard",
+  "name": "@substrate-net/dashboard",
   "private": true,
   "version": "0.1.0",
   "type": "module",

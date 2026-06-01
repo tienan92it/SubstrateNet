@@ -15,11 +15,11 @@ export async function generateCanvas(root: string, kind: string, _opts: Generate
   const outDir = join(projectConfigDir(root), 'canvas');
   if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
   switch (kind) {
-    case 'triage-audit':       return writeCanvas(root, outDir, 'triage-audit.canvas.tsx', triageAuditData, '__CODEGPS_TRIAGE_DATA__');
-    case 'project-map':        return writeCanvas(root, outDir, 'project-map.canvas.tsx', projectMapData, '__CODEGPS_CONCEPTS_DATA__');
-    case 'decision-timeline':  return writeCanvas(root, outDir, 'decision-timeline.canvas.tsx', timelineData, '__CODEGPS_TIMELINE_DATA__');
-    case 'business-logic':     return writeCanvas(root, outDir, 'business-logic.canvas.tsx', businessLogicData, '__CODEGPS_BIZ_DATA__');
-    case 'cross-project-bridge': return writeCanvas(root, outDir, 'cross-project-bridge.canvas.tsx', crossProjectData, '__CODEGPS_BRIDGE_DATA__');
+    case 'triage-audit':       return writeCanvas(root, outDir, 'triage-audit.canvas.tsx', triageAuditData, '__SUBNET_TRIAGE_DATA__');
+    case 'project-map':        return writeCanvas(root, outDir, 'project-map.canvas.tsx', projectMapData, '__SUBNET_CONCEPTS_DATA__');
+    case 'decision-timeline':  return writeCanvas(root, outDir, 'decision-timeline.canvas.tsx', timelineData, '__SUBNET_TIMELINE_DATA__');
+    case 'business-logic':     return writeCanvas(root, outDir, 'business-logic.canvas.tsx', businessLogicData, '__SUBNET_BIZ_DATA__');
+    case 'cross-project-bridge': return writeCanvas(root, outDir, 'cross-project-bridge.canvas.tsx', crossProjectData, '__SUBNET_BRIDGE_DATA__');
     default:
       throw new Error(`Canvas kind "${kind}" not implemented. Known: triage-audit, project-map, decision-timeline, business-logic, cross-project-bridge`);
   }

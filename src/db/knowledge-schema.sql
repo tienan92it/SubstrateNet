@@ -1,4 +1,4 @@
--- CodeGps L1, L1.5, L2, L3 schema: conversations, triage, facts, concepts
+-- Substrate Net L1, L1.5, L2, L3 schema: conversations, triage, facts, concepts
 
 CREATE TABLE IF NOT EXISTS schema_versions (
     version INTEGER PRIMARY KEY,

@@ -6,7 +6,7 @@
 import type { Database as SqliteDb } from 'better-sqlite3';
 import { AgentRuntime } from '../agents/runtime.js';
 import { ARCHITECTURE_ANALYZER_AGENT, type ArchDirInput } from '../agents/architecture-analyzer.js';
-import type { CodeGpsConfig } from '../config.js';
+import type { SubstrateNetConfig } from '../config.js';
 
 export interface ArchitectureStats {
   directories: number;
@@ -23,7 +23,7 @@ function dirOf(path: string): string {
 export async function runArchitecturePass(
   codeDb: SqliteDb,
   knowDb: SqliteDb,
-  cfg: CodeGpsConfig,
+  cfg: SubstrateNetConfig,
 ): Promise<ArchitectureStats> {
   const stats: ArchitectureStats = { directories: 0, filesReassigned: 0 };
 

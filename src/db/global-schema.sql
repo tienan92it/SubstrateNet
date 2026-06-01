@@ -1,4 +1,4 @@
--- CodeGps L4 global schema: cross-project registry + concept links
+-- Substrate Net L4 global schema: cross-project registry + concept links
 
 CREATE TABLE IF NOT EXISTS schema_versions (
     version INTEGER PRIMARY KEY,

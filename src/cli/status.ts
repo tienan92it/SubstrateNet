@@ -32,7 +32,7 @@ export function registerStatus(program: Command): void {
           gaps: count(know, "k_nodes WHERE kind='knowledge_gap'"),
         };
 
-        console.log('CodeGps status');
+        console.log('Substrate Net status');
         console.log('  Project:', root);
         console.log('  L0 code:');
         console.log(`    files:   ${codeStats.files}`);

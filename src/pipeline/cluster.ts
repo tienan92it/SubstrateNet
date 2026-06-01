@@ -22,7 +22,7 @@ import { DedupeAgent, getKNodeEmbedding } from '../agents/dedupe.js';
 import { upsertConcept, newConceptId, setKNodeCluster, membersOf, nearestConcepts, recountAndCentroid, encodeCentroid } from '../knowledge/concept-store.js';
 import { scopeFromDomain, dominantGrounding, dominantScope } from '../knowledge/scope.js';
 import { mapPool } from '../util/pool.js';
-import type { CodeGpsConfig } from '../config.js';
+import type { SubstrateNetConfig } from '../config.js';
 
 /**
  * Leaf/evidence kinds are NOT clustered into concepts — they are citations,
@@ -46,7 +46,7 @@ export interface ClusterOpts {
 }
 
 export async function runClustererForNewFacts(
-  knowDb: SqliteDb, cfg: CodeGpsConfig, opts: ClusterOpts = {},
+  knowDb: SqliteDb, cfg: SubstrateNetConfig, opts: ClusterOpts = {},
 ): Promise<ClusterStats> {
   const rt = new AgentRuntime({ knowledgeDb: knowDb, config: cfg });
 

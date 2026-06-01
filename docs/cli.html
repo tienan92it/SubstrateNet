@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CLI — CodeGps</title>
+  <title>CLI — Substrate Net</title>
   <link rel="stylesheet" href="assets/style.css">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23b25a3c' d='M12 2 L14 12 L12 22 L10 12 Z M2 12 L12 14 L22 12 L12 10 Z'/%3E%3C/svg%3E">
 </head>
@@ -12,7 +12,7 @@
   <header class="site-header">
     <a class="brand" href="./">
       <svg class="brand-mark" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 L14 12 L12 22 L10 12 Z M2 12 L12 14 L22 12 L12 10 Z"/></svg>
-      codegps
+      subnet
     </a>
     <nav class="site-nav">
       <a href="./">overview</a>
@@ -22,7 +22,7 @@
       <a href="mcp.html">mcp</a>
       <a href="dashboard.html">dashboard</a>
       <a href="configuration.html">config</a>
-      <a href="https://github.com/tienan92it/CodeGps">github →</a>
+      <a href="https://github.com/tienan92it/SubstrateNet">github →</a>
     </nav>
   </header>
 
@@ -40,11 +40,11 @@
   </div>
 
   <h2 id="init">init</h2>
-  <pre><code>codegps init [path]</code></pre>
-  <p>Creates <code>&lt;path&gt;/.codegps/</code> with empty <code>code.db</code>, <code>knowledge.db</code>, and a stub <code>config.json</code>. Registers the project in <code>~/.codegps/global.db</code>.</p>
+  <pre><code>subnet init [path]</code></pre>
+  <p>Creates <code>&lt;path&gt;/.substrate-net/</code> with empty <code>code.db</code>, <code>knowledge.db</code>, and a stub <code>config.json</code>. Registers the project in <code>~/.substrate-net/global.db</code>.</p>
 
   <h2 id="sync">sync</h2>
-  <pre><code>codegps sync [path] [--full]</code></pre>
+  <pre><code>subnet sync [path] [--full]</code></pre>
   <p>Re-indexes the L0 code graph.</p>
   <table>
     <tr><th>Flag</th><th>Effect</th></tr>
@@ -54,7 +54,7 @@
   <pre><code>L0 sync complete: 142 files, 2041 nodes, 3177 edges</code></pre>
 
   <h2 id="analyze">analyze</h2>
-  <pre><code>codegps analyze [path] [--full]</code></pre>
+  <pre><code>subnet analyze [path] [--full]</code></pre>
   <p>
     Code-grounded analysis (the tree-sitter + LLM hybrid). For each indexed file
     it builds a deterministic payload from <code>code.db</code> — definitions,
@@ -71,7 +71,7 @@
   <p class="small">Incremental: a file whose <code>content_hash</code> is unchanged since its last analysis is skipped. Also runs inside <code>ingest</code> (disable with <code>--no-analyze</code>).</p>
 
   <h2 id="ingest">ingest</h2>
-  <pre><code>codegps ingest [path] [--agent &lt;id&gt;] [--no-triage] [--no-extract] [--no-analyze] [--no-enrich] [--reprocess]</code></pre>
+  <pre><code>subnet ingest [path] [--agent &lt;id&gt;] [--no-triage] [--no-extract] [--no-analyze] [--no-enrich] [--reprocess]</code></pre>
   <p>Pulls new conversation data, runs the agent pipeline (L1.5→L3), the code-grounded analysis (L0.5), then the enrichment pass (L2.5).</p>
   <table>
     <tr><th>Flag</th><th>Effect</th></tr>
@@ -99,7 +99,7 @@
   Knowledge gaps:   2</code></pre>
 
   <h2 id="enrich">enrich</h2>
-  <pre><code>codegps enrich [path] [--no-agent]</code></pre>
+  <pre><code>subnet enrich [path] [--no-agent]</code></pre>
   <p>
     Runs the L2.5 enrichment pass on its own: manifest + SQL structural
     extraction, entity reconciliation, technical-skill synthesis, domain
@@ -113,21 +113,21 @@
   </table>
   <p class="small">
     Counts in the report are <strong>rows added this run</strong>, not totals. A
-    re-run over already-enriched data shows zeros; use <code>codegps status</code>
+    re-run over already-enriched data shows zeros; use <code>subnet status</code>
     for true totals.
   </p>
 
   <h2 id="status">status</h2>
-  <pre><code>codegps status [path]</code></pre>
+  <pre><code>subnet status [path]</code></pre>
   <p>Counts per layer, broken down by <code>scope</code> and <code>grounding</code>. Cheap, read-only.</p>
 
   <h2 id="serve">serve</h2>
-  <pre><code>codegps serve [path] --mcp</code></pre>
+  <pre><code>subnet serve [path] --mcp</code></pre>
   <p>Runs the MCP server over stdio. See <a href="mcp.html">MCP integration</a> for client wiring and the tool catalogue.</p>
 
   <h2 id="canvas">canvas</h2>
-  <pre><code>codegps canvas &lt;kind&gt; [path]</code></pre>
-  <p>Generates a self-contained <code>.canvas.tsx</code> under <code>.codegps/canvas/</code>.</p>
+  <pre><code>subnet canvas &lt;kind&gt; [path]</code></pre>
+  <p>Generates a self-contained <code>.canvas.tsx</code> under <code>.substrate-net/canvas/</code>.</p>
   <table>
     <tr><th>Kind</th><th>Purpose</th></tr>
     <tr><td><code>triage-audit</code></td><td>Every triaged window with labels and rationale; filter by kept/dropped/domain.</td></tr>
@@ -138,15 +138,15 @@
   </table>
 
   <h2 id="link">link</h2>
-  <pre><code>codegps link [path] [--rebuild]</code></pre>
-  <p>Rebuilds the L4 cross-project graph and the L5 skill graph: exports this project's concepts and enrichment evidence to <code>~/.codegps/global.db</code>, runs mechanical matching, the Linker Agent, then synthesizes skills across all registered projects.</p>
+  <pre><code>subnet link [path] [--rebuild]</code></pre>
+  <p>Rebuilds the L4 cross-project graph and the L5 skill graph: exports this project's concepts and enrichment evidence to <code>~/.substrate-net/global.db</code>, runs mechanical matching, the Linker Agent, then synthesizes skills across all registered projects.</p>
   <table>
     <tr><th>Flag</th><th>Effect</th></tr>
     <tr><td><code>--rebuild</code></td><td>Wipe <code>concept_links</code> first; re-compute from scratch.</td></tr>
   </table>
 
   <h2 id="skills">skills</h2>
-  <pre><code>codegps skills [--scope technical|industry] [--cross] [--limit &lt;n&gt;]</code></pre>
+  <pre><code>subnet skills [--scope technical|industry] [--cross] [--limit &lt;n&gt;]</code></pre>
   <p>The global skill graph (L5): what you know, weighted by evidence across projects. Each row shows evidence weight, grounding, and project count.</p>
   <table>
     <tr><th>Flag</th><th>Effect</th></tr>
@@ -155,21 +155,21 @@
   </table>
 
   <h2 id="profile">profile</h2>
-  <pre><code>codegps profile [--prose] [--out &lt;path&gt;]</code></pre>
+  <pre><code>subnet profile [--prose] [--out &lt;path&gt;]</code></pre>
   <p>The big-picture second-brain summary across all projects: classified industries, top technical skills by evidence weight, and the grounding mix. Read-only over <code>global.db</code>.</p>
   <table>
     <tr><th>Flag</th><th>Effect</th></tr>
     <tr><td><code>--prose</code></td><td>Generate portfolio/background markdown via the ProfileWriter agent (consumes domain highlights + skills + industries).</td></tr>
-    <tr><td><code>--out &lt;path&gt;</code></td><td>Where to write the prose (default <code>~/.codegps/profile.md</code>).</td></tr>
+    <tr><td><code>--out &lt;path&gt;</code></td><td>Where to write the prose (default <code>~/.substrate-net/profile.md</code>).</td></tr>
   </table>
   <p class="small">ProfileWriter respects grounding: <code>structural</code>/<code>corroborated</code> skills are stated as demonstrated; <code>stated</code> ones are hedged; nothing is invented.</p>
 
   <h2 id="learn">learn</h2>
-  <pre><code>codegps learn [path] [--limit &lt;n&gt;]</code></pre>
+  <pre><code>subnet learn [path] [--limit &lt;n&gt;]</code></pre>
   <p>Learning targets: industry-standard knowledge (grounding <code>model</code> / <code>external</code>) the IndustryEnricher surfaced that is <em>not</em> yet grounded in your own work. These are general domain knowledge, explicitly distinct from facts about your project.</p>
 
   <h2 id="verify">verify</h2>
-  <pre><code>codegps verify [path] [--prune-below &lt;n&gt;] [--max-pairs &lt;n&gt;] [--invalidate-triage-days &lt;n&gt;]</code></pre>
+  <pre><code>subnet verify [path] [--prune-below &lt;n&gt;] [--max-pairs &lt;n&gt;] [--invalidate-triage-days &lt;n&gt;]</code></pre>
   <p>Runs the Verifier sweep:</p>
   <ol>
     <li>Prune orphan facts whose confidence falls below the threshold (default <code>0.25</code>).</li>
@@ -178,13 +178,13 @@
   </ol>
 
   <h2 id="dashboard">dashboard</h2>
-  <pre><code>codegps dashboard [path] [--open]</code></pre>
+  <pre><code>subnet dashboard [path] [--open]</code></pre>
   <p>
     Builds a self-contained interactive graph dashboard from the project's SQLite
     databases: a file-level dependency graph (nodes colored by architectural
     layer), domain highlights/entities, L3 concepts, and a fuzzy search index.
     Emits a single offline-openable <code>index.html</code> (graph inlined) plus a
-    shareable <code>graph.json</code> to <code>&lt;project&gt;/.codegps/dashboard/</code>.
+    shareable <code>graph.json</code> to <code>&lt;project&gt;/.substrate-net/dashboard/</code>.
   </p>
   <table>
     <tr><th>Flag</th><th>Effect</th></tr>
@@ -196,24 +196,24 @@
   </p>
 
   <h2 id="clean">clean</h2>
-  <pre><code>codegps clean [path] [--local-only] [--global-only] [--all] [--yes]</code></pre>
-  <p>Removes a project's knowledge: its local <code>.codegps/</code> and/or its rows in the global brain. The skill graph is re-aggregated after global rows are removed. Runs as a dry run by default — it prints the plan and only deletes with <code>--yes</code>.</p>
+  <pre><code>subnet clean [path] [--local-only] [--global-only] [--all] [--yes]</code></pre>
+  <p>Removes a project's knowledge: its local <code>.substrate-net/</code> and/or its rows in the global brain. The skill graph is re-aggregated after global rows are removed. Runs as a dry run by default — it prints the plan and only deletes with <code>--yes</code>.</p>
   <table>
     <tr><th>Flag</th><th>Effect</th></tr>
-    <tr><td><code>--local-only</code></td><td>Only delete the local <code>.codegps/</code> directory.</td></tr>
-    <tr><td><code>--global-only</code></td><td>Only delete this project's rows in <code>~/.codegps/global.db</code>.</td></tr>
+    <tr><td><code>--local-only</code></td><td>Only delete the local <code>.substrate-net/</code> directory.</td></tr>
+    <tr><td><code>--global-only</code></td><td>Only delete this project's rows in <code>~/.substrate-net/global.db</code>.</td></tr>
     <tr><td><code>--all</code></td><td>Full reset: every registered project's local data + the global brain (keeps <code>config.json</code>).</td></tr>
     <tr><td><code>-y, --yes</code></td><td>Skip the dry run and actually delete.</td></tr>
   </table>
 
   <h2 id="triage">triage audit</h2>
-  <pre><code>codegps triage audit [path] [--dropped] [--limit &lt;n&gt;]</code></pre>
+  <pre><code>subnet triage audit [path] [--dropped] [--limit &lt;n&gt;]</code></pre>
   <p>Lists triaged windows with their labels and rationale. Use <code>--dropped</code> to inspect what triage filtered out and decide whether to tune.</p>
 
   <h2 id="agents">agents</h2>
-  <pre><code>codegps agents list
-codegps agents eval [path] [--agent &lt;name&gt;]
-codegps agents run &lt;name&gt; [path]</code></pre>
+  <pre><code>subnet agents list
+subnet agents eval [path] [--agent &lt;name&gt;]
+subnet agents run &lt;name&gt; [path]</code></pre>
   <p>
     <code>list</code> shows registered agents and their prompt versions.
     <code>eval</code> runs every golden fixture under
@@ -225,7 +225,7 @@ codegps agents run &lt;name&gt; [path]</code></pre>
 
   <footer class="site-footer">
     <span>v0.1.0 · MIT</span>
-    <span><a href="https://github.com/tienan92it/CodeGps">github.com/tienan92it/CodeGps</a></span>
+    <span><a href="https://github.com/tienan92it/SubstrateNet">github.com/tienan92it/SubstrateNet</a></span>
   </footer>
 </div>
 </body>

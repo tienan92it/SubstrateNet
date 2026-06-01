@@ -9,7 +9,7 @@ import { allSupportedExtensions } from './languages.js';
 const ALWAYS_IGNORE = [
   'node_modules', '.git', 'dist', 'build', 'out', 'coverage',
   '.next', '.nuxt', '.cache', '__pycache__', '.venv', 'venv',
-  '.codegps',
+  '.substrate-net',
 ];
 
 export interface WalkOpts {

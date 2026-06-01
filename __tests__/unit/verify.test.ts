@@ -14,7 +14,7 @@ function insertFact(db: any, id: string, kind: string, title: string, confidence
 
 describe('verify pipeline', () => {
   it('prunes orphan facts below the confidence threshold', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'codegps-vf-'));
+    const dir = mkdtempSync(join(tmpdir(), 'subnet-vf-'));
     const db = openKnowledgeDb(dir);
     try {
       insertFact(db, 'low', 'todo', 'tiny noise', 0.1);
@@ -41,7 +41,7 @@ describe('verify pipeline', () => {
   });
 
   it('records contradiction edges when verifier flags them', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'codegps-vf-'));
+    const dir = mkdtempSync(join(tmpdir(), 'subnet-vf-'));
     const db = openKnowledgeDb(dir);
     try {
       db.prepare(`INSERT INTO concepts (id,name,member_count) VALUES (?,?,?)`).run('c1', 'auth', 2);
@@ -71,7 +71,7 @@ describe('verify pipeline', () => {
   });
 
   it('invalidateStaleTriageCache removes old triage agent_runs', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'codegps-vf-'));
+    const dir = mkdtempSync(join(tmpdir(), 'subnet-vf-'));
     const db = openKnowledgeDb(dir);
     try {
       const now = Date.now();

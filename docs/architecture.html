@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Architecture — CodeGps</title>
+  <title>Architecture — Substrate Net</title>
   <link rel="stylesheet" href="assets/style.css">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23b25a3c' d='M12 2 L14 12 L12 22 L10 12 Z M2 12 L12 14 L22 12 L12 10 Z'/%3E%3C/svg%3E">
   <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
@@ -19,7 +19,7 @@
   <header class="site-header">
     <a class="brand" href="./">
       <svg class="brand-mark" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 L14 12 L12 22 L10 12 Z M2 12 L12 14 L22 12 L12 10 Z"/></svg>
-      codegps
+      subnet
     </a>
     <nav class="site-nav">
       <a href="./">overview</a>
@@ -29,7 +29,7 @@
       <a href="mcp.html">mcp</a>
       <a href="dashboard.html">dashboard</a>
       <a href="configuration.html">config</a>
-      <a href="https://github.com/tienan92it/CodeGps">github →</a>
+      <a href="https://github.com/tienan92it/SubstrateNet">github →</a>
     </nav>
   </header>
 
@@ -93,7 +93,7 @@
     Project-truth queries default to <code>structural</code> / <code>stated</code> /
     <code>corroborated</code>. <code>external</code> and <code>model</code> are
     opt-in and always filterable, so "fill the gap" knowledge never gets mistaken
-    for what your project actually does. <code>codegps status</code> breaks every
+    for what your project actually does. <code>subnet status</code> breaks every
     layer down by both scope and grounding.
   </p>
 
@@ -225,7 +225,7 @@ interface AgentRuntime {
 
   <h2 id="storage">Storage</h2>
 
-  <pre><code>&lt;project&gt;/.codegps/
+  <pre><code>&lt;project&gt;/.substrate-net/
 ├── code.db          # L0 — codegraph-compatible schema
 │   ├── nodes              (id, kind, name, qualified_name, file_path, ...)
 │   ├── edges              (source, target, kind, line, col, provenance)
@@ -248,7 +248,7 @@ interface AgentRuntime {
 │
 └── canvas/          # generated .canvas.tsx artifacts
 
-~/.codegps/
+~/.substrate-net/
 ├── global.db
 │   ├── projects
 │   ├── concepts_global    (mirrors per-project concepts with embeddings)
@@ -300,15 +300,15 @@ interface AgentRuntime {
   <ul>
     <li><strong>Local-only.</strong> No cloud sync. The hard runtime dependency is a local (or pluggable) LLM. The alternative would be regex-based NL understanding, which drifts the moment anyone tries to maintain it.</li>
     <li><strong>Cached, not deterministic.</strong> Agent output is stable per <code>(agent, model, input_hash, prompt_version)</code>. Bumping the prompt version invalidates the cache by design.</li>
-    <li><strong>Incremental clustering.</strong> The Clusterer attaches greedily and may drift; <code>codegps link --rebuild</code> triggers a full recompute when the drift becomes visible.</li>
-    <li><strong>Pull-based ingest.</strong> No real-time chat hooks; re-run <code>codegps ingest</code> (or call <code>codegps_ingest</code> via MCP) to pick up new sessions.</li>
+    <li><strong>Incremental clustering.</strong> The Clusterer attaches greedily and may drift; <code>subnet link --rebuild</code> triggers a full recompute when the drift becomes visible.</li>
+    <li><strong>Pull-based ingest.</strong> No real-time chat hooks; re-run <code>subnet ingest</code> (or call <code>subnet_ingest</code> via MCP) to pick up new sessions.</li>
     <li><strong>Code DB stays codegraph-compatible.</strong> New code-side fields go in <code>project_metadata</code> JSON rather than schema changes.</li>
     <li><strong>Conservative triage by default.</strong> Windows are kept unless an axis is firmly negative with confidence ≥ 0.6. <code>triage audit --dropped</code> lets you tune.</li>
   </ul>
 
   <footer class="site-footer">
     <span>v0.1.0 · MIT</span>
-    <span><a href="https://github.com/tienan92it/CodeGps">github.com/tienan92it/CodeGps</a></span>
+    <span><a href="https://github.com/tienan92it/SubstrateNet">github.com/tienan92it/SubstrateNet</a></span>
   </footer>
 </div>
 </body>

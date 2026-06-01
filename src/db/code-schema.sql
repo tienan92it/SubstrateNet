@@ -1,4 +1,4 @@
--- CodeGps L0 schema: code structure (codegraph-compatible)
+-- Substrate Net L0 schema: code structure (codegraph-compatible)
 
 CREATE TABLE IF NOT EXISTS schema_versions (
     version INTEGER PRIMARY KEY,
