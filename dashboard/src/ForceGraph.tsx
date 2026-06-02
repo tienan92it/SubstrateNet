@@ -30,11 +30,11 @@ export function ForceGraph({ nodes, links, onNodeClick }: {
         nodeColor={(n: any) => n.color}
         nodeVal={(n: any) => n.val ?? 1}
         nodeRelSize={5}
-        linkColor={() => 'rgba(150,150,160,0.18)'}
+        linkColor={() => 'rgba(140,150,165,0.16)'}
         linkDirectionalParticles={0}
         onNodeClick={(n: any) => onNodeClick?.(n as FGNode)}
         cooldownTicks={120}
-        backgroundColor="#0f1115"
+        backgroundColor="#0a0c10"
       />
     </div>
   );

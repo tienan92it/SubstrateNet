@@ -1,16 +1,18 @@
-import { useMemo, useRef, useState } from 'react';
-import ForceGraph2D from 'react-force-graph-2d';
-import type { ConceptItem, DashboardSnapshot, GraphNode, SearchItem } from './types';
-import { LAYER_COLORS } from './types';
+import { useMemo, useState } from 'react';
+import type { ConceptItem, DashboardSnapshot, GraphNode, KnowledgeNode, KnowledgeLevel, SearchItem } from './types';
+import { LAYER_COLORS, KNOWLEDGE_COLORS, KNOWLEDGE_LABELS } from './types';
+import { ForceGraph, type FGNode } from './ForceGraph';
 
 type Tab = 'graph' | 'domains' | 'layers' | 'concepts' | 'search';
 
 export function App({ snapshot }: { snapshot: DashboardSnapshot }) {
   const [tab, setTab] = useState<Tab>('graph');
   const [query, setQuery] = useState('');
-  const [selected, setSelected] = useState<GraphNode | null>(null);
+  const [selectedFile, setSelectedFile] = useState<GraphNode | null>(null);
+  const [selectedK, setSelectedK] = useState<KnowledgeNode | null>(null);
 
   const layerColor = (layer: string) => LAYER_COLORS[layer] ?? LAYER_COLORS.other;
+  const c = snapshot.meta.counts;
 
   return (
     <div className="app">
@@ -23,35 +25,47 @@ export function App({ snapshot }: { snapshot: DashboardSnapshot }) {
         </div>
         <div className="search">
           <input
-            placeholder="Search files, concepts, domains…"
+            placeholder="Search knowledge, files, domains…"
             value={query}
             onChange={(e) => { setQuery(e.target.value); if (e.target.value) setTab('search'); }}
           />
         </div>
         <span className="counts">
-          {snapshot.meta.counts.files} files · {snapshot.meta.counts.edges} edges · {snapshot.meta.counts.concepts} concepts
+          {c.knowledgeNodes} knowledge nodes · {c.knowledgeEdges} links · {c.concepts} concepts
         </span>
       </div>
 
-      {tab === 'graph' && <Legend layers={snapshot.meta.layers} color={layerColor} />}
+      {tab === 'graph' && <KnowledgeLegend />}
 
       <div className="body">
         <div className="main">
-          {tab === 'graph' && <GraphView snapshot={snapshot} color={layerColor} onSelect={setSelected} />}
+          {tab === 'graph' && <KnowledgeGraphView snapshot={snapshot} onSelect={(n) => { setSelectedK(n); setSelectedFile(null); }} />}
           {tab === 'domains' && <DomainsView snapshot={snapshot} />}
-          {tab === 'layers' && <LayersView snapshot={snapshot} color={layerColor} onSelect={setSelected} />}
+          {tab === 'layers' && <LayersView snapshot={snapshot} color={layerColor} onSelect={(n) => { setSelectedFile(n); setSelectedK(null); }} />}
           {tab === 'concepts' && <ConceptsView snapshot={snapshot} />}
           {tab === 'search' && <SearchView snapshot={snapshot} query={query} />}
         </div>
-        {selected && (
+        {selectedK && (
           <aside className="side">
-            <h3>{selected.label}</h3>
+            <span className="grounding" style={{ color: KNOWLEDGE_COLORS[selectedK.level] }}>{KNOWLEDGE_LABELS[selectedK.level]}</span>
+            <h3>{selectedK.label}</h3>
             <div className="meta">
-              <span className="grounding" style={{ color: layerColor(selected.layer) }}>{selected.layer}</span>
-              {' '}{selected.language} · {selected.id}
+              {selectedK.kind}
+              {selectedK.scope ? ` · ${selectedK.scope}` : ''}
+              {selectedK.grounding ? ` · ${selectedK.grounding}` : ''}
             </div>
-            {selected.summary && <p className="summary">{selected.summary}</p>}
-            <div>{selected.tags.map((t) => <span key={t} className="tag">{t}</span>)}</div>
+            {selectedK.summary && <p className="summary">{selectedK.summary}</p>}
+          </aside>
+        )}
+        {!selectedK && selectedFile && (
+          <aside className="side">
+            <h3>{selectedFile.label}</h3>
+            <div className="meta">
+              <span className="grounding" style={{ color: layerColor(selectedFile.layer) }}>{selectedFile.layer}</span>
+              {' '}{selectedFile.language} · {selectedFile.id}
+            </div>
+            {selectedFile.summary && <p className="summary">{selectedFile.summary}</p>}
+            <div>{selectedFile.tags.map((t) => <span key={t} className="tag">{t}</span>)}</div>
           </aside>
         )}
       </div>
@@ -59,40 +73,43 @@ export function App({ snapshot }: { snapshot: DashboardSnapshot }) {
   );
 }
 
-function Legend({ layers, color }: { layers: string[]; color: (l: string) => string }) {
+const KNOWLEDGE_SIZE: Record<KnowledgeLevel, number> = {
+  business_domain: 6, tech_domain: 6, concept: 3, entity: 3, fact: 1,
+};
+
+function KnowledgeLegend() {
+  const levels: KnowledgeLevel[] = ['business_domain', 'tech_domain', 'concept', 'entity', 'fact'];
   return (
     <div className="legend">
-      {layers.map((l) => (
-        <span key={l}><i className="swatch" style={{ background: color(l) }} /> {l}</span>
+      {levels.map((l) => (
+        <span key={l}><i className="swatch" style={{ background: KNOWLEDGE_COLORS[l] }} /> {KNOWLEDGE_LABELS[l]}</span>
       ))}
+      <span className="legend-hint">domains group concepts &amp; entities; click a node for detail</span>
     </div>
   );
 }
 
-function GraphView({ snapshot, color, onSelect }: {
-  snapshot: DashboardSnapshot; color: (l: string) => string; onSelect: (n: GraphNode) => void;
+function KnowledgeGraphView({ snapshot, onSelect }: {
+  snapshot: DashboardSnapshot; onSelect: (n: KnowledgeNode) => void;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const data = useMemo(() => ({
-    nodes: snapshot.nodes.map((n) => ({ ...n })),
-    links: snapshot.edges.map((e) => ({ source: e.source, target: e.target })),
-  }), [snapshot]);
+  const byId = useMemo(() => new Map(snapshot.knowledge.nodes.map((n) => [n.id, n])), [snapshot]);
+  const nodes: FGNode[] = useMemo(() => snapshot.knowledge.nodes.map((n) => ({
+    id: n.id,
+    label: `${KNOWLEDGE_LABELS[n.level]}: ${n.label}`,
+    color: KNOWLEDGE_COLORS[n.level],
+    val: KNOWLEDGE_SIZE[n.level],
+  })), [snapshot]);
+
+  if (nodes.length === 0) {
+    return <div className="list"><p className="sub">No knowledge graph yet. Run <code>subnet ingest</code> (extraction + enrichment) to populate it.</p></div>;
+  }
 
   return (
-    <div ref={ref} style={{ width: '100%', height: '100%' }}>
-      <ForceGraph2D
-        graphData={data}
-        nodeId="id"
-        nodeLabel={(n: any) => `${n.label} (${n.layer})`}
-        nodeColor={(n: any) => color(n.layer)}
-        nodeRelSize={4}
-        linkColor={() => 'rgba(150,150,160,0.15)'}
-        linkDirectionalParticles={0}
-        onNodeClick={(n: any) => onSelect(n as GraphNode)}
-        cooldownTicks={120}
-        backgroundColor="#0f1115"
-      />
-    </div>
+    <ForceGraph
+      nodes={nodes}
+      links={snapshot.knowledge.edges.map((e) => ({ source: e.source, target: e.target }))}
+      onNodeClick={(n: FGNode) => { const k = byId.get(n.id); if (k) onSelect(k); }}
+    />
   );
 }
 
@@ -166,6 +183,10 @@ function LayersView({ snapshot, color, onSelect }: {
     for (const n of snapshot.nodes) { const a = m.get(n.layer) ?? []; a.push(n); m.set(n.layer, a); }
     return [...m.entries()].sort((a, b) => b[1].length - a[1].length);
   }, [snapshot]);
+
+  if (snapshot.nodes.length === 0) {
+    return <div className="list"><p className="sub">No file analysis available. Run <code>subnet analyze</code>.</p></div>;
+  }
 
   return (
     <div className="list">

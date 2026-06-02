@@ -12,11 +12,9 @@ import { openGlobalDb } from '../db/connection.js';
 import { projectConfigDir } from '../config.js';
 import { buildSnapshot, type DashboardSnapshot } from './snapshot.js';
 import { industryNodeId, projectNodeId } from '../global/taxonomy.js';
+import { listSkills, listIndustries, listHighlights } from '../global/skills.js';
 
 const MAX_EDGES = 4000;
-/** Per-project drill-down payloads stay small to keep the single file loadable. */
-const DRILLDOWN_MAX_NODES = 600;
-const DRILLDOWN_MAX_EDGES = 1500;
 
 export type HierarchyLevel = 'industry' | 'business_domain' | 'tech_domain' | 'project' | 'file';
 
@@ -34,6 +32,14 @@ export interface HierarchyNode {
 
 export interface HierarchyEdge { source: string; target: string; kind: string; }
 
+/** The cross-project "second brain": who the user is across all projects. */
+export interface GlobalProfile {
+  projectCount: number;
+  industries: Array<{ name: string; projectCount: number; confidence: number }>;
+  skills: Array<{ name: string; weight: number; projectCount: number; grounding: string }>;
+  highlights: Array<{ statement: string; evidence?: string; grounding: string; projectCount: number }>;
+}
+
 export interface GlobalDashboardSnapshot {
   meta: {
     mode: 'global';
@@ -46,8 +52,9 @@ export interface GlobalDashboardSnapshot {
       edges: number;
     };
   };
+  profile: GlobalProfile;
   hierarchy: { nodes: HierarchyNode[]; edges: HierarchyEdge[] };
-  /** Per-project file graphs, keyed by raw project id. */
+  /** Per-project knowledge graphs, keyed by raw project id. */
   drillDown: Record<string, DashboardSnapshot>;
 }
 
@@ -127,12 +134,25 @@ export function buildGlobalSnapshot(): GlobalDashboardSnapshot {
     const { nodes, edges } = assembleHierarchy(gdb);
     const projects = gdb.prepare(`SELECT id, path FROM projects`).all() as Array<{ id: string; path: string }>;
 
+    const profile: GlobalProfile = {
+      projectCount: projects.length,
+      industries: listIndustries(gdb),
+      skills: listSkills(gdb, { scope: 'technical', limit: 40 }).map((s) => ({
+        name: s.name, weight: s.evidenceWeight, projectCount: s.projectCount, grounding: s.grounding,
+      })),
+      highlights: listHighlights(gdb, 40).map((h) => ({
+        statement: h.statement, evidence: h.evidence ?? undefined, grounding: h.grounding, projectCount: h.projectCount,
+      })),
+    };
+
     const drillDown: Record<string, DashboardSnapshot> = {};
     for (const p of projects) {
       // Only projects that still have local data can be drilled into.
       if (!existsSync(projectConfigDir(p.path))) continue;
       try {
-        drillDown[p.id] = buildSnapshot(p.path, { maxNodes: DRILLDOWN_MAX_NODES, maxEdges: DRILLDOWN_MAX_EDGES });
+        // Drill-down renders the knowledge graph only; skip the file graph to
+        // keep the single-file payload small.
+        drillDown[p.id] = buildSnapshot(p.path, { includeFileGraph: false });
       } catch { /* skip projects whose DBs can't be opened */ }
     }
 
@@ -149,6 +169,7 @@ export function buildGlobalSnapshot(): GlobalDashboardSnapshot {
           edges: edges.length,
         },
       },
+      profile,
       hierarchy: { nodes, edges },
       drillDown,
     };

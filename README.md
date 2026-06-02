@@ -35,6 +35,26 @@ known — so project truth and inferred knowledge never blur together.
 Everything is local. SQLite for storage. Ollama is the default LLM backend; any
 OpenAI-compatible endpoint (OpenRouter, OpenAI, Together, Groq) works too.
 
+## The dashboard
+
+A self-contained, offline view built for humans. The global dashboard
+(`subnet dashboard --global`) opens on a **Profile** — your cross-project skills,
+industries, and portfolio highlights — and a **Map** of
+`industry → business domain → tech domain → project` you can drill into. Each
+project also renders its own **knowledge graph** (domains → concepts/entities →
+rules/skills); the file dependency graph stays in `graph.json` for agents.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/assets/dashboard-profile.png" alt="Profile view — cross-project skills, industries, and portfolio highlights"></td>
+    <td width="50%"><img src="docs/assets/dashboard-map.png" alt="Map view — industry to domain to project knowledge graph"></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Profile — the second brain</em></td>
+    <td align="center"><em>Map — cross-project knowledge graph</em></td>
+  </tr>
+</table>
+
 ---
 
 ## Quickstart

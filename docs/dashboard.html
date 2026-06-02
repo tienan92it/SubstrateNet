@@ -28,8 +28,10 @@
 
   <h1>Interactive dashboard</h1>
   <p class="lede">
-    The local view: a self-contained, offline dashboard built from your SQLite
-    databases. Skills, layers, domains, and structure — navigable in one graph.
+    The local view, built for humans: a self-contained, offline knowledge graph
+    from your SQLite databases — business &amp; tech domains, concepts, and
+    entities, navigable from overview to detail. The file dependency graph stays
+    in <code>graph.json</code> for agents.
   </p>
 
   <div class="toc">
@@ -37,8 +39,8 @@
     <ul>
       <li><a href="#build">build the viewer</a></li>
       <li><a href="#generate">generate</a></li>
-      <li><a href="#global">global hierarchy</a></li>
-      <li><a href="#views">views</a></li>
+      <li><a href="#global">global: profile &amp; map</a></li>
+      <li><a href="#views">project views</a></li>
       <li><a href="#snapshot">the snapshot</a></li>
       <li><a href="#share">sharing</a></li>
     </ul>
@@ -64,29 +66,46 @@ subnet dashboard --open     # and open it in your browser</code></pre>
     <code>sync</code> / <code>analyze</code> / <code>ingest</code> to refresh.
   </p>
 
-  <h2 id="global">Global hierarchy (all projects)</h2>
+  <h2 id="global">Global dashboard: Profile &amp; Map</h2>
   <p>
     <code>subnet dashboard --global</code> builds the cross-project view from
-    <code>~/.substrate-net/global.db</code>: a navigable hierarchy of
-    <strong>industry &rarr; business domain &rarr; tech domain &rarr; project</strong>,
-    with each project drilling down into its own file graph. Run
-    <code>subnet link</code> in your projects first so the global zones are
-    populated.
+    <code>~/.substrate-net/global.db</code>. Run <code>subnet link</code> in your
+    projects first so the global zones, skills, and highlights are populated.
   </p>
   <pre class="shell"><code>subnet link                 # in each project: export skills + knowledge zones
 subnet dashboard --global   # writes ~/.substrate-net/dashboard/index.html
 subnet dashboard --global --open</code></pre>
-  <p>
-    Click a project node to drill into its files; use the breadcrumb to return
-    to the overview. Same-named domains merge across projects, so shared
-    business and technical zones surface as single nodes weighted by how many
-    projects reach them.
-  </p>
 
-  <h2 id="views">Views</h2>
+  <h3>Profile — the second brain</h3>
+  <p>
+    The default landing: a portfolio of what you know across every project —
+    classified industries, top technical skills weighted by evidence (with
+    cross-project coverage), and grounded portfolio highlights. Aggregated
+    mechanically from L2.5/L5 evidence; nothing invented.
+  </p>
+  <figure class="shot">
+    <img src="assets/dashboard-profile.png" alt="Global Profile view: stat tiles for projects/industries/skills/highlights, industry chips, evidence-weighted skill bars, and portfolio highlight cards." loading="lazy">
+    <figcaption>Profile — cross-project skills, industries, and highlights.</figcaption>
+  </figure>
+
+  <h3>Map — the cross-project wiki</h3>
+  <p>
+    A navigable hierarchy of
+    <strong>industry &rarr; business domain &rarr; tech domain &rarr; project</strong>.
+    Same-named domains merge across projects, so shared business and technical
+    zones surface as single nodes weighted by how many projects reach them. Click
+    a project node to drill into <em>its</em> knowledge graph; use the breadcrumb
+    to return.
+  </p>
+  <figure class="shot">
+    <img src="assets/dashboard-map.png" alt="Global Map view: force-directed hierarchy graph with nodes colored by level (industry, business domain, tech domain, project) and a legend." loading="lazy">
+    <figcaption>Map — industry &rarr; domain &rarr; project, colored by knowledge level.</figcaption>
+  </figure>
+
+  <h2 id="views">Project views</h2>
   <table>
     <tr><th>View</th><th>What it shows</th></tr>
-    <tr><td><strong>Graph</strong></td><td>File-level dependency graph (imports + calls), nodes colored by architectural layer. Click a node for its summary and tags.</td></tr>
+    <tr><td><strong>Graph</strong></td><td>Knowledge graph for humans: business &amp; tech domains (hubs) grouping concepts and entities, with rules/skills/actors as leaves. Nodes colored by knowledge level; click one for its summary, scope, and grounding. (The file dependency graph is exported to <code>graph.json</code> for agents, not shown here.)</td></tr>
     <tr><td><strong>Domains</strong></td><td>Classified industries, evidence-cited portfolio highlights, and domain entities.</td></tr>
     <tr><td><strong>Layers</strong></td><td>Files grouped by architectural layer (api · service · data · ui · utility · other).</td></tr>
     <tr><td><strong>Concepts</strong></td><td>L3 concepts with their scope/domain and a structured digest (problem · constraints · decision · consequences) when available.</td></tr>
@@ -100,8 +119,8 @@ subnet dashboard --global --open</code></pre>
     <code>code.db</code> + <code>knowledge.db</code>:
   </p>
   <ul>
-    <li><strong>nodes</strong> — files with language, layer, summary, tags</li>
-    <li><strong>edges</strong> — file→file dependencies derived from symbol-level imports/calls</li>
+    <li><strong>knowledge</strong> — the human graph: business/tech domain, concept, entity, and fact nodes + their relationships (the dashboard's main view)</li>
+    <li><strong>nodes</strong> / <strong>edges</strong> — the agent-facing file dependency graph (files by layer; symbol-level imports/calls), kept for tooling/MCP</li>
     <li><strong>domains</strong> — industries, portfolio highlights, entities</li>
     <li><strong>concepts</strong> — L3 concepts</li>
     <li><strong>search</strong> — a prebuilt fuzzy index</li>

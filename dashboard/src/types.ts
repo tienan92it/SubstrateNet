@@ -14,13 +14,29 @@ export interface ConceptItem {
 }
 export interface SearchItem { id: string; label: string; kind: string; layer?: string; }
 
+export type KnowledgeLevel = 'business_domain' | 'tech_domain' | 'concept' | 'entity' | 'fact';
+export interface KnowledgeNode {
+  id: string;
+  label: string;
+  level: KnowledgeLevel;
+  kind: string;
+  summary?: string;
+  scope?: string;
+  grounding?: string;
+}
+export interface KnowledgeEdge { source: string; target: string; kind: string; }
+
 export interface DashboardSnapshot {
   meta: {
     project: string;
     generatedAt: number;
     layers: string[];
-    counts: { files: number; edges: number; highlights: number; concepts: number };
+    counts: {
+      files: number; edges: number; highlights: number; concepts: number;
+      knowledgeNodes: number; knowledgeEdges: number;
+    };
   };
+  knowledge: { nodes: KnowledgeNode[]; edges: KnowledgeEdge[] };
   nodes: GraphNode[];
   edges: GraphEdge[];
   domains: {
@@ -31,6 +47,22 @@ export interface DashboardSnapshot {
   concepts: ConceptItem[];
   search: SearchItem[];
 }
+
+export const KNOWLEDGE_COLORS: Record<KnowledgeLevel, string> = {
+  business_domain: '#4caf78',
+  tech_domain: '#3c8ce0',
+  concept: '#b45ad6',
+  entity: '#e0723c',
+  fact: '#8a8f98',
+};
+
+export const KNOWLEDGE_LABELS: Record<KnowledgeLevel, string> = {
+  business_domain: 'Business domain',
+  tech_domain: 'Tech domain',
+  concept: 'Concept',
+  entity: 'Entity',
+  fact: 'Fact',
+};
 
 export const LAYER_COLORS: Record<string, string> = {
   api: '#e0723c',
@@ -59,6 +91,13 @@ export interface HierarchyNode {
 
 export interface HierarchyEdge { source: string; target: string; kind: string; }
 
+export interface GlobalProfile {
+  projectCount: number;
+  industries: Array<{ name: string; projectCount: number; confidence: number }>;
+  skills: Array<{ name: string; weight: number; projectCount: number; grounding: string }>;
+  highlights: Array<{ statement: string; evidence?: string; grounding: string; projectCount: number }>;
+}
+
 export interface GlobalDashboardSnapshot {
   meta: {
     mode: 'global';
@@ -71,6 +110,7 @@ export interface GlobalDashboardSnapshot {
       edges: number;
     };
   };
+  profile: GlobalProfile;
   hierarchy: { nodes: HierarchyNode[]; edges: HierarchyEdge[] };
   drillDown: Record<string, DashboardSnapshot>;
 }

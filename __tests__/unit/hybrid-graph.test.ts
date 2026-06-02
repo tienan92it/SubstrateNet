@@ -123,17 +123,26 @@ describe('dashboard snapshot', () => {
       knowDb.close();
 
       const snap = buildSnapshot(root);
+      // Agent-facing file graph is retained (graph.json / MCP).
       expect(snap.nodes.map((n) => n.id).sort()).toEqual(['src/api/handler.ts', 'src/db/repo.ts']);
       expect(snap.nodes.find((n) => n.id === 'src/api/handler.ts')!.layer).toBe('api');
       // file→file edge derived from the cross-file symbol call
       expect(snap.edges).toContainEqual({ source: 'src/api/handler.ts', target: 'src/db/repo.ts', kind: 'calls' });
+      // Human-facing knowledge graph: entity + concept become nodes.
+      expect(snap.knowledge.nodes.find((n) => n.label === 'Account')?.level).toBe('entity');
+      expect(snap.knowledge.nodes.find((n) => n.label === 'Payments')?.level).toBe('concept');
       expect(snap.domains.industries.map((i) => i.name)).toContain('fintech');
       expect(snap.domains.highlights[0].statement).toContain('Go backend');
       expect(snap.domains.entities.map((e) => e.title)).toContain('Account');
       expect(snap.concepts.map((c) => c.name)).toContain('Payments');
-      // search index spans files + concepts + entities + highlights
+      // search index spans knowledge nodes + files + highlights
       const kinds = new Set(snap.search.map((s) => s.kind));
       expect(kinds).toEqual(new Set(['file', 'concept', 'entity', 'highlight']));
+
+      // File graph can be omitted for global drill-down payloads.
+      const lean = buildSnapshot(root, { includeFileGraph: false });
+      expect(lean.nodes).toHaveLength(0);
+      expect(lean.knowledge.nodes.length).toBeGreaterThan(0);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

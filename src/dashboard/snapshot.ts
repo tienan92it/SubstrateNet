@@ -1,10 +1,11 @@
 /**
  * Dashboard snapshot builder.
  *
- * Exports a bounded, self-contained graph from the project's SQLite databases:
- * a file-level dependency graph (nodes colored by architectural layer), domain
- * highlights/entities, L3 concepts, and a prebuilt search index. This is the
- * single artifact the static dashboard renders — no live DB connection needed.
+ * Exports a bounded, self-contained snapshot from the project's SQLite
+ * databases. The human-facing artifact is the KNOWLEDGE graph (zones ->
+ * concepts/entities -> rules/skills); the file-level dependency graph
+ * (`nodes`/`edges`) is retained for agents/tooling (graph.json, MCP) but is
+ * not the primary human view. Self-contained — no live DB connection needed.
  */
 import type { Database as SqliteDb } from 'better-sqlite3';
 import { basename } from 'path';
@@ -12,12 +13,19 @@ import { openCodeDb, openKnowledgeDb } from '../db/connection.js';
 
 const DEFAULT_MAX_NODES = 2500;
 const DEFAULT_MAX_EDGES = 6000;
+const MAX_KNOWLEDGE_NODES = 1500;
+const MAX_KNOWLEDGE_EDGES = 3000;
 
 export interface SnapshotOpts {
   /** Cap on file nodes (lower this for global drill-down payloads). */
   maxNodes?: number;
   /** Cap on file-to-file edges. */
   maxEdges?: number;
+  /**
+   * Include the agent-facing file dependency graph (`nodes`/`edges`). Off for
+   * global drill-down payloads, which only render the knowledge graph.
+   */
+  includeFileGraph?: boolean;
 }
 
 export interface GraphNode {
@@ -36,13 +44,32 @@ export interface ConceptItem {
 }
 export interface SearchItem { id: string; label: string; kind: string; layer?: string; }
 
+/** A node in the human-facing knowledge graph. */
+export type KnowledgeLevel = 'business_domain' | 'tech_domain' | 'concept' | 'entity' | 'fact';
+export interface KnowledgeNode {
+  id: string;
+  label: string;
+  level: KnowledgeLevel;
+  kind: string;          // underlying k_node kind or 'concept'
+  summary?: string;
+  scope?: string;
+  grounding?: string;
+}
+export interface KnowledgeEdge { source: string; target: string; kind: string; }
+
 export interface DashboardSnapshot {
   meta: {
     project: string;
     generatedAt: number;
     layers: string[];
-    counts: { files: number; edges: number; highlights: number; concepts: number };
+    counts: {
+      files: number; edges: number; highlights: number; concepts: number;
+      knowledgeNodes: number; knowledgeEdges: number;
+    };
   };
+  /** Human-facing knowledge graph (the primary view). */
+  knowledge: { nodes: KnowledgeNode[]; edges: KnowledgeEdge[] };
+  /** Agent-facing file dependency graph (graph.json / MCP); empty when omitted. */
   nodes: GraphNode[];
   edges: GraphEdge[];
   domains: {
@@ -68,37 +95,42 @@ export function buildSnapshot(root: string, opts: SnapshotOpts = {}): DashboardS
 function assemble(root: string, codeDb: SqliteDb, knowDb: SqliteDb, opts: SnapshotOpts): DashboardSnapshot {
   const MAX_NODES = opts.maxNodes ?? DEFAULT_MAX_NODES;
   const MAX_EDGES = opts.maxEdges ?? DEFAULT_MAX_EDGES;
-  // File nodes with their semantic overlay (layer/summary/tags).
-  const fileRows = codeDb.prepare(`
-    SELECT f.path AS path, f.language AS language,
-           fa.layer AS layer, fa.summary AS summary, fa.tags AS tags
-    FROM files f
-    LEFT JOIN file_analysis fa ON fa.path = f.path
-    ORDER BY f.path
-    LIMIT ?
-  `).all(MAX_NODES) as Array<{ path: string; language: string; layer: string | null; summary: string | null; tags: string | null }>;
+  const includeFileGraph = opts.includeFileGraph ?? true;
 
-  const nodeIds = new Set(fileRows.map((r) => r.path));
-  const nodes: GraphNode[] = fileRows.map((r) => ({
-    id: r.path,
-    label: basename(r.path),
-    language: r.language,
-    layer: r.layer ?? 'other',
-    summary: r.summary ?? undefined,
-    tags: parseTags(r.tags),
-  }));
+  // File dependency graph (agent-facing): nodes colored by layer + import/call
+  // edges. Retained in the snapshot for graph.json / MCP, not the human view.
+  let nodes: GraphNode[] = [];
+  let edges: GraphEdge[] = [];
+  if (includeFileGraph) {
+    const fileRows = codeDb.prepare(`
+      SELECT f.path AS path, f.language AS language,
+             fa.layer AS layer, fa.summary AS summary, fa.tags AS tags
+      FROM files f
+      LEFT JOIN file_analysis fa ON fa.path = f.path
+      ORDER BY f.path
+      LIMIT ?
+    `).all(MAX_NODES) as Array<{ path: string; language: string; layer: string | null; summary: string | null; tags: string | null }>;
 
-  // File-to-file dependency edges, derived by mapping symbol-level imports/calls
-  // to their containing files and deduping.
-  const rawEdges = codeDb.prepare(`
-    SELECT DISTINCT s.file_path AS source, t.file_path AS target, e.kind AS kind
-    FROM edges e
-    JOIN nodes s ON s.id = e.source
-    JOIN nodes t ON t.id = e.target
-    WHERE e.kind IN ('imports','calls') AND s.file_path != t.file_path
-    LIMIT ?
-  `).all(MAX_EDGES) as Array<{ source: string; target: string; kind: string }>;
-  const edges: GraphEdge[] = rawEdges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
+    const nodeIds = new Set(fileRows.map((r) => r.path));
+    nodes = fileRows.map((r) => ({
+      id: r.path,
+      label: basename(r.path),
+      language: r.language,
+      layer: r.layer ?? 'other',
+      summary: r.summary ?? undefined,
+      tags: parseTags(r.tags),
+    }));
+
+    const rawEdges = codeDb.prepare(`
+      SELECT DISTINCT s.file_path AS source, t.file_path AS target, e.kind AS kind
+      FROM edges e
+      JOIN nodes s ON s.id = e.source
+      JOIN nodes t ON t.id = e.target
+      WHERE e.kind IN ('imports','calls') AND s.file_path != t.file_path
+      LIMIT ?
+    `).all(MAX_EDGES) as Array<{ source: string; target: string; kind: string }>;
+    edges = rawEdges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
+  }
 
   // Domains: industries, portfolio highlights, top entities.
   const industries = (knowDb.prepare(`SELECT title, evidence_text FROM k_nodes WHERE kind='industry'`)
@@ -123,11 +155,13 @@ function assemble(root: string, codeDb: SqliteDb, knowDb: SqliteDb, opts: Snapsh
       structured: parseStructured(r.structured),
     }));
 
-  // Search index across files, concepts, entities, highlights.
+  // Human-facing knowledge graph: zones -> concepts/entities -> rules/skills.
+  const knowledge = buildKnowledgeGraph(knowDb, concepts);
+
+  // Search index across knowledge nodes, files (if present), concepts, entities.
   const search: SearchItem[] = [
+    ...knowledge.nodes.map((n) => ({ id: n.id, label: n.label, kind: n.kind })),
     ...nodes.map((n) => ({ id: n.id, label: n.label, kind: 'file', layer: n.layer })),
-    ...concepts.map((c) => ({ id: c.id, label: c.name, kind: 'concept' })),
-    ...entities.map((e) => ({ id: e.id, label: e.title, kind: 'entity' })),
     ...highlights.map((h, i) => ({ id: `hl-${i}`, label: h.statement, kind: 'highlight' })),
   ];
 
@@ -138,14 +172,105 @@ function assemble(root: string, codeDb: SqliteDb, knowDb: SqliteDb, opts: Snapsh
       project: root,
       generatedAt: Date.now(),
       layers,
-      counts: { files: nodes.length, edges: edges.length, highlights: highlights.length, concepts: concepts.length },
+      counts: {
+        files: nodes.length, edges: edges.length,
+        highlights: highlights.length, concepts: concepts.length,
+        knowledgeNodes: knowledge.nodes.length, knowledgeEdges: knowledge.edges.length,
+      },
     },
+    knowledge,
     nodes,
     edges,
     domains: { industries, highlights, entities },
     concepts,
     search,
   };
+}
+
+/** k_node kinds promoted into the human knowledge graph, in display priority. */
+const KNOWLEDGE_KINDS = [
+  'business_domain', 'tech_domain', 'entity',
+  'business_rule', 'skill', 'actor', 'process', 'metric', 'glossary_term', 'knowledge_gap',
+] as const;
+
+/** Edge kinds that express knowledge structure (containment + relationships). */
+const KNOWLEDGE_EDGE_KINDS = [
+  'part_of', 'relates_to', 'owned_by', 'governed_by', 'has_state', 'transitions_to', 'depends_on',
+];
+
+function knowledgeLevel(kind: string): KnowledgeLevel {
+  if (kind === 'business_domain') return 'business_domain';
+  if (kind === 'tech_domain') return 'tech_domain';
+  if (kind === 'entity') return 'entity';
+  return 'fact';
+}
+
+/**
+ * Assemble the knowledge graph from k_nodes/k_edges + L3 concepts. Zones
+ * (business/tech domains) are the hubs; entities and concepts the mid layer;
+ * rules/skills/actors/processes the leaves. Edges are containment (`part_of`,
+ * concept membership) plus domain relationships.
+ */
+function buildKnowledgeGraph(
+  knowDb: SqliteDb, concepts: ConceptItem[],
+): { nodes: KnowledgeNode[]; edges: KnowledgeEdge[] } {
+  const kindList = KNOWLEDGE_KINDS.map(() => '?').join(',');
+  const rows = knowDb.prepare(`
+    SELECT id, kind, title, summary, scope, grounding FROM k_nodes
+    WHERE kind IN (${kindList})
+    ORDER BY CASE kind
+      WHEN 'business_domain' THEN 0 WHEN 'tech_domain' THEN 1 WHEN 'entity' THEN 2 ELSE 3 END,
+      updated_at DESC
+    LIMIT ?
+  `).all(...KNOWLEDGE_KINDS, MAX_KNOWLEDGE_NODES) as Array<{
+    id: string; kind: string; title: string; summary: string | null; scope: string | null; grounding: string | null;
+  }>;
+
+  const nodes: KnowledgeNode[] = rows.map((r) => ({
+    id: r.id,
+    label: r.title,
+    level: knowledgeLevel(r.kind),
+    kind: r.kind,
+    summary: r.summary ?? undefined,
+    scope: r.scope ?? undefined,
+    grounding: r.grounding ?? undefined,
+  }));
+
+  // Concepts (L3) as mid-level grouping nodes.
+  const conceptBudget = Math.max(0, MAX_KNOWLEDGE_NODES - nodes.length);
+  for (const c of concepts.slice(0, conceptBudget)) {
+    nodes.push({
+      id: c.id, label: c.name, level: 'concept', kind: 'concept',
+      summary: c.summary, scope: c.scope,
+    });
+  }
+
+  const present = new Set(nodes.map((n) => n.id));
+  const edges: KnowledgeEdge[] = [];
+  const seen = new Set<string>();
+  const pushEdge = (source: string, target: string, kind: string) => {
+    if (!present.has(source) || !present.has(target) || source === target) return;
+    const key = `${source}|${target}|${kind}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    if (edges.length < MAX_KNOWLEDGE_EDGES) edges.push({ source, target, kind });
+  };
+
+  // Domain relationships + containment from k_edges.
+  const edgeKindList = KNOWLEDGE_EDGE_KINDS.map(() => '?').join(',');
+  const kEdges = knowDb.prepare(`
+    SELECT source, target, kind FROM k_edges WHERE kind IN (${edgeKindList})
+  `).all(...KNOWLEDGE_EDGE_KINDS) as Array<{ source: string; target: string; kind: string }>;
+  for (const e of kEdges) pushEdge(e.source, e.target, e.kind);
+
+  // Concept membership: fact -> its concept (only for nodes already present).
+  const members = knowDb.prepare(`
+    SELECT id, cluster_id FROM k_nodes
+    WHERE cluster_id IS NOT NULL AND kind IN (${kindList})
+  `).all(...KNOWLEDGE_KINDS) as Array<{ id: string; cluster_id: string }>;
+  for (const m of members) pushEdge(m.id, m.cluster_id, 'in_concept');
+
+  return { nodes, edges };
 }
 
 function parseTags(raw: string | null): string[] {
