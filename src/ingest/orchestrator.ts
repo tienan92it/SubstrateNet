@@ -30,6 +30,13 @@ import { runClustererForNewFacts } from '../pipeline/cluster.js';
 import { runEnrichment } from '../pipeline/enrich.js';
 import { analyzeWithDbs } from '../pipeline/analyze-code.js';
 
+export interface IngestProgress {
+  stage: 'discover' | 'ingest' | 'segment' | 'triage' | 'extract' | 'cluster' | 'analyze' | 'enrich';
+  current?: number;
+  total?: number;
+  detail?: string;
+}
+
 export interface IngestOpts {
   agentFilter?: AgentId;
   runTriage?: boolean;
@@ -43,6 +50,7 @@ export interface IngestOpts {
    * ingested ones. Use after switching models or to finish an interrupted run.
    */
   reprocess?: boolean;
+  onProgress?: (p: IngestProgress) => void;
 }
 
 export interface IngestStats {
@@ -75,10 +83,13 @@ export async function ingestProject(root: string, opts: IngestOpts = {}): Promis
     filesAnalyzed: 0,
   };
 
+  const progress = (p: IngestProgress) => opts.onProgress?.(p);
+
   try {
-    const adapters: SessionAdapter[] = pickAdapters(cfg, opts.agentFilter);
+    const adapters: SessionAdapter[] = buildSessionAdapters(cfg, opts.agentFilter);
     const newWindowIds: string[] = [];
 
+    progress({ stage: 'discover' });
     for (const adapter of adapters) {
       for await (const ref of adapter.discover(root)) {
         stats.sessionsSeen++;
@@ -158,13 +169,19 @@ export async function ingestProject(root: string, opts: IngestOpts = {}): Promis
 
     // 5. Triage (M3)
     if (opts.runTriage !== false && windowsToProcess.length > 0) {
-      const tri: TriageRunResult = await runTriageForWindows(root, knowDb, cfg, windowsToProcess);
+      progress({ stage: 'triage', current: 0, total: windowsToProcess.length });
+      const tri: TriageRunResult = await runTriageForWindows(root, knowDb, cfg, windowsToProcess, {
+        onWindow: (i, total) => progress({ stage: 'triage', current: i, total }),
+      });
       stats.triaged = tri.triaged;
       stats.kept = tri.kept;
       stats.dropped = tri.dropped;
       // 6. Extractors only over kept windows (M5)
       if (opts.runExtract !== false && tri.keptWindowIds.length > 0) {
-        const exStats = await runExtractorsForKeptWindows(root, knowDb, codeDb, cfg, tri.keptWindowIds);
+        progress({ stage: 'extract', current: 0, total: tri.keptWindowIds.length });
+        const exStats = await runExtractorsForKeptWindows(root, knowDb, codeDb, cfg, tri.keptWindowIds, {
+          onTask: (i, total) => progress({ stage: 'extract', current: i, total }),
+        });
         stats.factsProduced = exStats.factsProduced;
 
         // 7. Clusterer + Summarizer over newly-produced facts (M7)
@@ -181,7 +198,9 @@ export async function ingestProject(root: string, opts: IngestOpts = {}): Promis
     //     Runs before enrichment so the domain-analyzer can use layers.
     if (opts.runAnalyze !== false && opts.runExtract !== false) {
       try {
-        const an = await analyzeWithDbs(codeDb, knowDb, root, cfg);
+        const an = await analyzeWithDbs(codeDb, knowDb, root, cfg, {
+          onFile: (i, total) => progress({ stage: 'analyze', current: i, total }),
+        });
         stats.filesAnalyzed = an.filesAnalyzed;
       } catch { /* analysis is best-effort; pipeline continues */ }
     }
@@ -190,6 +209,7 @@ export async function ingestProject(root: string, opts: IngestOpts = {}): Promis
     //    extraction depends on the code graph (updated by `sync`, not ingest),
     //    and is idempotent. Skip only when explicitly disabled.
     if (opts.runEnrich !== false) {
+      progress({ stage: 'enrich' });
       const enrich = await runEnrichment(root, knowDb, codeDb, cfg, { noAgent: opts.runExtract === false });
       stats.domainEntities = enrich.structuralEntities;
       stats.domainRelationships = enrich.structuralRelationships + enrich.agentRelationships;
@@ -202,11 +222,13 @@ export async function ingestProject(root: string, opts: IngestOpts = {}): Promis
   return stats;
 }
 
-function pickAdapters(_cfg: ReturnType<typeof loadConfig>, filter?: AgentId): SessionAdapter[] {
+/** Build session adapters with configured transcript roots. */
+export function buildSessionAdapters(cfg: ReturnType<typeof loadConfig>, filter?: AgentId): SessionAdapter[] {
+  const roots = cfg.transcriptRoots;
   const all: SessionAdapter[] = [
-    new CursorAdapter(),
-    new ClaudeCodeAdapter(),
-    new CodexAdapter(),
+    new CursorAdapter({ root: roots?.cursor }),
+    new ClaudeCodeAdapter({ root: roots?.claudeCode }),
+    new CodexAdapter({ root: roots?.codex }),
     new CopilotAdapter(),
   ];
   if (!filter) return all;

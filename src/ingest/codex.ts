@@ -50,7 +50,7 @@ export class CodexAdapter implements SessionAdapter {
         continue;
       }
       if (!name.endsWith('.jsonl')) continue;
-      const cwd = sniffCwd(abs);
+      const cwd = sniffCodexSessionCwd(abs);
       if (cwd && resolvePath(cwd) === target) {
         yield {
           agent: 'codex',
@@ -145,7 +145,8 @@ function extractPaths(args: unknown): string[] | undefined {
  * Read the first few lines looking for a JSON entry that carries `cwd` or
  * `workspace` so we can decide if the session belongs to the project.
  */
-function sniffCwd(path: string): string | undefined {
+/** Read session JSONL header for project cwd (used by setup discovery). */
+export function sniffCodexSessionCwd(path: string): string | undefined {
   try {
     const buf = readFileSync(path, { encoding: 'utf8' });
     const lines = buf.split('\n', 20);

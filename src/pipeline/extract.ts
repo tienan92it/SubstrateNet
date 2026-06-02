@@ -73,12 +73,17 @@ function route(domain: string, quality: string): RoutingDecision {
   return { agents };
 }
 
+export interface ExtractRunOpts {
+  onTask?: (current: number, total: number) => void;
+}
+
 export async function runExtractorsForKeptWindows(
   _root: string,
   knowDb: SqliteDb,
   codeDb: SqliteDb,
   cfg: SubstrateNetConfig,
   windowIds: string[],
+  runOpts: ExtractRunOpts = {},
 ): Promise<ExtractStats> {
   const rt = new AgentRuntime({ knowledgeDb: knowDb, config: cfg });
   const stats: ExtractStats = {
@@ -108,13 +113,18 @@ export async function runExtractorsForKeptWindows(
   }
 
   const limit = cfg.concurrency ?? 4;
+  let taskDone = 0;
   const outcomes = await mapPool(tasks, limit, async (t) => {
     try {
       const out = await rt.run<ExtractorPayload, ExtractorOutput>(t.agent, {
         payload: { text: t.text, windowId: t.windowId, domain: t.domain },
       });
+      taskDone++;
+      runOpts.onTask?.(taskDone, tasks.length);
       return { t, out };
     } catch {
+      taskDone++;
+      runOpts.onTask?.(taskDone, tasks.length);
       return undefined; // backend error for this call; others continue
     }
   });

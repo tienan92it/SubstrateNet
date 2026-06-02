@@ -103,7 +103,7 @@ export function registerProfile(program: Command): void {
 }
 
 /** Generate portfolio prose via the ProfileWriter agent and write it to disk. */
-async function writeProse(outPath: string): Promise<void> {
+export async function writeProse(outPath: string): Promise<void> {
   const gdb = openGlobalDb();
   try {
     const projectCount = (gdb.prepare(`SELECT COUNT(*) AS n FROM projects`).get() as any).n;

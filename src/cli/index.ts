@@ -15,6 +15,7 @@ import { registerProfile } from './profile.js';
 import { registerClean } from './clean.js';
 import { registerAnalyze } from './analyze.js';
 import { registerDashboard } from './dashboard.js';
+import { registerSetup } from './setup.js';
 
 const program = new Command();
 
@@ -38,6 +39,7 @@ registerProfile(program);
 registerClean(program);
 registerAnalyze(program);
 registerDashboard(program);
+registerSetup(program);
 
 program.parseAsync(process.argv).catch((err) => {
   console.error(err?.stack ?? err);

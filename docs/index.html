@@ -94,22 +94,15 @@
   <h2>Minimal Run</h2>
   <pre class="shell"><code># 1. Install (Node 20+)
 git clone https://github.com/tienan92it/SubstrateNet && cd SubstrateNet
-npm install &amp;&amp; npm run build &amp;&amp; npm link
+npm install &amp;&amp; npm run build:all &amp;&amp; npm link
 
 # 2. Local LLM (one-time)
 ollama pull qwen3:4b-instruct
 ollama pull qwen2.5:14b
 ollama pull qwen3-embedding:0.6b
 
-# 3. Index a project
-cd /path/to/your/project
-subnet init
-subnet sync          # L0 code structure
-subnet analyze       # L0.5 summaries + layers (hybrid)
-subnet ingest        # L1→L3 + enrichment (L2.5)
-subnet link          # cross-project links + skill graph
-subnet profile       # industries + top skills
-subnet dashboard --open   # interactive graph</code></pre>
+# 3. Discover → estimate → run (one command)
+subnet setup</code></pre>
 
   <p>Full walkthrough: <a href="getting-started.html">getting started →</a></p>
 

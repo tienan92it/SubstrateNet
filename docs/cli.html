@@ -39,6 +39,28 @@
     </ul>
   </div>
 
+  <h2 id="setup">setup</h2>
+  <pre><code>subnet setup [options]</code></pre>
+  <p>
+    Interactive first-run wizard: discover local AI workspaces, select projects,
+    show a pre-flight estimate (tokens/API calls for frontier models, wall time for
+    local Ollama), then run init → sync → ingest → link → dashboard.
+  </p>
+  <table>
+    <tr><th>Flag</th><th>Effect</th></tr>
+    <tr><td><code>--discover-only</code></td><td>List discoverable workspaces and exit.</td></tr>
+    <tr><td><code>--plan-only</code></td><td>Estimate work without running the pipeline (requires <code>--projects</code>).</td></tr>
+    <tr><td><code>--projects &lt;paths&gt;</code></td><td>Comma-separated roots (non-interactive selection).</td></tr>
+    <tr><td><code>--agents &lt;id&gt;</code></td><td>Limit discovery: <code>cursor</code>, <code>claude-code</code>, <code>codex</code>, <code>copilot</code>.</td></tr>
+    <tr><td><code>--yes</code></td><td>Skip confirmation after the plan.</td></tr>
+    <tr><td><code>--json</code></td><td>JSON output for discover/plan modes.</td></tr>
+    <tr><td><code>--reprocess</code></td><td>Pass through to ingest (re-triage all windows).</td></tr>
+    <tr><td><code>--verify</code></td><td>Run verify after ingest per project.</td></tr>
+    <tr><td><code>--prose</code></td><td>Generate portfolio markdown via ProfileWriter after link.</td></tr>
+    <tr><td><code>--skip-dashboard</code></td><td>Skip dashboard build.</td></tr>
+    <tr><td><code>--open</code></td><td>Open dashboard in the browser when done.</td></tr>
+  </table>
+
   <h2 id="init">init</h2>
   <pre><code>subnet init [path]</code></pre>
   <p>Creates <code>&lt;path&gt;/.substrate-net/</code> with empty <code>code.db</code>, <code>knowledge.db</code>, and a stub <code>config.json</code>. Registers the project in <code>~/.substrate-net/global.db</code>.</p>

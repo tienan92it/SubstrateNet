@@ -29,8 +29,13 @@ export interface TriageRunResult {
   duplicateWindows: number;
 }
 
+export interface TriageRunOpts {
+  onWindow?: (current: number, total: number) => void;
+}
+
 export async function runTriageForWindows(
   _root: string, db: SqliteDb, cfg: SubstrateNetConfig, windowIds: string[],
+  runOpts: TriageRunOpts = {},
 ): Promise<TriageRunResult> {
   const rt = new AgentRuntime({ knowledgeDb: db, config: cfg });
   const result: TriageRunResult = {
@@ -45,13 +50,18 @@ export async function runTriageForWindows(
     | { windowId: string; ok: true; model: string; output: any }
     | { windowId: string; ok: false; error: string }
     | undefined;
+  let triageDone = 0;
   const labeled = await mapPool(windowIds, limit, async (windowId): Promise<Labeled> => {
     const text = getWindowText(db, windowId);
     if (!text) return undefined;
     try {
       const out = await rt.run(TRIAGE_AGENT, { payload: { text, windowId } });
+      triageDone++;
+      runOpts.onWindow?.(triageDone, windowIds.length);
       return { windowId, ok: true, model: out.model, output: out.output };
     } catch (e) {
+      triageDone++;
+      runOpts.onWindow?.(triageDone, windowIds.length);
       return { windowId, ok: false, error: (e as Error).message.slice(0, 200) };
     }
   });

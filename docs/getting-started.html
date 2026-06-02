@@ -27,7 +27,7 @@
   </header>
 
   <h1>Getting started</h1>
-  <p class="lede">Install the CLI, index a project, then open your cross-project skill view.</p>
+  <p class="lede">Install the CLI, run <code>subnet setup</code>, or use the per-step pipeline below.</p>
 
   <div class="toc">
     <h4>on this page</h4>
@@ -35,9 +35,10 @@
       <li><a href="#prereqs">prerequisites</a></li>
       <li><a href="#install">1. install</a></li>
       <li><a href="#llm">2. local llm</a></li>
-      <li><a href="#init">3. init a project</a></li>
-      <li><a href="#index">4. index code + ingest conversations</a></li>
-      <li><a href="#inspect">5. inspect the result</a></li>
+      <li><a href="#setup">3. setup wizard (recommended)</a></li>
+      <li><a href="#init">4. init a project (manual)</a></li>
+      <li><a href="#index">5. index code + ingest (manual)</a></li>
+      <li><a href="#inspect">6. inspect the result</a></li>
       <li><a href="#troubleshooting">troubleshooting</a></li>
     </ul>
   </div>
@@ -80,7 +81,25 @@ ollama pull qwen3-embedding:0.6b   # embeddings — dedupe, clustering</code></p
 launchctl setenv OLLAMA_MAX_LOADED_MODELS 3
 # restart Ollama after these</code></pre>
 
-  <h2 id="init">3. Init a project</h2>
+  <h2 id="setup">3. Setup wizard (recommended)</h2>
+  <p>
+    One command discovers local workspaces (Cursor, Claude Code, Codex, VS Code/Cursor
+    workspace storage), lets you select projects, estimates LLM cost or local
+    runtime, then runs the full pipeline through dashboard build.
+  </p>
+  <pre class="shell"><code>npm run build:dashboard   # once, if not using build:all
+subnet setup</code></pre>
+  <p>Non-interactive:</p>
+  <pre class="shell"><code>subnet setup --discover-only
+subnet setup --plan-only --projects /path/a,/path/b
+subnet setup --projects /path/a,/path/b --yes --open</code></pre>
+  <p class="small">
+    Flags: <code>--prose</code> (portfolio markdown), <code>--verify</code>,
+    <code>--reprocess</code>, <code>--skip-dashboard</code>, <code>--json</code>.
+    See <a href="cli.html#setup">CLI → setup</a>.
+  </p>
+
+  <h2 id="init">4. Init a project (manual)</h2>
   <pre class="shell"><code>cd /path/to/your/project
 subnet init</code></pre>
   <p>This creates:</p>
@@ -93,7 +112,7 @@ subnet init</code></pre>
 ├── global.db        # L4 links + L5 skill graph + project registry
 └── config.json      # global defaults</code></pre>
 
-  <h2 id="index">4. Index code + ingest conversations</h2>
+  <h2 id="index">5. Index code + ingest conversations (manual)</h2>
   <p><strong>L0 — code structure</strong></p>
   <pre class="shell"><code>subnet sync</code></pre>
   <p>
@@ -131,7 +150,7 @@ subnet init</code></pre>
 subnet profile       # industries + top skills across all projects
 subnet skills --cross # skills demonstrated in more than one project</code></pre>
 
-  <h2 id="inspect">5. Inspect the result</h2>
+  <h2 id="inspect">6. Inspect the result</h2>
   <pre class="shell"><code>subnet status .
 
 # Substrate Net status

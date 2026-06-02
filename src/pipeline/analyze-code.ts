@@ -84,7 +84,10 @@ export function upsertFileAnalysis(
   );
 }
 
-export interface AnalyzeOpts { full?: boolean; }
+export interface AnalyzeOpts {
+  full?: boolean;
+  onFile?: (current: number, total: number) => void;
+}
 
 /** Open code.db + knowledge.db (the latter hosts the agent_runs cache) and analyze. */
 export async function analyzeProject(
@@ -125,12 +128,17 @@ export async function analyzeWithDbs(
     const rt = new AgentRuntime({ knowledgeDb: knowDb, config: cfg });
     const limit = cfg.concurrency ?? 4;
 
+    let fileDone = 0;
     const outcomes = await mapPool(pending, limit, async (f) => {
       try {
         const payload = buildPayload(codeDb, root, f);
         const out = await rt.run(FILE_ANALYZER_AGENT, { payload });
+        fileDone++;
+        opts.onFile?.(fileDone, pending.length);
         return { f, out };
       } catch {
+        fileDone++;
+        opts.onFile?.(fileDone, pending.length);
         return undefined;
       }
     });

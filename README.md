@@ -42,25 +42,28 @@ OpenAI-compatible endpoint (OpenRouter, OpenAI, Together, Groq) works too.
 ```bash
 # 1. Install (Node 20+)
 git clone https://github.com/tienan92it/SubstrateNet && cd SubstrateNet
-npm install && npm run build && npm link        # exposes `subnet` on $PATH
+npm install && npm run build:all && npm link   # exposes `subnet` on $PATH
 
-# 2. Bring up a local LLM
-ollama pull qwen3:4b-instruct                    # triage / classifier
-ollama pull qwen2.5:14b                          # extractors / summarizer
-ollama pull qwen3-embedding:0.6b                 # dedupe / clustering
+# 2. Bring up a local LLM (or configure OpenRouter in ~/.substrate-net/config.json)
+ollama pull qwen3:4b-instruct
+ollama pull qwen2.5:14b
+ollama pull qwen3-embedding:0.6b
 
-# 3. Index a project
+# 3. One-shot setup: discover workspaces → estimate → run full pipeline
+subnet setup
+```
+
+`subnet setup` scans Cursor, Claude Code, Codex, and VS Code/Cursor workspace
+storage, lets you pick projects, shows a pre-flight cost/time estimate, then runs
+init → sync → ingest → link → dashboard. Use `--projects /path/a,/path/b --yes`
+for non-interactive runs.
+
+**Per-step (advanced):**
+
+```bash
 cd /path/to/your/project
-subnet init                                     # creates .substrate-net/
-subnet sync                                     # L0 — code structure
-subnet analyze                                  # L0.5 — file summaries + layers (hybrid)
-subnet ingest                                   # L1 → L3 + enrichment (L2.5)
-subnet status                                   # see what landed in each layer
-
-# 4. Build the cross-project view
-subnet link                                     # L4 links + L5 skill graph
-subnet profile                                  # industries + top skills
-subnet dashboard --open                         # the local view (build:dashboard once)
+subnet init && subnet sync && subnet ingest && subnet link
+subnet profile && subnet dashboard --open
 ```
 
 To make Substrate Net callable from your AI agents, see [MCP integration](#mcp-integration).
@@ -109,6 +112,7 @@ knowledge never gets mistaken for "what your project actually does."
 ## CLI
 
 ```
+subnet setup [--projects ...] [--yes]  # discover workspaces → estimate → full pipeline
 subnet init [path]                  # writes .substrate-net/{code.db,knowledge.db,config.json}
 subnet sync [path] [--full]         # re-index code (L0)
 subnet analyze [path] [--full]      # code-grounded LLM pass: file summaries + layers + tags
