@@ -10,8 +10,15 @@ import type { Database as SqliteDb } from 'better-sqlite3';
 import { basename } from 'path';
 import { openCodeDb, openKnowledgeDb } from '../db/connection.js';
 
-const MAX_NODES = 2500;
-const MAX_EDGES = 6000;
+const DEFAULT_MAX_NODES = 2500;
+const DEFAULT_MAX_EDGES = 6000;
+
+export interface SnapshotOpts {
+  /** Cap on file nodes (lower this for global drill-down payloads). */
+  maxNodes?: number;
+  /** Cap on file-to-file edges. */
+  maxEdges?: number;
+}
 
 export interface GraphNode {
   id: string;            // file path
@@ -23,7 +30,10 @@ export interface GraphNode {
 }
 export interface GraphEdge { source: string; target: string; kind: string; }
 export interface DomainHighlightItem { statement: string; evidence?: string; grounding: string; }
-export interface ConceptItem { id: string; name: string; summary?: string; domain?: string; scope?: string; }
+export interface ConceptItem {
+  id: string; name: string; summary?: string; domain?: string; scope?: string;
+  structured?: Record<string, string>;
+}
 export interface SearchItem { id: string; label: string; kind: string; layer?: string; }
 
 export interface DashboardSnapshot {
@@ -44,18 +54,20 @@ export interface DashboardSnapshot {
   search: SearchItem[];
 }
 
-export function buildSnapshot(root: string): DashboardSnapshot {
+export function buildSnapshot(root: string, opts: SnapshotOpts = {}): DashboardSnapshot {
   const codeDb = openCodeDb(root);
   const knowDb = openKnowledgeDb(root);
   try {
-    return assemble(root, codeDb, knowDb);
+    return assemble(root, codeDb, knowDb, opts);
   } finally {
     codeDb.close();
     knowDb.close();
   }
 }
 
-function assemble(root: string, codeDb: SqliteDb, knowDb: SqliteDb): DashboardSnapshot {
+function assemble(root: string, codeDb: SqliteDb, knowDb: SqliteDb, opts: SnapshotOpts): DashboardSnapshot {
+  const MAX_NODES = opts.maxNodes ?? DEFAULT_MAX_NODES;
+  const MAX_EDGES = opts.maxEdges ?? DEFAULT_MAX_EDGES;
   // File nodes with their semantic overlay (layer/summary/tags).
   const fileRows = codeDb.prepare(`
     SELECT f.path AS path, f.language AS language,
@@ -103,9 +115,13 @@ function assemble(root: string, codeDb: SqliteDb, knowDb: SqliteDb): DashboardSn
 
   // L3 concepts.
   const concepts = (knowDb.prepare(`
-    SELECT id, name, summary, domain, scope FROM concepts ORDER BY member_count DESC LIMIT 300
-  `).all() as Array<{ id: string; name: string; summary: string | null; domain: string | null; scope: string | null }>)
-    .map((r) => ({ id: r.id, name: r.name, summary: r.summary ?? undefined, domain: r.domain ?? undefined, scope: r.scope ?? undefined }));
+    SELECT id, name, summary, domain, scope, structured FROM concepts ORDER BY member_count DESC LIMIT 300
+  `).all() as Array<{ id: string; name: string; summary: string | null; domain: string | null; scope: string | null; structured: string | null }>)
+    .map((r) => ({
+      id: r.id, name: r.name, summary: r.summary ?? undefined,
+      domain: r.domain ?? undefined, scope: r.scope ?? undefined,
+      structured: parseStructured(r.structured),
+    }));
 
   // Search index across files, concepts, entities, highlights.
   const search: SearchItem[] = [
@@ -135,4 +151,12 @@ function assemble(root: string, codeDb: SqliteDb, knowDb: SqliteDb): DashboardSn
 function parseTags(raw: string | null): string[] {
   if (!raw) return [];
   try { const v = JSON.parse(raw); return Array.isArray(v) ? v : []; } catch { return []; }
+}
+
+function parseStructured(raw: string | null): Record<string, string> | undefined {
+  if (!raw) return undefined;
+  try {
+    const v = JSON.parse(raw);
+    return v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length ? v : undefined;
+  } catch { return undefined; }
 }

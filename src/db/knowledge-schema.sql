@@ -170,6 +170,7 @@ CREATE TABLE IF NOT EXISTS concepts (
     domain TEXT,
     scope TEXT,                 -- 'technical' | 'industry' | 'meta'
     grounding TEXT,             -- dominant grounding tier across members
+    structured TEXT,            -- JSON "systematic thinking" digest (problem/decision/...)
     member_count INTEGER NOT NULL,
     embedding BLOB
 );

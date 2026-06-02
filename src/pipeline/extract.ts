@@ -16,6 +16,7 @@ import { DECISION_AGENT } from '../agents/decision.js';
 import { BUSINESS_LOGIC_AGENT } from '../agents/business-logic.js';
 import { INTENT_AGENT } from '../agents/intent.js';
 import { PROBLEM_SOLUTION_AGENT } from '../agents/problem-solution.js';
+import { REQUIREMENTS_AGENT } from '../agents/requirements.js';
 import {
   factToRows,
   type ExtractorOutput,
@@ -43,25 +44,34 @@ interface RoutingDecision {
 /**
  * Routing rules — which extractor runs on which window.
  * Conservative defaults: run agents that are likely productive given the domain.
+ * `isDoc` windows come from in-repo documentation (BRD/PRD/architecture) and
+ * always get the business-knowledge extractors regardless of triage domain.
  */
-function route(domain: string, quality: string): RoutingDecision {
+function route(domain: string, quality: string, isDoc: boolean): RoutingDecision {
   const agents: Extractor[] = [];
 
   // Decision agent is broadly useful — runs on most engineering domains.
   if (
-    ['architecture', 'implementation', 'business_logic', 'debugging', 'devops'].includes(domain) &&
-    ['signal', 'decision_grade'].includes(quality)
+    isDoc ||
+    (['architecture', 'implementation', 'business_logic', 'debugging', 'devops'].includes(domain) &&
+      ['signal', 'decision_grade'].includes(quality))
   ) {
     agents.push(DECISION_AGENT);
   }
 
-  // Business logic only when the triage said so.
-  if (['business_logic', 'architecture'].includes(domain)) {
+  // Business logic when the triage said so, or for any document.
+  if (isDoc || ['business_logic', 'architecture'].includes(domain)) {
     agents.push(BUSINESS_LOGIC_AGENT);
   }
 
+  // Requirements (actors / processes / metrics / intents) — documents and
+  // business/architecture conversations.
+  if (isDoc || ['business_logic', 'architecture', 'meta_process'].includes(domain)) {
+    agents.push(REQUIREMENTS_AGENT);
+  }
+
   // Intent — anywhere there's likely a user goal.
-  if (['architecture', 'implementation', 'business_logic', 'debugging'].includes(domain)) {
+  if (isDoc || ['architecture', 'implementation', 'business_logic', 'debugging'].includes(domain)) {
     agents.push(INTENT_AGENT);
   }
 
@@ -71,6 +81,16 @@ function route(domain: string, quality: string): RoutingDecision {
   }
 
   return { agents };
+}
+
+/** Window ids whose backing session is an in-repo document (agent='docs'). */
+function docWindowIds(knowDb: SqliteDb): Set<string> {
+  const rows = knowDb.prepare(`
+    SELECT tw.id AS id FROM turn_windows tw
+    JOIN sessions s ON s.id = tw.session_id
+    WHERE s.agent = 'docs'
+  `).all() as Array<{ id: string }>;
+  return new Set(rows.map((r) => r.id));
 }
 
 export interface ExtractRunOpts {
@@ -101,6 +121,7 @@ export async function runExtractorsForKeptWindows(
   // Build the full (window × agent) task list first, then run the chat calls
   // concurrently and persist results sequentially. The clusterer (incremental)
   // stays serial elsewhere; extractors are independent per window so this is safe.
+  const docWindows = docWindowIds(knowDb);
   const tasks: Array<{ windowId: string; text: string; domain: string; agent: Extractor }> = [];
   for (const windowId of windowIds) {
     const labels = getTriageLabels(knowDb, windowId);
@@ -108,7 +129,7 @@ export async function runExtractorsForKeptWindows(
     const text = getWindowText(knowDb, windowId);
     if (!text) continue;
     if (labels.rationale && /\[dup_of:/.test(labels.rationale)) continue; // skip dups
-    const { agents } = route(labels.domain, labels.quality);
+    const { agents } = route(labels.domain, labels.quality, docWindows.has(windowId));
     for (const agent of agents) tasks.push({ windowId, text, domain: labels.domain, agent });
   }
 

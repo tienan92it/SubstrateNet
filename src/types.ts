@@ -79,7 +79,7 @@ export interface IndexedFile {
 // L1 — Conversations
 // =============================================================================
 
-export type AgentId = 'cursor' | 'claude-code' | 'codex' | 'copilot';
+export type AgentId = 'cursor' | 'claude-code' | 'codex' | 'copilot' | 'docs';
 
 export interface Session {
   id: string;
@@ -178,6 +178,8 @@ export type KNodeKind =
   | 'dependency' | 'tool' | 'skill'
   // industry-profile kind:
   | 'industry'
+  // taxonomy / organization kinds (knowledge zones):
+  | 'business_domain' | 'tech_domain'
   // portfolio synthesis (technical x industry):
   | 'domain_highlight'
   // syntax-source kinds (deterministic):
@@ -304,8 +306,19 @@ export interface Concept {
   domain?: Domain;
   scope?: Scope;
   grounding?: Grounding;   // dominant tier across members
+  /** Optional "systematic thinking" digest (problem/constraints/decision/...). */
+  structured?: ConceptStructured;
   memberCount: number;
   embedding?: Buffer;
+}
+
+export interface ConceptStructured {
+  problem?: string;
+  constraints?: string;
+  options?: string;
+  decision?: string;
+  consequences?: string;
+  open_questions?: string;
 }
 
 // =============================================================================

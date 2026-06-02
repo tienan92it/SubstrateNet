@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
-import type { DashboardSnapshot, GraphNode, SearchItem } from './types';
+import type { ConceptItem, DashboardSnapshot, GraphNode, SearchItem } from './types';
 import { LAYER_COLORS } from './types';
 
-type Tab = 'graph' | 'domains' | 'layers' | 'search';
+type Tab = 'graph' | 'domains' | 'layers' | 'concepts' | 'search';
 
 export function App({ snapshot }: { snapshot: DashboardSnapshot }) {
   const [tab, setTab] = useState<Tab>('graph');
@@ -17,7 +17,7 @@ export function App({ snapshot }: { snapshot: DashboardSnapshot }) {
       <div className="topbar">
         <span className="brand">subnet</span>
         <div className="tabs">
-          {(['graph', 'domains', 'layers', 'search'] as Tab[]).map((t) => (
+          {(['graph', 'domains', 'layers', 'concepts', 'search'] as Tab[]).map((t) => (
             <button key={t} className={`tab ${tab === t ? 'active' : ''}`} onClick={() => setTab(t)}>{t}</button>
           ))}
         </div>
@@ -40,6 +40,7 @@ export function App({ snapshot }: { snapshot: DashboardSnapshot }) {
           {tab === 'graph' && <GraphView snapshot={snapshot} color={layerColor} onSelect={setSelected} />}
           {tab === 'domains' && <DomainsView snapshot={snapshot} />}
           {tab === 'layers' && <LayersView snapshot={snapshot} color={layerColor} onSelect={setSelected} />}
+          {tab === 'concepts' && <ConceptsView snapshot={snapshot} />}
           {tab === 'search' && <SearchView snapshot={snapshot} query={query} />}
         </div>
         {selected && (
@@ -119,6 +120,38 @@ function DomainsView({ snapshot }: { snapshot: DashboardSnapshot }) {
         <div key={e.id} className="card">
           <h4>{e.title}<span className="grounding">{e.grounding}</span></h4>
           {e.summary && <div className="sub">{e.summary}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const STRUCTURED_ORDER = ['problem', 'constraints', 'options', 'decision', 'consequences', 'open_questions'] as const;
+
+function ConceptsView({ snapshot }: { snapshot: DashboardSnapshot }) {
+  const concepts = snapshot.concepts;
+  if (concepts.length === 0) return <div className="list"><p className="sub">No concepts yet. Run ingest to cluster facts.</p></div>;
+  return (
+    <div className="list">
+      <p className="sub">{concepts.length} concept(s), most-connected first.</p>
+      {concepts.map((c: ConceptItem) => (
+        <div key={c.id} className="card">
+          <h4>
+            {c.name}
+            {c.scope && <span className="grounding">{c.scope}</span>}
+            {c.domain && <span className="grounding">{c.domain}</span>}
+          </h4>
+          {c.summary && <div className="sub">{c.summary}</div>}
+          {c.structured && (
+            <div className="structured">
+              {STRUCTURED_ORDER.filter((k) => c.structured![k]).map((k) => (
+                <div key={k} className="struct-row">
+                  <span className="struct-key">{k.replace('_', ' ')}</span>
+                  <span className="struct-val">{c.structured![k]}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       ))}
     </div>

@@ -79,6 +79,43 @@ CREATE TABLE IF NOT EXISTS industries (
 );
 CREATE INDEX IF NOT EXISTS idx_industries_project ON industries(project_id);
 
+-- Knowledge zones (the global hierarchy: industry > business domain > tech domain).
+-- `id` is a name-hash so the SAME domain across projects collapses to one node
+-- (mechanical cross-project merge); `project_id` records membership.
+CREATE TABLE IF NOT EXISTS business_domains (
+    id TEXT NOT NULL,              -- hash('business_domain'|lower(name))
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    summary TEXT,
+    grounding TEXT,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (id, project_id)
+);
+CREATE INDEX IF NOT EXISTS idx_bizdom_project ON business_domains(project_id);
+
+CREATE TABLE IF NOT EXISTS tech_domains (
+    id TEXT NOT NULL,              -- hash('tech_domain'|lower(name))
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    summary TEXT,
+    grounding TEXT,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (id, project_id)
+);
+CREATE INDEX IF NOT EXISTS idx_techdom_project ON tech_domains(project_id);
+
+-- Parent/child edges in the global hierarchy, per project (deduped at read).
+-- Node ids are prefixed: 'ind:'<hash> | 'bd:'<hash> | 'td:'<hash> | 'proj:'<id>.
+CREATE TABLE IF NOT EXISTS taxonomy_edges (
+    parent_id TEXT NOT NULL,
+    child_id TEXT NOT NULL,
+    kind TEXT NOT NULL,           -- 'industry_has_business' | 'business_has_tech' | 'tech_has_project'
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    PRIMARY KEY (parent_id, child_id, project_id)
+);
+CREATE INDEX IF NOT EXISTS idx_taxedge_parent ON taxonomy_edges(parent_id);
+CREATE INDEX IF NOT EXISTS idx_taxedge_project ON taxonomy_edges(project_id);
+
 -- Composite portfolio highlights (technical x industry), per project.
 CREATE TABLE IF NOT EXISTS highlights (
     id TEXT PRIMARY KEY,

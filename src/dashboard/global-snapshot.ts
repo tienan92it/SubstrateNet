@@ -1,0 +1,158 @@
+/**
+ * Global dashboard snapshot builder.
+ *
+ * Assembles the cross-project knowledge hierarchy from global.db
+ * (industry > business domain > tech domain > project) plus a bounded,
+ * per-project file graph for drill-down. Self-contained: the static dashboard
+ * renders overview-to-detail with no live DB connection.
+ */
+import type { Database as SqliteDb } from 'better-sqlite3';
+import { existsSync } from 'fs';
+import { openGlobalDb } from '../db/connection.js';
+import { projectConfigDir } from '../config.js';
+import { buildSnapshot, type DashboardSnapshot } from './snapshot.js';
+import { industryNodeId, projectNodeId } from '../global/taxonomy.js';
+
+const MAX_EDGES = 4000;
+/** Per-project drill-down payloads stay small to keep the single file loadable. */
+const DRILLDOWN_MAX_NODES = 600;
+const DRILLDOWN_MAX_EDGES = 1500;
+
+export type HierarchyLevel = 'industry' | 'business_domain' | 'tech_domain' | 'project' | 'file';
+
+export interface HierarchyNode {
+  id: string;
+  label: string;
+  level: HierarchyLevel;
+  summary?: string;
+  /** Raw project id (drill-down key) for project-level nodes. */
+  projectId?: string;
+  /** How many projects this node spans (cross-project weight). */
+  projectCount?: number;
+  grounding?: string;
+}
+
+export interface HierarchyEdge { source: string; target: string; kind: string; }
+
+export interface GlobalDashboardSnapshot {
+  meta: {
+    mode: 'global';
+    generatedAt: number;
+    counts: {
+      industries: number;
+      businessDomains: number;
+      techDomains: number;
+      projects: number;
+      edges: number;
+    };
+  };
+  hierarchy: { nodes: HierarchyNode[]; edges: HierarchyEdge[] };
+  /** Per-project file graphs, keyed by raw project id. */
+  drillDown: Record<string, DashboardSnapshot>;
+}
+
+/**
+ * Build the hierarchy nodes + edges from global.db (pure over the DB handle —
+ * no file IO, so it is unit-testable with an in-memory database).
+ */
+export function assembleHierarchy(gdb: SqliteDb): { nodes: HierarchyNode[]; edges: HierarchyEdge[] } {
+  const nodes = new Map<string, HierarchyNode>();
+
+  // Industries (grouped by name across projects).
+  const industries = gdb.prepare(`
+    SELECT name, COUNT(DISTINCT project_id) AS projects FROM industries GROUP BY lower(name)
+  `).all() as Array<{ name: string; projects: number }>;
+  for (const i of industries) {
+    nodes.set(industryNodeId(i.name), {
+      id: industryNodeId(i.name), label: i.name, level: 'industry', projectCount: i.projects,
+    });
+  }
+
+  // Business domains (id is already name-hashed → merged across projects).
+  const biz = gdb.prepare(`
+    SELECT id, MIN(name) AS name, MIN(summary) AS summary, MIN(grounding) AS grounding,
+           COUNT(DISTINCT project_id) AS projects
+    FROM business_domains GROUP BY id
+  `).all() as Array<{ id: string; name: string; summary: string | null; grounding: string | null; projects: number }>;
+  for (const b of biz) {
+    nodes.set(b.id, {
+      id: b.id, label: b.name, level: 'business_domain',
+      summary: b.summary ?? undefined, grounding: b.grounding ?? undefined, projectCount: b.projects,
+    });
+  }
+
+  // Tech domains.
+  const tech = gdb.prepare(`
+    SELECT id, MIN(name) AS name, MIN(summary) AS summary, MIN(grounding) AS grounding,
+           COUNT(DISTINCT project_id) AS projects
+    FROM tech_domains GROUP BY id
+  `).all() as Array<{ id: string; name: string; summary: string | null; grounding: string | null; projects: number }>;
+  for (const t of tech) {
+    nodes.set(t.id, {
+      id: t.id, label: t.name, level: 'tech_domain',
+      summary: t.summary ?? undefined, grounding: t.grounding ?? undefined, projectCount: t.projects,
+    });
+  }
+
+  // Projects.
+  const projects = gdb.prepare(`SELECT id, name FROM projects`).all() as Array<{ id: string; name: string }>;
+  for (const p of projects) {
+    nodes.set(projectNodeId(p.id), {
+      id: projectNodeId(p.id), label: p.name, level: 'project', projectId: p.id,
+    });
+  }
+
+  // Edges (deduped across projects; only those with both endpoints present).
+  const rawEdges = gdb.prepare(`
+    SELECT DISTINCT parent_id AS source, child_id AS target, kind FROM taxonomy_edges
+  `).all() as Array<{ source: string; target: string; kind: string }>;
+  const seen = new Set<string>();
+  const edges: HierarchyEdge[] = [];
+  for (const e of rawEdges) {
+    if (!nodes.has(e.source) || !nodes.has(e.target)) continue;
+    const key = `${e.source}|${e.target}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    edges.push({ source: e.source, target: e.target, kind: e.kind });
+    if (edges.length >= MAX_EDGES) break;
+  }
+
+  return { nodes: [...nodes.values()], edges };
+}
+
+/** Build the full global snapshot: hierarchy + per-project drill-down graphs. */
+export function buildGlobalSnapshot(): GlobalDashboardSnapshot {
+  const gdb = openGlobalDb();
+  try {
+    const { nodes, edges } = assembleHierarchy(gdb);
+    const projects = gdb.prepare(`SELECT id, path FROM projects`).all() as Array<{ id: string; path: string }>;
+
+    const drillDown: Record<string, DashboardSnapshot> = {};
+    for (const p of projects) {
+      // Only projects that still have local data can be drilled into.
+      if (!existsSync(projectConfigDir(p.path))) continue;
+      try {
+        drillDown[p.id] = buildSnapshot(p.path, { maxNodes: DRILLDOWN_MAX_NODES, maxEdges: DRILLDOWN_MAX_EDGES });
+      } catch { /* skip projects whose DBs can't be opened */ }
+    }
+
+    const count = (level: HierarchyLevel) => nodes.filter((n) => n.level === level).length;
+    return {
+      meta: {
+        mode: 'global',
+        generatedAt: Date.now(),
+        counts: {
+          industries: count('industry'),
+          businessDomains: count('business_domain'),
+          techDomains: count('tech_domain'),
+          projects: count('project'),
+          edges: edges.length,
+        },
+      },
+      hierarchy: { nodes, edges },
+      drillDown,
+    };
+  } finally {
+    gdb.close();
+  }
+}

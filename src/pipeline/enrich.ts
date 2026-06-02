@@ -18,10 +18,13 @@ import { createHash } from 'crypto';
 import { AgentRuntime } from '../agents/runtime.js';
 import '../agents/index.js';
 import { DOMAIN_MODELER_AGENT } from '../agents/domain-modeler.js';
+import { ARCHITECTURE_MODELER_AGENT } from '../agents/architecture-modeler.js';
 import { TECHNICAL_PROFILER_AGENT } from '../agents/technical-profiler.js';
 import { INDUSTRY_CLASSIFIER_AGENT } from '../agents/industry-classifier.js';
 import { INDUSTRY_ENRICHER_AGENT } from '../agents/industry-enricher.js';
 import { DOMAIN_ANALYZER_AGENT } from '../agents/domain-analyzer.js';
+import { BUSINESS_DOMAIN_MODELER_AGENT } from '../agents/business-domain-modeler.js';
+import { TECH_DOMAIN_MODELER_AGENT } from '../agents/tech-domain-modeler.js';
 import { runDomainFromCode } from './domain-from-code.js';
 import { runManifestParser } from './manifests.js';
 import { runGapDetector } from './gap-detector.js';
@@ -29,7 +32,7 @@ import { runEntityReconciler } from './reconcile.js';
 import { runClustererForNewFacts } from './cluster.js';
 import { upsertKNode, insertKEdgeUnique, setGroundingScope } from '../knowledge/store.js';
 import { DedupeAgent, storeKNodeEmbedding } from '../agents/dedupe.js';
-import { gapId } from '../knowledge/domain-store.js';
+import { gapId, domainNodeId } from '../knowledge/domain-store.js';
 import { createResearchBackend, cachedLookup } from '../research/backend.js';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
@@ -49,6 +52,10 @@ export interface EnrichStats {
   industryConcepts: number;
   externalUpgrades: number;
   domainHighlights: number;
+  architectureComponents: number;
+  architectureRelationships: number;
+  businessDomains: number;
+  techDomains: number;
 }
 
 export interface EnrichOpts {
@@ -68,6 +75,8 @@ export async function runEnrichment(
     structuralEntities: 0, externalEntities: 0, structuralRelationships: 0,
     reconciledEntities: 0, agentRelationships: 0, agentGaps: 0, detectedGaps: 0,
     industryConcepts: 0, externalUpgrades: 0, domainHighlights: 0,
+    architectureComponents: 0, architectureRelationships: 0,
+    businessDomains: 0, techDomains: 0,
   };
 
   // ── 1. Deterministic technical evidence (manifests + infra) ──────────
@@ -101,6 +110,14 @@ export async function runEnrichment(
       stats.agentGaps = ag.gaps;
     } catch { /* ignore */ }
 
+    // ── 5b. ArchitectureModeler (components + structure + lifecycles) ───
+    try {
+      const arch = await runArchitectureModeler(knowDb, codeDb, cfg);
+      stats.architectureComponents = arch.components;
+      stats.architectureRelationships = arch.relationships;
+      producedClusterableFacts ||= arch.components > 0;
+    } catch { /* ignore */ }
+
     // ── 6. IndustryClassifier (industry scope) ─────────────────────────
     try {
       const ind = await runIndustryClassifier(knowDb, codeDb, root, cfg);
@@ -120,6 +137,14 @@ export async function runEnrichment(
     // ── 7b. DomainAnalyzer: fuse technical + industry into portfolio highlights ─
     try {
       stats.domainHighlights = await runDomainAnalyzer(knowDb, codeDb, cfg, stats.industry);
+    } catch { /* ignore */ }
+
+    // ── 7c. Knowledge zones: group facts into business + technical domains ─
+    try {
+      stats.businessDomains = await runBusinessDomainModeler(knowDb, cfg, stats.industry);
+    } catch { /* ignore */ }
+    try {
+      stats.techDomains = await runTechDomainModeler(knowDb, codeDb, cfg);
     } catch { /* ignore */ }
   }
 
@@ -414,6 +439,236 @@ async function runDomainAnalyzer(
     upsertKNode(knowDb, node);
     await embedFact(dedupe, knowDb, node);
     count++;
+  }
+  return count;
+}
+
+/**
+ * ArchitectureModeler: name the system's components and structural relationships
+ * from layers + directories + entities + architecture facts, and record any
+ * entity lifecycles (has_state / transitions_to) the evidence describes.
+ */
+async function runArchitectureModeler(
+  knowDb: SqliteDb, codeDb: SqliteDb, cfg: SubstrateNetConfig,
+): Promise<{ components: number; relationships: number }> {
+  const layers = (codeDb.prepare(
+    `SELECT DISTINCT layer FROM file_analysis WHERE layer IS NOT NULL AND layer != 'other'`,
+  ).all() as Array<{ layer: string }>).map((r) => r.layer);
+
+  const directories = topDirectories(codeDb);
+  const entityRows = knowDb.prepare(`
+    SELECT id, title FROM k_nodes WHERE kind='entity' ORDER BY updated_at DESC LIMIT 60
+  `).all() as Array<{ id: string; title: string }>;
+  const entities = entityRows.map((e) => e.title);
+
+  const facts = (knowDb.prepare(`
+    SELECT kind, title, summary, evidence_text FROM k_nodes
+    WHERE kind IN ('decision','pattern','constraint','intent','process')
+    ORDER BY confidence DESC LIMIT 40
+  `).all() as Array<{ kind: string; title: string; summary: string | null; evidence_text: string | null }>)
+    .map((f) => ({ kind: f.kind, title: f.title, summary: f.summary ?? undefined, evidence: f.evidence_text ?? undefined }));
+
+  // Need at least directory structure or facts to model anything useful.
+  if (directories.length === 0 && facts.length === 0) return { components: 0, relationships: 0 };
+
+  const rt = new AgentRuntime({ knowledgeDb: knowDb, config: cfg });
+  const out = await rt.run(ARCHITECTURE_MODELER_AGENT, {
+    payload: { layers, directories, entities, facts },
+  });
+
+  let dedupe: DedupeAgent | undefined;
+  try { dedupe = new DedupeAgent(cfg); } catch { dedupe = undefined; }
+
+  const now = Date.now();
+  // title -> id for relation/lifecycle resolution (existing entities + new components).
+  const titleToId = new Map<string, string>();
+  for (const e of entityRows) titleToId.set(e.title.toLowerCase(), e.id);
+
+  let componentCount = 0;
+  let relCount = 0;
+
+  // Persist components as technical-scope entities so they join the entity graph.
+  for (const c of out.output.components) {
+    const id = domainNodeId('component', c.name);
+    const node: KNode = {
+      id, kind: 'entity', title: c.name,
+      summary: c.summary ?? (c.layer ? `Architecture component (${c.layer})` : 'Architecture component'),
+      evidenceText: c.evidence,
+      confidence: out.confidence, source: 'agent:architectureModeler',
+      grounding: 'stated', scope: 'technical', agentModel: out.model,
+      createdAt: now, updatedAt: now,
+    };
+    upsertKNode(knowDb, node);
+    await embedFact(dedupe, knowDb, node);
+    titleToId.set(c.name.toLowerCase(), id);
+    componentCount++;
+  }
+
+  const tx = knowDb.transaction(() => {
+    for (const r of out.output.relations) {
+      const from = titleToId.get(r.from.toLowerCase());
+      const to = titleToId.get(r.to.toLowerCase());
+      if (!from || !to || from === to) continue;
+      const added = insertKEdgeUnique(knowDb, {
+        source: from, target: to, kind: r.kind, weight: 1,
+        metadata: { via: 'architecture', grounding: 'stated', evidence: r.evidence },
+      });
+      if (added) relCount++;
+    }
+
+    // Lifecycles: entity -has_state-> state; state -transitions_to-> next state.
+    for (const lc of out.output.lifecycles) {
+      const entityId = titleToId.get(lc.entity.toLowerCase());
+      if (!entityId) continue;
+      const stateIds: string[] = [];
+      for (const stateName of lc.states) {
+        const sid = domainNodeId('state', `${lc.entity}:${stateName}`);
+        upsertKNode(knowDb, {
+          id: sid, kind: 'entity', title: stateName,
+          summary: `State of ${lc.entity}`, evidenceText: lc.evidence,
+          confidence: out.confidence, source: 'agent:architectureModeler:state',
+          grounding: 'stated', scope: 'technical', agentModel: out.model,
+          createdAt: now, updatedAt: now,
+        });
+        insertKEdgeUnique(knowDb, {
+          source: entityId, target: sid, kind: 'has_state', weight: 1,
+          metadata: { via: 'architecture', grounding: 'stated', evidence: lc.evidence },
+        });
+        stateIds.push(sid);
+      }
+      for (let i = 0; i + 1 < stateIds.length; i++) {
+        insertKEdgeUnique(knowDb, {
+          source: stateIds[i], target: stateIds[i + 1], kind: 'transitions_to', weight: 1,
+          metadata: { via: 'architecture', grounding: 'stated', evidence: lc.evidence },
+        });
+      }
+    }
+  });
+  tx();
+
+  return { components: componentCount, relationships: relCount };
+}
+
+/** Top directories (first two path segments) with their dominant layer. */
+function topDirectories(codeDb: SqliteDb): Array<{ path: string; layer: string }> {
+  const rows = codeDb.prepare(`
+    SELECT path, layer FROM file_analysis WHERE layer IS NOT NULL
+  `).all() as Array<{ path: string; layer: string }>;
+  const dirs = new Map<string, Map<string, number>>();
+  for (const r of rows) {
+    const segs = r.path.split('/').filter(Boolean);
+    const dir = segs.slice(0, 2).join('/') || segs[0] || '.';
+    let hist = dirs.get(dir);
+    if (!hist) { hist = new Map(); dirs.set(dir, hist); }
+    hist.set(r.layer, (hist.get(r.layer) ?? 0) + 1);
+  }
+  const out: Array<{ path: string; layer: string; count: number }> = [];
+  for (const [dir, hist] of dirs) {
+    let layer = 'other'; let best = -1; let count = 0;
+    for (const [l, n] of hist) { count += n; if (n > best) { best = n; layer = l; } }
+    out.push({ path: dir, layer, count });
+  }
+  return out.sort((a, b) => b.count - a.count).slice(0, 30).map(({ path, layer }) => ({ path, layer }));
+}
+
+/**
+ * BusinessDomainModeler: cluster industry-scoped facts (entities, rules,
+ * actors, processes, glossary terms) into named business domains (bounded
+ * contexts). Persists `business_domain` nodes + `part_of` edges (member -> domain).
+ */
+async function runBusinessDomainModeler(
+  knowDb: SqliteDb, cfg: SubstrateNetConfig, industry?: string,
+): Promise<number> {
+  const items = knowDb.prepare(`
+    SELECT id, kind, title, summary FROM k_nodes
+    WHERE kind IN ('entity','business_rule','actor','process','glossary_term','constraint')
+      AND COALESCE(scope,'meta') != 'technical'
+    ORDER BY updated_at DESC LIMIT 120
+  `).all() as Array<{ id: string; kind: string; title: string; summary: string | null }>;
+  if (items.length < 3) return 0;
+
+  return groupIntoDomains(knowDb, cfg, {
+    industry, kind: 'business_domain', scope: 'industry',
+    source: 'agent:businessDomainModeler', agent: BUSINESS_DOMAIN_MODELER_AGENT, items,
+  });
+}
+
+/**
+ * TechDomainModeler: cluster technical facts (skills, technical components,
+ * tools) into named technical domains/capabilities (e.g. "Auth", "Data
+ * pipeline"). Persists `tech_domain` nodes + `part_of` edges.
+ */
+async function runTechDomainModeler(
+  knowDb: SqliteDb, codeDb: SqliteDb, cfg: SubstrateNetConfig,
+): Promise<number> {
+  const items = knowDb.prepare(`
+    SELECT id, kind, title, summary FROM k_nodes
+    WHERE scope='technical' AND kind IN ('skill','entity','tool')
+    ORDER BY updated_at DESC LIMIT 120
+  `).all() as Array<{ id: string; kind: string; title: string; summary: string | null }>;
+  if (items.length < 3) return 0;
+
+  const layers = (codeDb.prepare(
+    `SELECT DISTINCT layer FROM file_analysis WHERE layer IS NOT NULL AND layer != 'other'`,
+  ).all() as Array<{ layer: string }>).map((r) => r.layer);
+
+  return groupIntoDomains(knowDb, cfg, {
+    kind: 'tech_domain', scope: 'technical',
+    source: 'agent:techDomainModeler', agent: TECH_DOMAIN_MODELER_AGENT,
+    items, hint: layers.length ? `Architectural layers present: ${layers.join(', ')}` : undefined,
+  });
+}
+
+/** Shared driver for the two domain-zone modelers (same input/output shape). */
+async function groupIntoDomains(
+  knowDb: SqliteDb, cfg: SubstrateNetConfig,
+  opts: {
+    industry?: string; hint?: string; kind: 'business_domain' | 'tech_domain';
+    scope: 'industry' | 'technical'; source: string;
+    agent: typeof BUSINESS_DOMAIN_MODELER_AGENT;
+    items: Array<{ id: string; kind: string; title: string; summary: string | null }>;
+  },
+): Promise<number> {
+  const titleToId = new Map<string, string>();
+  for (const it of opts.items) titleToId.set(it.title.toLowerCase(), it.id);
+
+  const rt = new AgentRuntime({ knowledgeDb: knowDb, config: cfg });
+  const out = await rt.run(opts.agent, {
+    payload: {
+      industry: opts.industry, hint: opts.hint,
+      items: opts.items.map((i) => ({ kind: i.kind, title: i.title, summary: i.summary ?? undefined })),
+    },
+  });
+  if (out.output.domains.length === 0) return 0;
+
+  let dedupe: DedupeAgent | undefined;
+  try { dedupe = new DedupeAgent(cfg); } catch { dedupe = undefined; }
+
+  const now = Date.now();
+  let count = 0;
+  for (const d of out.output.domains) {
+    const id = domainNodeId(opts.kind, d.name);
+    const node: KNode = {
+      id, kind: opts.kind, title: d.name,
+      summary: d.summary, evidenceText: d.members?.slice(0, 8).join(', '),
+      confidence: out.confidence, source: opts.source,
+      grounding: 'stated', scope: opts.scope, agentModel: out.model,
+      createdAt: now, updatedAt: now,
+    };
+    upsertKNode(knowDb, node);
+    await embedFact(dedupe, knowDb, node);
+    count++;
+    const tx = knowDb.transaction(() => {
+      for (const member of d.members ?? []) {
+        const mid = titleToId.get(member.toLowerCase());
+        if (!mid || mid === id) continue;
+        insertKEdgeUnique(knowDb, {
+          source: mid, target: id, kind: 'part_of', weight: 1,
+          metadata: { via: opts.kind, grounding: 'stated' },
+        });
+      }
+    });
+    tx();
   }
   return count;
 }

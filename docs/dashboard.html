@@ -37,6 +37,7 @@
     <ul>
       <li><a href="#build">build the viewer</a></li>
       <li><a href="#generate">generate</a></li>
+      <li><a href="#global">global hierarchy</a></li>
       <li><a href="#views">views</a></li>
       <li><a href="#snapshot">the snapshot</a></li>
       <li><a href="#share">sharing</a></li>
@@ -63,12 +64,32 @@ subnet dashboard --open     # and open it in your browser</code></pre>
     <code>sync</code> / <code>analyze</code> / <code>ingest</code> to refresh.
   </p>
 
+  <h2 id="global">Global hierarchy (all projects)</h2>
+  <p>
+    <code>subnet dashboard --global</code> builds the cross-project view from
+    <code>~/.substrate-net/global.db</code>: a navigable hierarchy of
+    <strong>industry &rarr; business domain &rarr; tech domain &rarr; project</strong>,
+    with each project drilling down into its own file graph. Run
+    <code>subnet link</code> in your projects first so the global zones are
+    populated.
+  </p>
+  <pre class="shell"><code>subnet link                 # in each project: export skills + knowledge zones
+subnet dashboard --global   # writes ~/.substrate-net/dashboard/index.html
+subnet dashboard --global --open</code></pre>
+  <p>
+    Click a project node to drill into its files; use the breadcrumb to return
+    to the overview. Same-named domains merge across projects, so shared
+    business and technical zones surface as single nodes weighted by how many
+    projects reach them.
+  </p>
+
   <h2 id="views">Views</h2>
   <table>
     <tr><th>View</th><th>What it shows</th></tr>
     <tr><td><strong>Graph</strong></td><td>File-level dependency graph (imports + calls), nodes colored by architectural layer. Click a node for its summary and tags.</td></tr>
     <tr><td><strong>Domains</strong></td><td>Classified industries, evidence-cited portfolio highlights, and domain entities.</td></tr>
     <tr><td><strong>Layers</strong></td><td>Files grouped by architectural layer (api · service · data · ui · utility · other).</td></tr>
+    <tr><td><strong>Concepts</strong></td><td>L3 concepts with their scope/domain and a structured digest (problem · constraints · decision · consequences) when available.</td></tr>
     <tr><td><strong>Search</strong></td><td>Fuzzy search across files, concepts, entities, and highlights.</td></tr>
   </table>
 

@@ -31,6 +31,8 @@ import type { SubstrateNetConfig } from '../config.js';
 const EVIDENCE_KINDS = [
   'path_mention', 'code_block', 'shell_command', 'error_message',
   'stack_trace', 'ticket_id', 'url', 'dependency', 'tool', 'knowledge_gap',
+  // Organizational zone nodes are taxonomy, not clusterable ideas.
+  'business_domain', 'tech_domain',
 ];
 
 export interface ClusterStats {
@@ -155,6 +157,7 @@ export async function runClustererForNewFacts(
     let name = currentRow?.name ?? '';
     let summary: string | undefined;
     let domain: string | undefined;
+    let structured: Record<string, string> | undefined;
     let didSummarize = false;
     if (members.length > 0) {
       try {
@@ -168,10 +171,11 @@ export async function runClustererForNewFacts(
         name = out.output.name || name;
         summary = out.output.summary;
         domain = out.output.domain;
+        structured = pruneStructured(out.output.structured);
         didSummarize = true;
       } catch { /* leave name/summary as-is on backend failure */ }
     }
-    return { cid, name, summary, domain, didSummarize };
+    return { cid, name, summary, domain, structured, didSummarize };
   });
 
   for (const s of summarized) {
@@ -180,6 +184,7 @@ export async function runClustererForNewFacts(
     const name = s.name;
     const summary = s.summary;
     const domain = s.domain;
+    const structured = s.structured;
     if (s.didSummarize) stats.conceptsSummarized++;
 
     // Place the concept in the scope x grounding matrix. Scope prefers the
@@ -192,9 +197,23 @@ export async function runClustererForNewFacts(
     const grounding = dominantGrounding(memberMeta.map((m) => m.grounding));
 
     knowDb.prepare(`
-      UPDATE concepts SET name=?, summary=?, domain=?, scope=?, grounding=?, member_count=?, embedding=? WHERE id=?
-    `).run(name, summary ?? null, domain ?? null, scope, grounding, memberCount, centroid ? encodeCentroid(centroid) : null, cid);
+      UPDATE concepts SET name=?, summary=?, domain=?, scope=?, grounding=?, structured=?, member_count=?, embedding=? WHERE id=?
+    `).run(
+      name, summary ?? null, domain ?? null, scope, grounding,
+      structured ? JSON.stringify(structured) : null,
+      memberCount, centroid ? encodeCentroid(centroid) : null, cid,
+    );
   }
 
   return stats;
+}
+
+/** Keep only non-empty structured fields; return undefined if all empty. */
+function pruneStructured(s: Record<string, string | undefined> | undefined): Record<string, string> | undefined {
+  if (!s) return undefined;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(s)) {
+    if (typeof v === 'string' && v.trim()) out[k] = v.trim();
+  }
+  return Object.keys(out).length ? out : undefined;
 }

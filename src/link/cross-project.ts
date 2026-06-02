@@ -8,6 +8,7 @@ import { runMechanicalLinking } from './mechanical.js';
 import { runSemanticLinking } from './semantic.js';
 import { projectIdForPath } from '../global/registry.js';
 import { exportProjectSkills, synthesizeSkills } from '../global/skills.js';
+import { exportProjectTaxonomy } from '../global/taxonomy.js';
 
 export interface LinkStats {
   exported: number;
@@ -15,6 +16,8 @@ export interface LinkStats {
   semantic: number;
   skills: number;
   crossProjectSkills: number;
+  businessDomains: number;
+  techDomains: number;
 }
 
 export async function rebuildLinks(root: string, opts: { full?: boolean } = {}): Promise<LinkStats> {
@@ -22,6 +25,8 @@ export async function rebuildLinks(root: string, opts: { full?: boolean } = {}):
   const exp = await exportProjectConcepts(root);
   // Export this project's technical-skill evidence + industries into global.db.
   await exportProjectSkills(root);
+  // Export this project's knowledge zones + global hierarchy edges.
+  const tax = exportProjectTaxonomy(root);
   const gdb = openGlobalDb();
   try {
     if (opts.full) {
@@ -43,6 +48,8 @@ export async function rebuildLinks(root: string, opts: { full?: boolean } = {}):
       semantic,
       skills: synth.skills,
       crossProjectSkills: synth.crossProject,
+      businessDomains: tax.businessDomains,
+      techDomains: tax.techDomains,
     };
   } finally {
     gdb.close();

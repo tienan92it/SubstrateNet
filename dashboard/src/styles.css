@@ -66,3 +66,32 @@ body { margin: 0; background: var(--bg); color: var(--fg); }
 .file-row:hover { color: var(--accent); }
 .file-row .path { color: var(--mute); font-size: 11px; margin-left: 8px; }
 .searchlist .file-row .kind { color: var(--mute); font-size: 11px; margin-right: 8px; text-transform: uppercase; }
+
+/* Global hierarchy mode */
+.mode-badge {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px;
+  padding: 2px 7px; border-radius: 4px; background: #2a2030; color: var(--accent);
+  border: 1px solid var(--rule);
+}
+.crumbs { display: flex; align-items: center; gap: 8px; }
+.crumb {
+  background: none; border: none; color: var(--mute); cursor: pointer;
+  font-size: 14px; padding: 2px 0;
+}
+.crumb.active { color: var(--fg); font-weight: 600; cursor: default; }
+.crumb:hover { color: var(--accent); }
+.crumbs .sep { color: var(--mute); }
+.legend-hint { color: var(--mute); font-size: 11px; font-style: italic; margin-left: auto; }
+.drill-btn {
+  margin-top: 14px; padding: 7px 12px; border-radius: 6px; cursor: pointer;
+  background: #20242d; color: var(--fg); border: 1px solid var(--rule);
+}
+.drill-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Concept structured digest */
+.structured { margin-top: 10px; border-top: 1px solid var(--rule); padding-top: 8px; }
+.struct-row { display: flex; gap: 8px; margin-bottom: 5px; font-size: 12px; }
+.struct-key {
+  flex: 0 0 92px; color: var(--accent); text-transform: capitalize; font-weight: 600;
+}
+.struct-val { color: var(--fg); }

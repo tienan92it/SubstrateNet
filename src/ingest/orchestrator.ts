@@ -17,6 +17,7 @@ import { CursorAdapter } from './cursor.js';
 import { ClaudeCodeAdapter } from './claude-code.js';
 import { CodexAdapter } from './codex.js';
 import { CopilotAdapter } from './copilot.js';
+import { DocsAdapter } from './docs.js';
 import type { SessionAdapter } from './base.js';
 import { insertTurn, nextTurnIdx, turnsForSession, updateOffset, upsertSession } from './store.js';
 import { insertWindow, segmentTurnsToWindows } from '../pipeline/segmenter.js';
@@ -230,6 +231,8 @@ export function buildSessionAdapters(cfg: ReturnType<typeof loadConfig>, filter?
     new ClaudeCodeAdapter({ root: roots?.claudeCode }),
     new CodexAdapter({ root: roots?.codex }),
     new CopilotAdapter(),
+    // In-repo documentation (BRD / PRD / architecture / glossaries) as L1.
+    new DocsAdapter(),
   ];
   if (!filter) return all;
   return all.filter((a) => a.agent === filter);

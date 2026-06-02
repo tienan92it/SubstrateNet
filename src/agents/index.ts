@@ -5,6 +5,7 @@
 import './triage.js';
 import './decision.js';
 import './business-logic.js';
+import './requirements.js';
 import './intent.js';
 import './problem-solution.js';
 import './clusterer.js';
@@ -12,6 +13,9 @@ import './summarizer.js';
 import './linker.js';
 import './verifier.js';
 import './domain-modeler.js';
+import './architecture-modeler.js';
+import './business-domain-modeler.js';
+import './tech-domain-modeler.js';
 import './technical-profiler.js';
 import './industry-classifier.js';
 import './industry-enricher.js';

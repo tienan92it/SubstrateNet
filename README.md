@@ -80,13 +80,14 @@ deterministic. Meaning is agent-driven.**
 |---|---|---|
 | **L0** Code structure | symbols, calls, imports, fields, SQL tables | deterministic (tree-sitter / regex DDL) |
 | **L0.5** Code analysis | per-file summaries, architectural layer, tags | tree-sitter structure → **agent** (FileAnalyzer · ArchitectureAnalyzer) |
-| **L1** Conversations | sessions, turns, tool calls | deterministic (file parsers) |
+| **L1** Conversations + docs | sessions, turns, tool calls; in-repo docs (README / docs / BRD / ADRs) | deterministic (file parsers + Docs adapter) |
 | **L1.5** Triage | relevance / domain / quality / linkage per window | **agent** (Triage) |
-| **L2** Facts | decisions, business rules, intents, problems / solutions | **agents** (Decision · BusinessLogic · Intent · ProblemSolution) + syntax pass |
-| **L2.5** Domain enrichment | dependencies, skills, entities, relationships, industry, gaps | manifests + SQL (structural) · reconciler · **agents** (TechnicalProfiler · DomainModeler · IndustryClassifier · IndustryEnricher) |
+| **L2** Facts | decisions, business rules, intents, problems / solutions; BRD actors / processes / metrics | **agents** (Decision · BusinessLogic · Requirements · Intent · ProblemSolution) + syntax pass |
+| **L2.5** Domain enrichment | dependencies, skills, entities, relationships, industry, components + lifecycles, gaps | manifests + SQL (structural) · reconciler · **agents** (TechnicalProfiler · DomainModeler · ArchitectureModeler · IndustryClassifier · IndustryEnricher) |
+| **L2.6** Knowledge zones | business domains + tech domains, grouping facts by bounded context / capability | **agents** (BusinessDomainModeler · TechDomainModeler) |
 | **L3** Concepts | clustered facts with names + structured summaries, scope-tagged | **agents** (Clusterer · Summarizer) |
 | **L4** Cross-project | shared concepts between repos | mechanical (exact + SimHash) + **agent** (Linker) |
-| **L5** Global skill graph | technical + industry skills aggregated across all projects | mechanical aggregation over L2.5 evidence |
+| **L5** Global skill graph + hierarchy | technical + industry skills, and the industry → business → tech → project zone tree | mechanical aggregation over L2.5/L2.6 evidence |
 
 ### Scope × grounding
 
@@ -123,7 +124,8 @@ subnet link [path] [--rebuild]      # rebuild cross-project links (L4) + skill g
 subnet skills [--scope X] [--cross] # global skill graph, weighted by evidence
 subnet profile [--prose] [--out p]  # industries + top skills; --prose writes a portfolio
 subnet learn [path]                 # industry-standard knowledge not yet in your work
-subnet dashboard [path] [--open]    # build a self-contained interactive graph dashboard
+subnet dashboard [path] [--open]    # per-project interactive graph dashboard
+subnet dashboard --global [--open]  # cross-project hierarchy: industry → domain → project → file
 subnet serve [path] --mcp           # MCP server over stdio
 subnet status [path]                # counts per layer, with scope + grounding breakdown
 subnet triage audit [path]          # show triaged windows with labels and rationale
@@ -135,7 +137,11 @@ subnet agents list | eval | run     # inspect / test / debug agents
 
 The `dashboard` command needs the viewer bundle built once: `npm run build:dashboard`
 (or `npm run build:all`). It then emits a single self-contained `index.html` (graph
-inlined) plus a shareable `graph.json` to `<project>/.substrate-net/dashboard/`.
+inlined) plus a shareable `graph.json` to `<project>/.substrate-net/dashboard/`. With
+`--global` it reads `~/.substrate-net/global.db` (populated by `subnet link`) and
+writes the cross-project hierarchy to `~/.substrate-net/dashboard/` — an
+overview-to-detail view that merges shared business and tech domains across projects
+and drills into each project's file graph.
 
 `ingest` is incremental: it only processes newly pulled windows. Use
 `--reprocess` to re-run the pipeline over **all** existing windows after a model
