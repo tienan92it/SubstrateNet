@@ -18,6 +18,7 @@ import { ClaudeCodeAdapter } from './claude-code.js';
 import { CodexAdapter } from './codex.js';
 import { CopilotAdapter } from './copilot.js';
 import { DocsAdapter } from './docs.js';
+import { DiagramsAdapter } from './diagrams.js';
 import type { SessionAdapter } from './base.js';
 import { insertTurn, nextTurnIdx, turnsForSession, updateOffset, upsertSession } from './store.js';
 import { insertWindow, segmentTurnsToWindows } from '../pipeline/segmenter.js';
@@ -27,7 +28,10 @@ import { resolvePath, writeKToCode } from '../pipeline/resolve.js';
 import type { AgentId, Turn } from '../types.js';
 import { runTriageForWindows, type TriageRunResult } from '../pipeline/triage.js';
 import { runExtractorsForKeptWindows } from '../pipeline/extract.js';
+import { runSourceClassifier } from '../pipeline/classify-sources.js';
+import { runIncidentExtractor } from '../pipeline/incidents.js';
 import { runClustererForNewFacts } from '../pipeline/cluster.js';
+import { runFactDedupe } from '../pipeline/fact-dedupe.js';
 import { runEnrichment } from '../pipeline/enrich.js';
 import { analyzeWithDbs } from '../pipeline/analyze-code.js';
 
@@ -69,6 +73,10 @@ export interface IngestStats {
   domainRelationships: number;
   knowledgeGaps: number;
   filesAnalyzed: number;
+  sourcesClassified: number;
+  incidentsExtracted: number;
+  factsMerged: number;
+  factsCorroborated: number;
 }
 
 export async function ingestProject(root: string, opts: IngestOpts = {}): Promise<IngestStats> {
@@ -81,7 +89,8 @@ export async function ingestProject(root: string, opts: IngestOpts = {}): Promis
     windowsCreated: 0, triaged: 0, kept: 0, dropped: 0, factsProduced: 0,
     conceptsCreated: 0, conceptsAttached: 0,
     domainEntities: 0, domainRelationships: 0, knowledgeGaps: 0,
-    filesAnalyzed: 0,
+    filesAnalyzed: 0, sourcesClassified: 0, incidentsExtracted: 0,
+    factsMerged: 0, factsCorroborated: 0,
   };
 
   const progress = (p: IngestProgress) => opts.onProgress?.(p);
@@ -177,6 +186,13 @@ export async function ingestProject(root: string, opts: IngestOpts = {}): Promis
       stats.triaged = tri.triaged;
       stats.kept = tri.kept;
       stats.dropped = tri.dropped;
+      // 5.5 Classify source-backed (docs/diagrams) kept windows by content type.
+      if (opts.runExtract !== false && tri.keptWindowIds.length > 0) {
+        try {
+          const cls = await runSourceClassifier(knowDb, cfg, tri.keptWindowIds);
+          stats.sourcesClassified = cls.classified;
+        } catch { /* best-effort */ }
+      }
       // 6. Extractors only over kept windows (M5)
       if (opts.runExtract !== false && tri.keptWindowIds.length > 0) {
         progress({ stage: 'extract', current: 0, total: tri.keptWindowIds.length });
@@ -184,6 +200,13 @@ export async function ingestProject(root: string, opts: IngestOpts = {}): Promis
           onTask: (i, total) => progress({ stage: 'extract', current: i, total }),
         });
         stats.factsProduced = exStats.factsProduced;
+
+        // 6.5 Incident / RCA extraction over kept bug-fix windows.
+        try {
+          const inc = await runIncidentExtractor(knowDb, cfg, tri.keptWindowIds);
+          stats.incidentsExtracted = inc.incidents;
+          if (inc.incidents > 0) exStats.factsProduced += inc.incidents;
+        } catch { /* best-effort */ }
 
         // 7. Clusterer + Summarizer over newly-produced facts (M7)
         if (exStats.factsProduced > 0) {
@@ -215,6 +238,14 @@ export async function ingestProject(root: string, opts: IngestOpts = {}): Promis
       stats.domainEntities = enrich.structuralEntities;
       stats.domainRelationships = enrich.structuralRelationships + enrich.agentRelationships;
       stats.knowledgeGaps = enrich.detectedGaps + enrich.agentGaps;
+
+      // 9. Cross-source dedup + corroboration — clean up the final KB once all
+      //    sources (code/chat/docs) have contributed their facts.
+      try {
+        const dd = runFactDedupe(knowDb);
+        stats.factsMerged = dd.merged;
+        stats.factsCorroborated = dd.corroborated;
+      } catch { /* best-effort */ }
     }
   } finally {
     codeDb.close();
@@ -233,6 +264,8 @@ export function buildSessionAdapters(cfg: ReturnType<typeof loadConfig>, filter?
     new CopilotAdapter(),
     // In-repo documentation (BRD / PRD / architecture / glossaries) as L1.
     new DocsAdapter(),
+    // In-repo diagrams (mermaid / drawio / excalidraw / plantuml) as L1.
+    new DiagramsAdapter(),
   ];
   if (!filter) return all;
   return all.filter((a) => a.agent === filter);

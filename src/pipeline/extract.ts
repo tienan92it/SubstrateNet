@@ -24,6 +24,7 @@ import {
 } from '../agents/extractors-common.js';
 import { DedupeAgent, storeKNodeEmbedding } from '../agents/dedupe.js';
 import { getWindowText, getTriageLabels } from '../knowledge/triage-store.js';
+import { buildProjectContext } from '../knowledge/project-context.js';
 import { upsertKNode, insertProvenance } from '../knowledge/store.js';
 import { resolvePath, resolveSymbol, writeKToCode } from './resolve.js';
 import { mapPool } from '../util/pool.js';
@@ -47,40 +48,50 @@ interface RoutingDecision {
  * `isDoc` windows come from in-repo documentation (BRD/PRD/architecture) and
  * always get the business-knowledge extractors regardless of triage domain.
  */
-function route(domain: string, quality: string, isDoc: boolean): RoutingDecision {
+function route(domain: string, quality: string, isDoc: boolean, activity?: string): RoutingDecision {
   const agents: Extractor[] = [];
 
   // Decision agent is broadly useful — runs on most engineering domains.
   if (
     isDoc ||
     (['architecture', 'implementation', 'business_logic', 'debugging', 'devops'].includes(domain) &&
-      ['signal', 'decision_grade'].includes(quality))
+      ['signal', 'decision_grade'].includes(quality)) ||
+    ['feature', 'planning', 'bugfix'].includes(activity ?? '')
   ) {
     agents.push(DECISION_AGENT);
   }
 
-  // Business logic when the triage said so, or for any document.
-  if (isDoc || ['business_logic', 'architecture'].includes(domain)) {
+  // Business logic when the triage said so, or for any document, or building a feature.
+  if (isDoc || ['business_logic', 'architecture'].includes(domain) || ['feature', 'planning'].includes(activity ?? '')) {
     agents.push(BUSINESS_LOGIC_AGENT);
   }
 
-  // Requirements (actors / processes / metrics / intents) — documents and
-  // business/architecture conversations.
-  if (isDoc || ['business_logic', 'architecture', 'meta_process'].includes(domain)) {
+  // Requirements (actors / processes / metrics / intents) — documents,
+  // business/architecture conversations, and feature/planning work.
+  if (
+    isDoc ||
+    ['business_logic', 'architecture', 'meta_process'].includes(domain) ||
+    ['feature', 'planning', 'info_request'].includes(activity ?? '')
+  ) {
     agents.push(REQUIREMENTS_AGENT);
   }
 
   // Intent — anywhere there's likely a user goal.
-  if (isDoc || ['architecture', 'implementation', 'business_logic', 'debugging'].includes(domain)) {
+  if (
+    isDoc ||
+    ['architecture', 'implementation', 'business_logic', 'debugging'].includes(domain) ||
+    ['feature', 'planning', 'todo'].includes(activity ?? '')
+  ) {
     agents.push(INTENT_AGENT);
   }
 
-  // Problem/solution — debugging + implementation
-  if (['debugging', 'implementation'].includes(domain)) {
+  // Problem/solution — debugging + implementation, or any bugfix.
+  if (['debugging', 'implementation'].includes(domain) || activity === 'bugfix') {
     agents.push(PROBLEM_SOLUTION_AGENT);
   }
 
-  return { agents };
+  // De-dupe (activity + domain rules can overlap).
+  return { agents: [...new Set(agents)] };
 }
 
 /** Window ids whose backing session is an in-repo document (agent='docs'). */
@@ -129,16 +140,17 @@ export async function runExtractorsForKeptWindows(
     const text = getWindowText(knowDb, windowId);
     if (!text) continue;
     if (labels.rationale && /\[dup_of:/.test(labels.rationale)) continue; // skip dups
-    const { agents } = route(labels.domain, labels.quality, docWindows.has(windowId));
+    const { agents } = route(labels.domain, labels.quality, docWindows.has(windowId), labels.activity);
     for (const agent of agents) tasks.push({ windowId, text, domain: labels.domain, agent });
   }
 
   const limit = cfg.concurrency ?? 4;
+  const context = buildProjectContext(knowDb) || undefined;
   let taskDone = 0;
   const outcomes = await mapPool(tasks, limit, async (t) => {
     try {
       const out = await rt.run<ExtractorPayload, ExtractorOutput>(t.agent, {
-        payload: { text: t.text, windowId: t.windowId, domain: t.domain },
+        payload: { text: t.text, windowId: t.windowId, domain: t.domain, context },
       });
       taskDone++;
       runOpts.onTask?.(taskDone, tasks.length);

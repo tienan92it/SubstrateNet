@@ -18,5 +18,7 @@ export function registerLink(program: Command): void {
       console.log(`  Skills (global):   ${stats.skills} (${stats.crossProjectSkills} cross-project)`);
       console.log(`  Business domains:  ${stats.businessDomains}`);
       console.log(`  Tech domains:      ${stats.techDomains}`);
+      console.log(`  Workspace:         ${stats.workspace ?? '(none detected)'}`);
+      console.log(`  Project links:     ${stats.projectLinks}`);
     });
 }

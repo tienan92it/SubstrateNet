@@ -9,6 +9,8 @@ import { runSemanticLinking } from './semantic.js';
 import { projectIdForPath } from '../global/registry.js';
 import { exportProjectSkills, synthesizeSkills } from '../global/skills.js';
 import { exportProjectTaxonomy } from '../global/taxonomy.js';
+import { assignWorkspace } from '../global/workspaces.js';
+import { computeEmergentLinks } from './emergent.js';
 
 export interface LinkStats {
   exported: number;
@@ -18,6 +20,8 @@ export interface LinkStats {
   crossProjectSkills: number;
   businessDomains: number;
   techDomains: number;
+  workspace?: string;
+  projectLinks: number;
 }
 
 export async function rebuildLinks(root: string, opts: { full?: boolean } = {}): Promise<LinkStats> {
@@ -42,6 +46,10 @@ export async function rebuildLinks(root: string, opts: { full?: boolean } = {}):
     }
     // Aggregate skill evidence across all projects into the global skill graph.
     const synth = synthesizeSkills(gdb);
+    // Explicit workspace umbrella for this project.
+    const ws = assignWorkspace(gdb, root);
+    // Emergent project-to-project links across the whole registry.
+    const emergent = computeEmergentLinks(gdb);
     return {
       exported: exp.conceptsExported,
       mechanical: mech.linksWritten,
@@ -50,6 +58,8 @@ export async function rebuildLinks(root: string, opts: { full?: boolean } = {}):
       crossProjectSkills: synth.crossProject,
       businessDomains: tax.businessDomains,
       techDomains: tax.techDomains,
+      workspace: ws.name,
+      projectLinks: emergent.links,
     };
   } finally {
     gdb.close();

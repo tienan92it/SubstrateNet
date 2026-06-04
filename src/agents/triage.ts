@@ -11,12 +11,14 @@
  */
 import type { Agent, AgentInput } from './runtime.js';
 import type { ChatMessage } from './backends/base.js';
-import type { TurnWindow, TriageLabels, Relevance, Domain, Quality, Linkage } from '../types.js';
+import type { TurnWindow, TriageLabels, Relevance, Domain, Quality, Linkage, Activity } from '../types.js';
 import { registerAgent } from './registry.js';
 
 export interface TriagePayload {
   text: string;
   windowId: string;
+  /** Optional compact project context to keep labels grounded + consistent. */
+  context?: string;
 }
 
 export interface TriageOutput {
@@ -24,6 +26,7 @@ export interface TriageOutput {
   domain: Domain;
   quality: Quality;
   linkage: Linkage;
+  activity: Activity;
   confidence: number;
   rationale: string;
 }
@@ -63,21 +66,32 @@ LINKAGE
   general_knowledge — generic engineering knowledge with no project specificity.
   unrelated        — not relevant to any project of the user.
 
+ACTIVITY (what the exchange was DOING — orthogonal to domain)
+  feature          — building/adding new functionality.
+  bugfix           — diagnosing or fixing a defect or failure.
+  info_request     — asking for information about the project/product.
+  todo             — capturing a task or follow-up to do later.
+  planning         — designing, scoping, prioritizing, or roadmapping.
+  refactor         — restructuring code without changing behavior.
+  ops              — deploy, infra, release, monitoring, incident response.
+  question         — a general technical question (not project-specific info).
+  chitchat         — no actionable activity.
+
 Confidence: a number in [0,1] reflecting your overall certainty.
 Rationale: ≤ 280 chars explaining the classification.
 
 Return JSON exactly matching:
 {
   "relevance":"...","domain":"...","quality":"...","linkage":"...",
-  "confidence":0.0,"rationale":"..."
+  "activity":"...","confidence":0.0,"rationale":"..."
 }`;
 
 export const TRIAGE_AGENT: Agent<TriagePayload, TriageOutput> = {
   name: 'triage',
-  promptVersion: 1,
+  promptVersion: 2,
   schema: {
     type: 'object',
-    required: ['relevance', 'domain', 'quality', 'linkage', 'confidence', 'rationale'],
+    required: ['relevance', 'domain', 'quality', 'linkage', 'activity', 'confidence', 'rationale'],
     properties: {
       relevance: { enum: ['on_topic', 'off_topic', 'mixed', 'unknown'] },
       domain: {
@@ -88,6 +102,12 @@ export const TRIAGE_AGENT: Agent<TriagePayload, TriageOutput> = {
       },
       quality: { enum: ['noise', 'boilerplate', 'signal', 'decision_grade'] },
       linkage: { enum: ['this_project', 'cross_project', 'general_knowledge', 'unrelated'] },
+      activity: {
+        enum: [
+          'feature', 'bugfix', 'info_request', 'todo', 'planning',
+          'refactor', 'ops', 'question', 'chitchat',
+        ],
+      },
       confidence: { type: 'number', minimum: 0, maximum: 1 },
       rationale: { type: 'string', maxLength: 800 },
     },
@@ -95,11 +115,13 @@ export const TRIAGE_AGENT: Agent<TriagePayload, TriageOutput> = {
   },
   prompt(input: AgentInput<TriagePayload>): ChatMessage[] {
     const body = clamp(input.payload.text, 6000);
+    const ctx = input.payload.context ? `PROJECT CONTEXT (for grounding):\n${input.payload.context}\n\n` : '';
     return [
       { role: 'system', content: SYSTEM },
       {
         role: 'user',
         content:
+          ctx +
           `WINDOW ID: ${input.payload.windowId}\n` +
           `--- begin window ---\n${body}\n--- end window ---\n\n` +
           `Return JSON only.`,
@@ -134,6 +156,7 @@ export function labelsToRow(
     domain: o.domain,
     quality: o.quality,
     linkage: o.linkage,
+    activity: o.activity,
     confidence: o.confidence,
     rationale: o.rationale,
     model,

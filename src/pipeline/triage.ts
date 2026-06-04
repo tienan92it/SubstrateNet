@@ -18,6 +18,7 @@ import '../agents/index.js';
 import { TRIAGE_AGENT, shouldKeep, labelsToRow } from '../agents/triage.js';
 import { DedupeAgent, storeWindowEmbedding } from '../agents/dedupe.js';
 import { upsertTriageLabels, getWindowText } from '../knowledge/triage-store.js';
+import { buildProjectContext } from '../knowledge/project-context.js';
 import { mapPool } from '../util/pool.js';
 
 export interface TriageRunResult {
@@ -44,6 +45,8 @@ export async function runTriageForWindows(
   };
 
   const limit = cfg.concurrency ?? 4;
+  // Build the grounding context once and reuse for every window.
+  const context = buildProjectContext(db) || undefined;
 
   // Phase 1: run triage agent calls concurrently (the expensive part).
   type Labeled =
@@ -55,7 +58,7 @@ export async function runTriageForWindows(
     const text = getWindowText(db, windowId);
     if (!text) return undefined;
     try {
-      const out = await rt.run(TRIAGE_AGENT, { payload: { text, windowId } });
+      const out = await rt.run(TRIAGE_AGENT, { payload: { text, windowId, context } });
       triageDone++;
       runOpts.onWindow?.(triageDone, windowIds.length);
       return { windowId, ok: true, model: out.model, output: out.output };
@@ -78,7 +81,7 @@ export async function runTriageForWindows(
     } else {
       upsertTriageLabels(db, labelsToRow(l.windowId, 'fallback', {
         relevance: 'unknown', domain: 'unknown', quality: 'signal', linkage: 'this_project',
-        confidence: 0.1, rationale: `triage agent failed: ${l.error}`,
+        activity: 'question', confidence: 0.1, rationale: `triage agent failed: ${l.error}`,
       }, true));
       result.triaged++;
       result.kept++;

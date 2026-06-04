@@ -8,7 +8,7 @@ type View = 'profile' | 'map';
 /** Bigger nodes for higher levels / more cross-project coverage. */
 function nodeSize(n: HierarchyNode): number {
   const base: Record<HierarchyLevel, number> = {
-    industry: 6, business_domain: 4, tech_domain: 3, project: 3, file: 1,
+    workspace: 8, industry: 6, business_domain: 4, tech_domain: 3, project: 3, file: 1,
   };
   return base[n.level] + Math.min(4, (n.projectCount ?? 1) - 1);
 }
@@ -251,7 +251,7 @@ function DrillKnowledgeView({ snapshot, onSelect }: {
 }
 
 function LevelLegend() {
-  const levels: HierarchyLevel[] = ['industry', 'business_domain', 'tech_domain', 'project'];
+  const levels: HierarchyLevel[] = ['workspace', 'industry', 'business_domain', 'tech_domain', 'project'];
   return (
     <div className="legend">
       {levels.map((l) => (

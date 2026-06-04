@@ -17,6 +17,7 @@ import { type AgentBackend as BackendSpec, resolveApiKey } from '../config.js';
 import type { Backend, ChatMessage } from './backends/base.js';
 import { OllamaBackend } from './backends/ollama.js';
 import { OpenAIBackend } from './backends/openai.js';
+import { CursorBackend } from './backends/cursor.js';
 import type { TurnWindow, KNode } from '../types.js';
 
 export interface AgentInput<I> {
@@ -34,6 +35,8 @@ export interface AgentOutput<O> {
 }
 
 export type JsonSchema = Record<string, unknown>;
+
+interface ResolvedModel { backendName: string; model: string; modelRef: string; }
 
 export interface Agent<I, O> {
   name: string;
@@ -68,39 +71,52 @@ export class AgentRuntime {
   async run<I, O>(agent: Agent<I, O>, input: AgentInput<I>): Promise<AgentOutput<O>> {
     const resolved = this.resolveModel(agent);
     const validator = this.getValidator(agent);
-    const inputHash = hashInput(agent, resolved.modelRef, input);
 
-    // 1. cache lookup
-    const cached = this.lookupCache(agent.name, resolved.modelRef, inputHash);
-    if (cached) {
-      const parsed = JSON.parse(cached.output_json) as O;
-      const post = agent.postprocess?.(parsed, input);
-      return {
-        output: post?.output ?? parsed,
-        confidence: post?.confidence ?? extractConfidence(parsed) ?? 1,
-        model: resolved.modelRef,
-        cached: true,
-      };
+    // Candidate chain: primary, then optional fallback (e.g. frontier -> local).
+    // The fallback lets heavy agents default to a subscribed backend yet still
+    // run on local Ollama when that backend is unavailable (no API key, etc.).
+    const candidates = [resolved.primary, ...(resolved.fallback ? [resolved.fallback] : [])];
+
+    // 1. cache lookup — across all candidate model refs.
+    for (const cand of candidates) {
+      const inputHash = hashInput(agent, cand.modelRef, input);
+      const cached = this.lookupCache(agent.name, cand.modelRef, inputHash);
+      if (cached) {
+        const parsed = JSON.parse(cached.output_json) as O;
+        const post = agent.postprocess?.(parsed, input);
+        return {
+          output: post?.output ?? parsed,
+          confidence: post?.confidence ?? extractConfidence(parsed) ?? 1,
+          model: cand.modelRef,
+          cached: true,
+        };
+      }
     }
 
-    // 2. call backend
+    // 2. call backend — try each candidate in order until one responds.
     const start = Date.now();
-    let backend: Backend;
-    try {
-      backend = this.getBackend(resolved.backendName);
-    } catch (e) {
-      this.persistRun(agent.name, resolved.modelRef, inputHash, '', false, (e as Error).message, Date.now() - start);
-      throw e;
-    }
-
     const messages = agent.prompt(input);
-    let raw: { content: string; tokensIn?: number; tokensOut?: number };
-    try {
-      raw = await backend.chat({ model: resolved.model, messages, jsonMode: true });
-    } catch (e) {
-      this.persistRun(agent.name, resolved.modelRef, inputHash, '', false, (e as Error).message, Date.now() - start);
-      throw e;
+    let active: ResolvedModel | undefined;
+    let backend: Backend | undefined;
+    let raw: { content: string; tokensIn?: number; tokensOut?: number } | undefined;
+    let lastError: Error | undefined;
+    for (const cand of candidates) {
+      try {
+        const b = this.getBackend(cand.backendName);
+        raw = await b.chat({ model: cand.model, messages, jsonMode: true });
+        active = cand;
+        backend = b;
+        break;
+      } catch (e) {
+        lastError = e as Error;
+      }
     }
+    if (!active || !backend || !raw) {
+      this.persistRun(agent.name, resolved.primary.modelRef, hashInput(agent, resolved.primary.modelRef, input), '', false, lastError?.message ?? 'no backend', Date.now() - start);
+      throw lastError ?? new Error('no backend available');
+    }
+    const inputHash = hashInput(agent, active.modelRef, input);
+    const resolvedActive = active;
 
     // 3. parse + validate (with one repair retry)
     let parsed: unknown;
@@ -126,14 +142,14 @@ export class AgentRuntime {
         },
       ];
       try {
-        raw = await backend.chat({ model: resolved.model, messages: repair, jsonMode: true });
+        raw = await backend.chat({ model: resolvedActive.model, messages: repair, jsonMode: true });
         parsed = parseJsonLenient(raw.content);
         if (!validator(parsed)) {
           throw new Error(`schema validation failed after repair: ${this.ajv.errorsText(validator.errors)}`);
         }
       } catch (e) {
         this.persistRun(
-          agent.name, resolved.modelRef, inputHash, raw.content, false,
+          agent.name, resolvedActive.modelRef, inputHash, raw.content, false,
           (e as Error).message, Date.now() - start,
           raw.tokensIn, raw.tokensOut,
         );
@@ -143,13 +159,13 @@ export class AgentRuntime {
 
     const ms = Date.now() - start;
     const outputJson = JSON.stringify(parsed);
-    this.persistRun(agent.name, resolved.modelRef, inputHash, outputJson, true, undefined, ms, raw.tokensIn, raw.tokensOut);
+    this.persistRun(agent.name, resolvedActive.modelRef, inputHash, outputJson, true, undefined, ms, raw.tokensIn, raw.tokensOut);
 
     const post = agent.postprocess?.(parsed as O, input);
     return {
       output: post?.output ?? (parsed as O),
       confidence: post?.confidence ?? extractConfidence(parsed) ?? 0.5,
-      model: resolved.modelRef,
+      model: resolvedActive.modelRef,
       tokens: raw.tokensIn !== undefined && raw.tokensOut !== undefined
         ? { in: raw.tokensIn, out: raw.tokensOut }
         : undefined,
@@ -159,15 +175,23 @@ export class AgentRuntime {
 
   // ------------------------------------------------------------------------
 
-  private resolveModel<I, O>(agent: Agent<I, O>): { backendName: string; model: string; modelRef: string } {
+  private resolveModel<I, O>(agent: Agent<I, O>): { primary: ResolvedModel; fallback?: ResolvedModel } {
     const key = agent.modelKey ?? agent.name;
     const spec = this.config.agents[key];
     if (!spec) throw new Error(`Agent "${key}" missing in config.agents`);
-    const { backend, model } = parseModelRef(spec.model);
+    const primary = this.parseResolved(spec.model, key)!; // non-soft: throws, never undefined
+    const fallback = spec.fallback ? this.parseResolved(spec.fallback, key, true) : undefined;
+    return { primary, fallback };
+  }
+
+  /** Parse a "<backend>:<model>" ref; for the primary, the backend must exist. */
+  private parseResolved(ref: string, key: string, soft = false): ResolvedModel | undefined {
+    const { backend, model } = parseModelRef(ref);
     if (!this.config.agentBackends[backend]) {
+      if (soft) return undefined; // fallback to a missing backend is just ignored
       throw new Error(`Backend "${backend}" referenced by agent "${key}" not configured`);
     }
-    return { backendName: backend, model, modelRef: spec.model };
+    return { backendName: backend, model, modelRef: ref };
   }
 
   private getValidator<I, O>(agent: Agent<I, O>): ValidateFunction {
@@ -194,6 +218,9 @@ export class AgentRuntime {
           endpoint: spec.endpoint ?? 'https://api.openai.com/v1',
           apiKey: resolveApiKey(spec),
         });
+        break;
+      case 'cursor-agent':
+        b = new CursorBackend({ apiKey: resolveApiKey(spec) });
         break;
       case 'anthropic':
         throw new Error('anthropic backend not yet implemented');

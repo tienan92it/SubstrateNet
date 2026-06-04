@@ -7,17 +7,17 @@ import type { TriageLabels } from '../types.js';
 export function upsertTriageLabels(db: SqliteDb, l: TriageLabels): void {
   db.prepare(`
     INSERT INTO triage_labels
-      (window_id, relevance, domain, quality, linkage, confidence,
+      (window_id, relevance, domain, quality, linkage, activity, confidence,
        rationale, model, produced_at, kept)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(window_id) DO UPDATE SET
       relevance=excluded.relevance, domain=excluded.domain,
-      quality=excluded.quality, linkage=excluded.linkage,
+      quality=excluded.quality, linkage=excluded.linkage, activity=excluded.activity,
       confidence=excluded.confidence, rationale=excluded.rationale,
       model=excluded.model, produced_at=excluded.produced_at,
       kept=excluded.kept
   `).run(
-    l.windowId, l.relevance, l.domain, l.quality, l.linkage,
+    l.windowId, l.relevance, l.domain, l.quality, l.linkage, l.activity ?? null,
     l.confidence, l.rationale ?? null, l.model, l.producedAt, l.kept ? 1 : 0,
   );
 }
@@ -33,6 +33,7 @@ export function getTriageLabels(db: SqliteDb, windowId: string): TriageLabels | 
     domain: row.domain,
     quality: row.quality,
     linkage: row.linkage,
+    activity: row.activity ?? undefined,
     confidence: row.confidence,
     rationale: row.rationale ?? undefined,
     model: row.model,

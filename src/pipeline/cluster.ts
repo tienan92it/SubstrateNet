@@ -33,6 +33,8 @@ const EVIDENCE_KINDS = [
   'stack_trace', 'ticket_id', 'url', 'dependency', 'tool', 'knowledge_gap',
   // Organizational zone nodes are taxonomy, not clusterable ideas.
   'business_domain', 'tech_domain',
+  // Structured RCA records are linked by edges, not clustered into concepts.
+  'incident', 'root_cause',
 ];
 
 export interface ClusterStats {

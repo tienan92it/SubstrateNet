@@ -16,7 +16,7 @@ import { listSkills, listIndustries, listHighlights } from '../global/skills.js'
 
 const MAX_EDGES = 4000;
 
-export type HierarchyLevel = 'industry' | 'business_domain' | 'tech_domain' | 'project' | 'file';
+export type HierarchyLevel = 'workspace' | 'industry' | 'business_domain' | 'tech_domain' | 'project' | 'file';
 
 export interface HierarchyNode {
   id: string;
@@ -109,20 +109,34 @@ export function assembleHierarchy(gdb: SqliteDb): { nodes: HierarchyNode[]; edge
     });
   }
 
+  // Workspace umbrellas (top level) + workspace -> project membership edges.
+  const workspaces = gdb.prepare(`
+    SELECT w.id AS id, w.name AS name, COUNT(pw.project_id) AS projects
+    FROM workspaces w JOIN project_workspace pw ON pw.workspace_id=w.id
+    GROUP BY w.id
+  `).all() as Array<{ id: string; name: string; projects: number }>;
+  for (const w of workspaces) {
+    nodes.set(w.id, { id: w.id, label: w.name, level: 'workspace', projectCount: w.projects });
+  }
+  const membership = gdb.prepare(`SELECT workspace_id, project_id FROM project_workspace`)
+    .all() as Array<{ workspace_id: string; project_id: string }>;
+
   // Edges (deduped across projects; only those with both endpoints present).
   const rawEdges = gdb.prepare(`
     SELECT DISTINCT parent_id AS source, child_id AS target, kind FROM taxonomy_edges
   `).all() as Array<{ source: string; target: string; kind: string }>;
   const seen = new Set<string>();
   const edges: HierarchyEdge[] = [];
-  for (const e of rawEdges) {
-    if (!nodes.has(e.source) || !nodes.has(e.target)) continue;
-    const key = `${e.source}|${e.target}`;
-    if (seen.has(key)) continue;
+  const pushEdge = (source: string, target: string, kind: string) => {
+    if (!nodes.has(source) || !nodes.has(target)) return;
+    const key = `${source}|${target}`;
+    if (seen.has(key) || edges.length >= MAX_EDGES) return;
     seen.add(key);
-    edges.push({ source: e.source, target: e.target, kind: e.kind });
-    if (edges.length >= MAX_EDGES) break;
-  }
+    edges.push({ source, target, kind });
+  };
+  // Workspace -> project edges first (the new top level).
+  for (const m of membership) pushEdge(m.workspace_id, projectNodeId(m.project_id), 'workspace_has_project');
+  for (const e of rawEdges) pushEdge(e.source, e.target, e.kind);
 
   return { nodes: [...nodes.values()], edges };
 }

@@ -47,6 +47,7 @@ function migrateKnowledgeDb(db: SqliteDb): void {
   ensureColumn(db, 'concepts', 'scope', 'scope TEXT');
   ensureColumn(db, 'concepts', 'grounding', 'grounding TEXT');
   ensureColumn(db, 'concepts', 'structured', 'structured TEXT');
+  ensureColumn(db, 'triage_labels', 'activity', 'activity TEXT');
   db.exec(`CREATE INDEX IF NOT EXISTS idx_knodes_grounding ON k_nodes(grounding)`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_knodes_scope ON k_nodes(scope)`);
   db.exec(`

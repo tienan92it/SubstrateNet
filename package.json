@@ -53,6 +53,7 @@
     "zod": "^4.4.3"
   },
   "optionalDependencies": {
+    "@cursor/sdk": "^1.0.17",
     "sqlite-vec": "^0.1.6"
   },
   "devDependencies": {

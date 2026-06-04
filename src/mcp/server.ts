@@ -447,6 +447,137 @@ export async function startMcpServer(root: string): Promise<void> {
     },
   );
 
+  // --------------------------------------------------------------------
+  // Research surface — structured product knowledge + global linking
+  // --------------------------------------------------------------------
+
+  server.tool(
+    'subnet_requirements',
+    'Product knowledge for this project: requirements, features, actors, processes, and metrics extracted from docs + conversations.',
+    { query: z.string().optional(), limit: z.number().optional() },
+    async ({ query, limit }) => {
+      const db = openKnowledgeDb(root);
+      try {
+        const args: any[] = [];
+        let where = `kind IN ('requirement','feature','actor','process','metric','intent')`;
+        if (query) { where += ` AND (title LIKE ? OR summary LIKE ?)`; args.push(`%${query}%`, `%${query}%`); }
+        args.push(limit ?? 60);
+        const rows = db.prepare(`
+          SELECT kind, title, summary, COALESCE(grounding,'stated') AS grounding
+          FROM k_nodes WHERE ${where} ORDER BY kind, updated_at DESC LIMIT ?
+        `).all(...args) as Array<{ kind: string; title: string; summary: string | null; grounding: string }>;
+        if (!rows.length) return text('No product requirements captured yet. Ingest docs/conversations first.');
+        return text(rows.map((r) => `- **[${r.kind}]** ${r.title} · _${r.grounding}_` + (r.summary ? `\n    ${r.summary}` : '')).join('\n'));
+      } finally { db.close(); }
+    },
+  );
+
+  server.tool(
+    'subnet_incidents',
+    'Root-cause analysis: incidents (symptoms) linked to their root cause and resolution, mined from bug-fix conversations. Ask "why did X break / how was it fixed".',
+    { query: z.string().optional(), limit: z.number().optional() },
+    async ({ query, limit }) => {
+      const db = openKnowledgeDb(root);
+      try {
+        const args: any[] = [];
+        let where = `i.kind='incident'`;
+        if (query) { where += ` AND (i.title LIKE ? OR i.summary LIKE ?)`; args.push(`%${query}%`, `%${query}%`); }
+        args.push(limit ?? 40);
+        const incidents = db.prepare(`
+          SELECT i.id, i.title, i.summary FROM k_nodes i WHERE ${where}
+          ORDER BY i.updated_at DESC LIMIT ?
+        `).all(...args) as Array<{ id: string; title: string; summary: string | null }>;
+        if (!incidents.length) return text('No incidents captured yet. Bug-fix conversations populate this.');
+        const causeFor = db.prepare(`
+          SELECT c.title AS title FROM k_edges e JOIN k_nodes c ON c.id=e.target
+          WHERE e.source=? AND e.kind='caused_by' LIMIT 1
+        `);
+        const fixFor = db.prepare(`
+          SELECT s.title AS title FROM k_edges e JOIN k_nodes s ON s.id=e.source
+          WHERE e.target=? AND e.kind='resolves' LIMIT 1
+        `);
+        const out = incidents.map((inc) => {
+          const cause = (causeFor.get(inc.id) as { title: string } | undefined)?.title;
+          const fix = (fixFor.get(inc.id) as { title: string } | undefined)?.title;
+          return `- **${inc.title}**` +
+            (cause ? `\n    root cause: ${cause}` : '') +
+            (fix ? `\n    resolution: ${fix}` : '');
+        });
+        return text(out.join('\n'));
+      } finally { db.close(); }
+    },
+  );
+
+  server.tool(
+    'subnet_workspace',
+    'Cross-project view: this project\'s workspace umbrella, sibling projects, and emergently-related projects (shared domains/skills/concepts).',
+    {},
+    async () => {
+      const gdb = openGlobalDb();
+      try {
+        const { projectIdForPath } = await import('../global/registry.js');
+        const pid = projectIdForPath(root);
+        const ws = gdb.prepare(`
+          SELECT w.name AS name, w.source AS source FROM project_workspace pw
+          JOIN workspaces w ON w.id=pw.workspace_id WHERE pw.project_id=?
+        `).get(pid) as { name: string; source: string } | undefined;
+        let outStr = ws ? `# Workspace: ${ws.name} _(via ${ws.source})_\n` : `# Workspace\n_(no umbrella detected; set "workspace" in config to group repos)_\n`;
+        if (ws) {
+          const siblings = gdb.prepare(`
+            SELECT p.name AS name FROM project_workspace pw JOIN projects p ON p.id=pw.project_id
+            WHERE pw.workspace_id=(SELECT workspace_id FROM project_workspace WHERE project_id=?) AND pw.project_id!=?
+            ORDER BY p.name
+          `).all(pid, pid) as Array<{ name: string }>;
+          outStr += `\n## Sibling repos\n` + (siblings.length ? siblings.map((s) => `- ${s.name}`).join('\n') : '_(none)_');
+        }
+        const related = gdb.prepare(`
+          SELECT p.name AS name, pl.weight AS weight, pl.signals AS signals
+          FROM project_links pl
+          JOIN projects p ON p.id = CASE WHEN pl.a=? THEN pl.b ELSE pl.a END
+          WHERE pl.a=? OR pl.b=? ORDER BY pl.weight DESC LIMIT 15
+        `).all(pid, pid, pid) as Array<{ name: string; weight: number; signals: string }>;
+        outStr += `\n\n## Related projects (emergent)\n` + (related.length
+          ? related.map((r) => `- ${r.name} · w=${r.weight}`).join('\n')
+          : '_(none yet; run `subnet link` across more projects)_');
+        return text(outStr);
+      } finally { gdb.close(); }
+    },
+  );
+
+  server.tool(
+    'subnet_ask',
+    'Grounded retrieval over the knowledge base. Returns the most relevant facts + concepts for a question, filtered to project-truth grounding by default.',
+    { query: z.string(), includeInferred: z.boolean().optional(), limit: z.number().optional() },
+    async ({ query, includeInferred, limit }) => {
+      const db = openKnowledgeDb(root);
+      try {
+        const grounds = includeInferred
+          ? ['structural', 'corroborated', 'stated', 'external', 'model']
+          : ['structural', 'corroborated', 'stated'];
+        const gph = grounds.map(() => '?').join(',');
+        const match = query.trim().split(/\s+/).map((t) => `"${t.replace(/"/g, '')}"`).join(' OR ');
+        let facts: Array<{ kind: string; title: string; summary: string | null; grounding: string }> = [];
+        try {
+          facts = db.prepare(`
+            SELECT k.kind, k.title, k.summary, COALESCE(k.grounding,'stated') AS grounding
+            FROM k_nodes_fts f JOIN k_nodes k ON k.rowid=f.rowid
+            WHERE k_nodes_fts MATCH ? AND COALESCE(k.grounding,'stated') IN (${gph})
+            LIMIT ?
+          `).all(match, ...grounds, limit ?? 25) as any[];
+        } catch {
+          facts = db.prepare(`
+            SELECT kind, title, summary, COALESCE(grounding,'stated') AS grounding
+            FROM k_nodes WHERE (title LIKE ? OR summary LIKE ?) AND COALESCE(grounding,'stated') IN (${gph})
+            LIMIT ?
+          `).all(`%${query}%`, `%${query}%`, ...grounds, limit ?? 25) as any[];
+        }
+        if (!facts.length) return text(`No grounded facts found for "${query}". Try includeInferred:true to include model/external knowledge.`);
+        return text(`# Answers for "${query}"\n\n` + facts.map((f) =>
+          `- **[${f.kind}]** ${f.title} · _${f.grounding}_` + (f.summary ? `\n    ${f.summary}` : '')).join('\n'));
+      } finally { db.close(); }
+    },
+  );
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

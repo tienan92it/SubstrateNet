@@ -103,6 +103,10 @@
     <tr><td><code>subnet_skills</code></td><td>Global skill graph — technical + industry skills aggregated across projects, weighted by evidence.</td><td><code>scope?, cross?, limit?</code></td></tr>
     <tr><td><code>subnet_profile</code></td><td>Big-picture knowledge profile — industries, top technical skills, evidence mix. Pass <code>prose</code> for ProfileWriter-generated portfolio markdown.</td><td><code>prose?</code></td></tr>
     <tr><td><code>subnet_learn</code></td><td>Learning targets — industry-standard knowledge not yet grounded in your work.</td><td><code>limit?</code></td></tr>
+    <tr><td><code>subnet_ask</code></td><td>Grounded Q&amp;A — most relevant facts + concepts for a question, filtered to project-truth grounding (<code>includeInferred</code> to add model/external).</td><td><code>query, includeInferred?, limit?</code></td></tr>
+    <tr><td><code>subnet_requirements</code></td><td>Product knowledge — requirements, features, actors, processes, metrics from docs + conversations.</td><td><code>query?, limit?</code></td></tr>
+    <tr><td><code>subnet_incidents</code></td><td>Root-cause analysis — incidents linked to root cause + resolution (why X broke / how it was fixed).</td><td><code>query?, limit?</code></td></tr>
+    <tr><td><code>subnet_workspace</code></td><td>Cross-project view — workspace umbrella, sibling repos, and emergently-related projects.</td><td>none</td></tr>
   </table>
 
   <h2 id="usage-patterns">Usage patterns</h2>

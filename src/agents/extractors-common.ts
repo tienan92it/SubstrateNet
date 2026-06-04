@@ -29,6 +29,8 @@ export interface ExtractorPayload {
   windowId: string;
   /** Triage hint: agent may use to focus or skip. */
   domain?: string;
+  /** Compact project context for grounding + consistent naming/dedup. */
+  context?: string;
 }
 
 const FACT_SCHEMA: Record<string, unknown> = {
@@ -91,6 +93,7 @@ export function defineExtractor(opts: DefineExtractorOpts): Agent<ExtractorPaylo
         {
           role: 'user',
           content:
+            (input.payload.context ? `PROJECT CONTEXT (reuse these names; do not invent variants):\n${input.payload.context}\n\n` : '') +
             `WINDOW ID: ${input.payload.windowId}\n` +
             `DOMAIN (triage): ${input.payload.domain ?? 'unknown'}\n` +
             `--- begin window ---\n${text}\n--- end window ---\n\n` +

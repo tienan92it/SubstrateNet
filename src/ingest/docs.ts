@@ -97,8 +97,14 @@ export class DocsAdapter implements SessionAdapter {
   }
 }
 
-/** Recursively yield candidate doc file paths under `base`. */
-export function* walkDocs(base: string): Generator<string> {
+/**
+ * Recursively yield files under `base` matching a predicate, skipping vendored
+ * and hidden directories. Shared by the docs and diagrams adapters.
+ */
+export function* walkFiles(
+  base: string,
+  accept: (abs: string, dir: string, base: string) => boolean,
+): Generator<string> {
   const stack: string[] = [base];
   while (stack.length) {
     const dir = stack.pop()!;
@@ -111,11 +117,16 @@ export function* walkDocs(base: string): Generator<string> {
       if (st.isDirectory()) {
         if (SKIP_DIRS.has(name) || name.startsWith('.')) continue;
         stack.push(abs);
-      } else if (st.isFile() && isDocFile(abs, dir, base)) {
+      } else if (st.isFile() && accept(abs, dir, base)) {
         yield abs;
       }
     }
   }
+}
+
+/** Recursively yield candidate doc file paths under `base`. */
+export function* walkDocs(base: string): Generator<string> {
+  yield* walkFiles(base, isDocFile);
 }
 
 /** A file counts as a doc if it is markdown/text, or lives in an ADR dir. */

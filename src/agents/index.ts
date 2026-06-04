@@ -3,11 +3,13 @@
  * Anything that wants `ALL_AGENTS` populated should import this module first.
  */
 import './triage.js';
+import './source-classifier.js';
 import './decision.js';
 import './business-logic.js';
 import './requirements.js';
 import './intent.js';
 import './problem-solution.js';
+import './incident.js';
 import './clusterer.js';
 import './summarizer.js';
 import './linker.js';

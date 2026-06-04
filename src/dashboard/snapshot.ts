@@ -190,6 +190,7 @@ function assemble(root: string, codeDb: SqliteDb, knowDb: SqliteDb, opts: Snapsh
 /** k_node kinds promoted into the human knowledge graph, in display priority. */
 const KNOWLEDGE_KINDS = [
   'business_domain', 'tech_domain', 'entity',
+  'requirement', 'feature', 'incident', 'root_cause',
   'business_rule', 'skill', 'actor', 'process', 'metric', 'glossary_term', 'knowledge_gap',
 ] as const;
 

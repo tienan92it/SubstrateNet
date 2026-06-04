@@ -150,6 +150,13 @@ export type Domain =
   | 'devops' | 'meta_process' | 'chitchat' | 'unknown';
 export type Quality = 'noise' | 'boilerplate' | 'signal' | 'decision_grade';
 export type Linkage = 'this_project' | 'cross_project' | 'general_knowledge' | 'unrelated';
+/**
+ * What the conversation was DOING — orthogonal to `domain`. Drives extractor
+ * routing (e.g. bugfix → incident/RCA; planning/feature → requirements).
+ */
+export type Activity =
+  | 'feature' | 'bugfix' | 'info_request' | 'todo' | 'planning'
+  | 'refactor' | 'ops' | 'question' | 'chitchat';
 
 export interface TriageLabels {
   windowId: string;
@@ -157,6 +164,7 @@ export interface TriageLabels {
   domain: Domain;
   quality: Quality;
   linkage: Linkage;
+  activity?: Activity;
   confidence: number;
   rationale?: string;
   model: string;
@@ -180,6 +188,8 @@ export type KNodeKind =
   | 'industry'
   // taxonomy / organization kinds (knowledge zones):
   | 'business_domain' | 'tech_domain'
+  // structured product knowledge (research-grade KB):
+  | 'requirement' | 'feature' | 'incident' | 'root_cause'
   // portfolio synthesis (technical x industry):
   | 'domain_highlight'
   // syntax-source kinds (deterministic):
@@ -221,6 +231,11 @@ export const ENRICHMENT_GROUNDING: Grounding[] = ['external', 'model'];
  *   - 'meta'      — process/tooling/uncategorized.
  */
 export type Scope = 'technical' | 'industry' | 'meta';
+
+/** Content type of a non-code source artifact (doc/diagram/note). */
+export type DocKind =
+  | 'brd' | 'prd' | 'architecture' | 'adr' | 'runbook' | 'api_spec'
+  | 'diagram' | 'notes' | 'changelog' | 'meta';
 
 export interface KNode {
   id: string;

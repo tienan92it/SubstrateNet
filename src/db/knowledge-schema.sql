@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS triage_labels (
     domain TEXT NOT NULL,
     quality TEXT NOT NULL,
     linkage TEXT NOT NULL,
+    activity TEXT,              -- feature|bugfix|info_request|todo|planning|refactor|ops|question|chitchat
     confidence REAL NOT NULL,
     rationale TEXT,
     model TEXT NOT NULL,
@@ -87,6 +88,19 @@ CREATE TABLE IF NOT EXISTS triage_labels (
 );
 CREATE INDEX IF NOT EXISTS idx_triage_kept ON triage_labels(kept);
 CREATE INDEX IF NOT EXISTS idx_triage_domain ON triage_labels(domain);
+
+-- Content labels for non-code source artifacts (docs/diagrams/notes), per window.
+CREATE TABLE IF NOT EXISTS source_labels (
+    window_id TEXT PRIMARY KEY REFERENCES turn_windows(id) ON DELETE CASCADE,
+    session_id TEXT,
+    source_path TEXT,
+    doc_kind TEXT,             -- brd|prd|architecture|adr|runbook|api_spec|diagram|notes|changelog|meta
+    topics TEXT,               -- JSON array
+    area TEXT,
+    model TEXT,
+    produced_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_source_labels_kind ON source_labels(doc_kind);
 
 -- L2: extracted facts
 CREATE TABLE IF NOT EXISTS k_nodes (

@@ -4,10 +4,11 @@
  * Separated from the CLI so it is testable without spawning the binary.
  * Global deletes rely on the FK cascade (the connection opens with
  * `foreign_keys = ON`): removing a `projects` row cascades to
- * `concepts_global`, `concept_links`, `skill_evidence`, and `industries`.
- * The one non-per-project table — `skills` (a cross-project aggregate) — is
- * fixed afterward by re-running `synthesizeSkills`, which drops orphaned
- * skills and recomputes weights/counts for survivors.
+ * `concepts_global`, `concept_links`, `skill_evidence`, `industries`,
+ * `business_domains`, `tech_domains`, `taxonomy_edges`, `project_workspace`,
+ * and `project_links`. Cross-project aggregates — `skills` and `workspaces` —
+ * are fixed afterward (`synthesizeSkills` drops orphaned skills; empty
+ * workspaces are pruned on the next `subnet link`).
  */
 import type { Database as SqliteDb } from 'better-sqlite3';
 import { projectIdForPath } from './registry.js';

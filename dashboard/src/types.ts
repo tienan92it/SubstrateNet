@@ -77,7 +77,7 @@ export const LAYER_COLORS: Record<string, string> = {
 // Global hierarchy (cross-project, overview -> detail)
 // =============================================================================
 
-export type HierarchyLevel = 'industry' | 'business_domain' | 'tech_domain' | 'project' | 'file';
+export type HierarchyLevel = 'workspace' | 'industry' | 'business_domain' | 'tech_domain' | 'project' | 'file';
 
 export interface HierarchyNode {
   id: string;
@@ -116,6 +116,7 @@ export interface GlobalDashboardSnapshot {
 }
 
 export const LEVEL_COLORS: Record<HierarchyLevel, string> = {
+  workspace: '#d64577',
   industry: '#e0723c',
   business_domain: '#4caf78',
   tech_domain: '#3c8ce0',
@@ -124,6 +125,7 @@ export const LEVEL_COLORS: Record<HierarchyLevel, string> = {
 };
 
 export const LEVEL_LABELS: Record<HierarchyLevel, string> = {
+  workspace: 'Workspace',
   industry: 'Industry',
   business_domain: 'Business domain',
   tech_domain: 'Tech domain',

@@ -78,8 +78,19 @@
     <tr><th>Kind</th><th>What it speaks</th><th>Auth</th></tr>
     <tr><td><code>ollama</code></td><td>Ollama HTTP API (<code>/api/chat</code>, <code>/api/embeddings</code>)</td><td>none</td></tr>
     <tr><td><code>openai-compatible</code></td><td>OpenAI Chat Completions + Embeddings shape (works with OpenAI, Together, Groq, OpenRouter, ...)</td><td><code>apiKeyEnv</code> (env-var name) or <code>apiKey</code> (inline)</td></tr>
+    <tr><td><code>cursor-agent</code></td><td>Cursor SDK (<code>@cursor/sdk</code>) — runs heavy reasoning via your Cursor subscription (higher-tier models, no per-token billing). Sandboxed: local one-shot against an empty temp dir, no tools/file access.</td><td><code>CURSOR_API_KEY</code> (env)</td></tr>
     <tr><td><code>anthropic</code></td><td>(placeholder)</td><td>not yet implemented</td></tr>
   </table>
+
+  <div class="callout">
+    <strong>Tiered routing (default).</strong> A <code>frontier</code> backend of kind
+    <code>cursor-agent</code> ships pre-configured. Bulk agents (triage, dedupe,
+    extractors) stay on local Ollama; heavy agents (source/domain/architecture
+    classification, linking, RCA) route to <code>frontier:auto</code> with a
+    <code>fallback</code> to local. Set <code>CURSOR_API_KEY</code> and run
+    <code>npm install @cursor/sdk</code> to enable; without it, everything falls
+    back to local automatically.
+  </div>
 
   <div class="callout">
     <strong>API keys: <code>apiKeyEnv</code> vs <code>apiKey</code>.</strong>

@@ -100,14 +100,16 @@ deterministic. Meaning is agent-driven.**
 |---|---|---|
 | **L0** Code structure | symbols, calls, imports, fields, SQL tables | deterministic (tree-sitter / regex DDL) |
 | **L0.5** Code analysis | per-file summaries, architectural layer, tags | tree-sitter structure → **agent** (FileAnalyzer · ArchitectureAnalyzer) |
-| **L1** Conversations + docs | sessions, turns, tool calls; in-repo docs (README / docs / BRD / ADRs) | deterministic (file parsers + Docs adapter) |
-| **L1.5** Triage | relevance / domain / quality / linkage per window | **agent** (Triage) |
-| **L2** Facts | decisions, business rules, intents, problems / solutions; BRD actors / processes / metrics | **agents** (Decision · BusinessLogic · Requirements · Intent · ProblemSolution) + syntax pass |
-| **L2.5** Domain enrichment | dependencies, skills, entities, relationships, industry, components + lifecycles, gaps | manifests + SQL (structural) · reconciler · **agents** (TechnicalProfiler · DomainModeler · ArchitectureModeler · IndustryClassifier · IndustryEnricher) |
+| **L1** Conversations + docs + diagrams | sessions, turns, tool calls; in-repo docs (README / BRD / ADRs) and diagrams (mermaid / drawio / excalidraw / plantuml) | deterministic (file parsers + Docs/Diagrams adapters) |
+| **L1.5** Triage | relevance / domain / quality / linkage / **activity** per window; **doc-kind** for source artifacts | **agents** (Triage · SourceClassifier) |
+| **L2** Facts | decisions, business rules, intents, problems / solutions; BRD actors / processes / metrics; **incidents → root cause → resolution** | **agents** (Decision · BusinessLogic · Requirements · Intent · ProblemSolution · Incident) + syntax pass |
+| **L2.5** Domain enrichment | dependencies, skills, entities, relationships, industry, components + lifecycles, gaps; cross-source **dedup + corroboration** | manifests + SQL (structural) · reconciler · fact-dedupe · **agents** (TechnicalProfiler · DomainModeler · ArchitectureModeler · IndustryClassifier · IndustryEnricher) |
 | **L2.6** Knowledge zones | business domains + tech domains, grouping facts by bounded context / capability | **agents** (BusinessDomainModeler · TechDomainModeler) |
 | **L3** Concepts | clustered facts with names + structured summaries, scope-tagged | **agents** (Clusterer · Summarizer) |
-| **L4** Cross-project | shared concepts between repos | mechanical (exact + SimHash) + **agent** (Linker) |
-| **L5** Global skill graph + hierarchy | technical + industry skills, and the industry → business → tech → project zone tree | mechanical aggregation over L2.5/L2.6 evidence |
+| **L4** Cross-project | shared concepts, **workspace umbrellas**, emergent project links | mechanical (exact + SimHash + shared-signal clustering) + **agent** (Linker) |
+| **L5** Global skill graph + hierarchy | technical + industry skills, and the workspace → industry → business → tech → project zone tree | mechanical aggregation over L2.5/L2.6 evidence |
+
+Agents run **tiered**: bulk work (triage, embeddings, extractors) stays on local Ollama; heavy reasoning (classification, domain/architecture modeling, linking, RCA) routes to a **Cursor SDK backend** (`frontier`, set `CURSOR_API_KEY`) and falls back to local automatically when unavailable.
 
 ### Scope × grounding
 
@@ -171,8 +173,9 @@ swap or an interrupted run.
 
 ## MCP integration
 
-A single MCP server exposes 21 tools — code (L0/L0.5), knowledge (L1.5–L3), domain
-(L2.5), and the global skill view (L4–L5) — over stdio:
+A single MCP server exposes 25 tools — code (L0/L0.5), knowledge (L1.5–L3), domain
+(L2.5), the global skill view (L4–L5), and a research surface
+(`subnet_requirements`, `subnet_incidents`, `subnet_workspace`, `subnet_ask`) — over stdio:
 
 ```jsonc
 // ~/.cursor/mcp.json  (or equivalent for Claude Code)
@@ -188,7 +191,9 @@ A single MCP server exposes 21 tools — code (L0/L0.5), knowledge (L1.5–L3), 
 
 Primary tools: `subnet_context` (facts + code for a topic), `subnet_recall`
 (semantic + FTS over conversations), `subnet_domain_model`, `subnet_gaps`,
-`subnet_skills`, `subnet_profile`, `subnet_learn`. Full catalogue in the
+`subnet_skills`, `subnet_profile`, `subnet_learn`, plus the research surface —
+`subnet_ask` (grounded Q&A), `subnet_requirements`, `subnet_incidents` (RCA),
+and `subnet_workspace` (umbrella + related projects). Full catalogue in the
 [MCP docs](https://tienan92it.github.io/SubstrateNet/mcp.html).
 
 ---

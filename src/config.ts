@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join, resolve } from 'path';
 
-export type BackendKind = 'ollama' | 'openai-compatible' | 'anthropic';
+export type BackendKind = 'ollama' | 'openai-compatible' | 'anthropic' | 'cursor-agent';
 
 export interface AgentBackend {
   kind: BackendKind;
@@ -54,13 +54,23 @@ export interface SubstrateNetConfig {
     codex?: string;
     copilot?: string;
   };
+  /**
+   * Explicit workspace/umbrella name for this project (e.g. "Kafi"). Overrides
+   * auto-detection (git org / parent dir) when grouping projects globally.
+   */
+  workspace?: string;
 }
 
 export const DEFAULT_CONFIG: SubstrateNetConfig = {
   agentBackends: {
     default: { kind: 'ollama', endpoint: 'http://localhost:11434' },
+    // Higher-tier reasoning via the user's Cursor subscription (@cursor/sdk).
+    // Heavy agents route here and fall back to `default` (local) when
+    // CURSOR_API_KEY is unset or the SDK is unavailable.
+    frontier: { kind: 'cursor-agent', apiKeyEnv: 'CURSOR_API_KEY' },
   },
   agents: {
+    // Bulk / high-volume — stay local (cheap, private, fast enough).
     triage:         { model: 'default:llama3.1:8b', windowTokens: 2000 },
     dedupe:         { model: 'default:nomic-embed-text' },
     decision:       { model: 'default:llama3.1:8b' },
@@ -70,20 +80,23 @@ export const DEFAULT_CONFIG: SubstrateNetConfig = {
     problemSolution:{ model: 'default:llama3.1:8b' },
     clusterer:      { model: 'default:llama3.1:8b' },
     summarizer:     { model: 'default:llama3.1:8b' },
-    linker:         { model: 'default:llama3.1:8b' },
     verifier:       { model: 'default:llama3.1:8b' },
-    domainModeler:  { model: 'default:llama3.1:8b' },
-    architectureModeler: { model: 'default:llama3.1:8b' },
-    businessDomainModeler: { model: 'default:llama3.1:8b' },
-    techDomainModeler: { model: 'default:llama3.1:8b' },
-    technicalProfiler: { model: 'default:llama3.1:8b' },
-    industryClassifier:{ model: 'default:llama3.1:8b' },
-    industryEnricher:  { model: 'default:llama3.1:8b' },
     skillSynthesizer:  { model: 'default:llama3.1:8b' },
     fileAnalyzer:      { model: 'default:llama3.1:8b' },
     architectureAnalyzer: { model: 'default:llama3.1:8b' },
-    domainAnalyzer:    { model: 'default:llama3.1:8b' },
-    profileWriter:     { model: 'default:llama3.1:8b' },
+    // Heavy reasoning — prefer frontier (Cursor), fall back to local.
+    sourceClassifier:  { model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
+    incident:          { model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
+    linker:            { model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
+    domainModeler:     { model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
+    architectureModeler: { model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
+    businessDomainModeler: { model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
+    techDomainModeler: { model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
+    technicalProfiler: { model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
+    industryClassifier:{ model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
+    industryEnricher:  { model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
+    domainAnalyzer:    { model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
+    profileWriter:     { model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
   },
   concurrency: 4,
   research: { kind: 'none' },

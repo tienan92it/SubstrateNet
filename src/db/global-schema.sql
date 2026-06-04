@@ -116,6 +116,34 @@ CREATE TABLE IF NOT EXISTS taxonomy_edges (
 CREATE INDEX IF NOT EXISTS idx_taxedge_parent ON taxonomy_edges(parent_id);
 CREATE INDEX IF NOT EXISTS idx_taxedge_project ON taxonomy_edges(project_id);
 
+-- Workspace umbrellas: a multi-repo product/org grouping (e.g. "Kafi" over
+-- GBI, bond, sales, data-platform, ...). `id` is a name-hash so the same
+-- umbrella collapses across projects.
+CREATE TABLE IF NOT EXISTS workspaces (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    source TEXT,                  -- 'config' | 'git-org' | 'path'
+    updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS project_workspace (
+    project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+    workspace_id TEXT NOT NULL,
+    source TEXT,
+    confidence REAL
+);
+CREATE INDEX IF NOT EXISTS idx_pw_workspace ON project_workspace(workspace_id);
+
+-- Emergent project links + suggested groupings (no explicit umbrella).
+CREATE TABLE IF NOT EXISTS project_links (
+    a TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    b TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    weight REAL NOT NULL,
+    signals TEXT,                 -- JSON: which signals contributed
+    PRIMARY KEY (a, b)
+);
+CREATE INDEX IF NOT EXISTS idx_plinks_a ON project_links(a);
+
 -- Composite portfolio highlights (technical x industry), per project.
 CREATE TABLE IF NOT EXISTS highlights (
     id TEXT PRIMARY KEY,

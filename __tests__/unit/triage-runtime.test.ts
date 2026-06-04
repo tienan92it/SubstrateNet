@@ -57,6 +57,7 @@ describe('Triage agent + runtime', () => {
         domain: 'business_logic',
         quality: 'decision_grade',
         linkage: 'this_project',
+        activity: 'planning',
         confidence: 0.9,
         rationale: 'explicit business rule about refunds',
       });
@@ -85,6 +86,7 @@ describe('Triage agent + runtime', () => {
         domain: 'chitchat',
         quality: 'noise',
         linkage: 'unrelated',
+        activity: 'chitchat',
         confidence: 0.95,
         rationale: 'pure thank-you exchange',
       });
@@ -113,6 +115,7 @@ describe('Triage agent + runtime', () => {
         domain: 'architecture',
         quality: 'decision_grade',
         linkage: 'this_project',
+        activity: 'planning',
         confidence: 0.8,
         rationale: 'pick Redis over in-memory caching',
       });
@@ -142,7 +145,7 @@ describe('Triage agent + runtime', () => {
           return {
             content: JSON.stringify({
               relevance: 'on_topic', domain: 'implementation', quality: 'signal',
-              linkage: 'this_project', confidence: 0.7, rationale: 'normal code talk',
+              linkage: 'this_project', activity: 'refactor', confidence: 0.7, rationale: 'normal code talk',
             }),
           };
         },
