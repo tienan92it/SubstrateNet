@@ -1,36 +1,42 @@
 {
-  "concurrency": 8,
+  "concurrency": 6,
   "agentBackends": {
     "local": { "kind": "ollama", "endpoint": "http://localhost:11434" },
     "openrouter": {
       "kind": "openai-compatible",
       "endpoint": "https://openrouter.ai/api/v1",
       "apiKeyEnv": "OPENROUTER_API_KEY"
-    }
+    },
+    "frontier": { "kind": "cursor-agent", "apiKeyEnv": "CURSOR_API_KEY" }
   },
   "agents": {
-    "dedupe":             { "model": "local:nomic-embed-text" },
+    "dedupe": { "model": "local:nomic-embed-text" },
 
-    "triage":             { "model": "openrouter:google/gemini-2.5-flash" },
-    "intent":             { "model": "openrouter:google/gemini-2.5-flash" },
-    "clusterer":          { "model": "openrouter:google/gemini-2.5-flash" },
-    "summarizer":         { "model": "openrouter:google/gemini-2.5-flash" },
+    "triage":          { "model": "openrouter:google/gemini-3.5-flash" },
+    "intent":          { "model": "openrouter:google/gemini-3.5-flash" },
+    "clusterer":       { "model": "openrouter:google/gemini-3.5-flash" },
+    "summarizer":      { "model": "openrouter:google/gemini-3.5-flash" },
+    "decision":        { "model": "openrouter:google/gemini-3.5-flash" },
+    "businessLogic":   { "model": "openrouter:google/gemini-3.5-flash" },
+    "requirements":    { "model": "openrouter:google/gemini-3.5-flash" },
+    "problemSolution": { "model": "openrouter:google/gemini-3.5-flash" },
+    "verifier":        { "model": "openrouter:google/gemini-3.5-flash" },
+    "skillSynthesizer":{ "model": "openrouter:google/gemini-3.5-flash" },
+    "fileAnalyzer":    { "model": "openrouter:google/gemini-3.5-flash" },
+    "architectureAnalyzer": { "model": "openrouter:google/gemini-3.5-flash" },
 
-    "decision":           { "model": "openrouter:anthropic/claude-sonnet-4" },
-    "businessLogic":      { "model": "openrouter:anthropic/claude-sonnet-4" },
-    "problemSolution":    { "model": "openrouter:anthropic/claude-sonnet-4" },
-    "domainModeler":      { "model": "openrouter:anthropic/claude-sonnet-4" },
-    "technicalProfiler":  { "model": "openrouter:anthropic/claude-sonnet-4" },
-    "industryClassifier": { "model": "openrouter:anthropic/claude-sonnet-4" },
-    "industryEnricher":   { "model": "openrouter:anthropic/claude-sonnet-4" },
-    "linker":             { "model": "openrouter:anthropic/claude-sonnet-4" },
-    "verifier":           { "model": "openrouter:anthropic/claude-sonnet-4" },
-    "skillSynthesizer":   { "model": "openrouter:anthropic/claude-sonnet-4" },
-
-    "fileAnalyzer":        { "model": "openrouter:google/gemini-2.5-flash" },
-    "architectureAnalyzer":{ "model": "openrouter:google/gemini-2.5-flash" },
-    "domainAnalyzer":      { "model": "openrouter:anthropic/claude-sonnet-4" },
-    "profileWriter":       { "model": "openrouter:anthropic/claude-sonnet-4" }
+    "sourceClassifier":    { "model": "frontier:auto", "fallback": "openrouter:google/gemini-3.5-flash" },
+    "incident":            { "model": "frontier:auto", "fallback": "openrouter:google/gemini-3.5-flash" },
+    "domainModeler":       { "model": "frontier:auto", "fallback": "openrouter:google/gemini-3.5-flash" },
+    "architectureModeler": { "model": "frontier:auto", "fallback": "openrouter:google/gemini-3.5-flash" },
+    "businessDomainModeler": { "model": "frontier:auto", "fallback": "openrouter:google/gemini-3.5-flash" },
+    "techDomainModeler":   { "model": "frontier:auto", "fallback": "openrouter:google/gemini-3.5-flash" },
+    "technicalProfiler":   { "model": "frontier:auto", "fallback": "openrouter:google/gemini-3.5-flash" },
+    "industryClassifier":  { "model": "frontier:auto", "fallback": "openrouter:google/gemini-3.5-flash" },
+    "industryEnricher":    { "model": "frontier:auto", "fallback": "openrouter:google/gemini-3.5-flash" },
+    "domainAnalyzer":      { "model": "frontier:auto", "fallback": "openrouter:google/gemini-3.5-flash" },
+    "linker":              { "model": "frontier:auto", "fallback": "openrouter:google/gemini-3.5-flash" },
+    "profileWriter":       { "model": "frontier:auto", "fallback": "openrouter:google/gemini-3.5-flash" }
   },
   "research": { "kind": "none" }
 }
