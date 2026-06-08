@@ -24,6 +24,8 @@ const EXT_MAP: Record<string, LangSpec> = {
   '.sql':  { language: 'sql',        wasmFile: '' },
   '.ddl':  { language: 'sql',        wasmFile: '' },
   '.cs':   { language: 'csharp',     wasmFile: 'tree-sitter-c_sharp.wasm' },
+  '.ex':   { language: 'elixir',     wasmFile: 'tree-sitter-elixir.wasm' },
+  '.exs':  { language: 'elixir',     wasmFile: 'tree-sitter-elixir.wasm' },
 };
 
 export function detectLanguage(filePath: string): LangSpec | undefined {

@@ -87,6 +87,7 @@ function routeFile(abs: string, rel: string, add: Add): void {
     case 'pubspec.yaml':     parsePubspec(raw, rel, add); break;
     case 'composer.json':    parseComposer(raw, rel, add); break;
     case 'Gemfile':          parseGemfile(raw, rel, add); break;
+    case 'mix.exs':          parseMixExs(raw, rel, add); break;
     case 'pom.xml':          parsePomXml(raw, rel, add); break;
     case 'build.gradle':
     case 'build.gradle.kts': parseGradle(raw, rel, add); break;
@@ -170,6 +171,12 @@ function parseComposer(raw: string, rel: string, add: Add): void {
 
 function parseGemfile(raw: string, rel: string, add: Add): void {
   for (const m of raw.matchAll(/^\s*gem\s+["']([^"']+)["']/gm)) add('dependency', m[1], `${rel}: ${m[1]}`);
+}
+
+function parseMixExs(raw: string, rel: string, add: Add): void {
+  for (const m of raw.matchAll(/\{:\s*([a-zA-Z0-9_]+)\s*,/g)) {
+    add('dependency', m[1], `${rel}: ${m[1]}`);
+  }
 }
 
 function parsePomXml(raw: string, rel: string, add: Add): void {
