@@ -44,10 +44,19 @@ export function printReport(report: DoctorReport): void {
 
 function formatHealth(h: ProjectHealth): string {
   const failRate = h.recentRuns > 0 ? Math.round((h.recentFailures / h.recentRuns) * 100) : 0;
+  const audit = h.pipelineAudit;
+  const auditBits = [
+    audit.windowsMechanicalDup ? `dupWin=${audit.windowsMechanicalDup}` : '',
+    audit.windowsSessionSkipped ? `skipSess=${audit.windowsSessionSkipped}` : '',
+    audit.factsAnchorRejected ? `anchorRej=${audit.factsAnchorRejected}` : '',
+    audit.factsEarlyDeduped ? `earlyDedup=${audit.factsEarlyDeduped}` : '',
+    audit.filesAnalyzeSkippedTier ? `skipAnalyze=${audit.filesAnalyzeSkippedTier}` : '',
+  ].filter(Boolean).join(' ');
   return (
     `${h.name.padEnd(20)} unclustered=${h.unclusteredFacts} ` +
     `missingSummaries=${h.conceptsMissingSummary} pendingFiles=${h.pendingFiles} ` +
     `failures(24h)=${h.recentFailures}/${h.recentRuns} (${failRate}%)` +
+    (auditBits ? ` audit[${auditBits}]` : '') +
     (h.modelDrift ? '  \x1b[33m[model config changed → run `subnet update --full`]\x1b[0m' : '')
   );
 }

@@ -20,6 +20,7 @@ import { TRIAGE_BATCH_AGENT } from '../agents/triage-batch.js';
 import { DedupeAgent, storeWindowEmbedding } from '../agents/dedupe.js';
 import { upsertTriageLabels, getWindowText } from '../knowledge/triage-store.js';
 import { buildProjectContext } from '../knowledge/project-context.js';
+import { serializeWindowBrief, getWindowBrief } from './window-brief.js';
 import { mapPool } from '../util/pool.js';
 
 export interface TriageRunResult {
@@ -46,10 +47,11 @@ type Labeled =
  */
 async function triageGroup(
   rt: AgentRuntime, db: SqliteDb, windowIds: string[], context: string | undefined,
+  textFor: (windowId: string) => string | undefined,
   onDone: () => void,
 ): Promise<Labeled[]> {
   const items = windowIds
-    .map((windowId) => ({ windowId, text: getWindowText(db, windowId) }))
+    .map((windowId) => ({ windowId, text: textFor(windowId) }))
     .filter((w): w is { windowId: string; text: string } => Boolean(w.text));
   if (items.length === 0) {
     windowIds.forEach(onDone);
@@ -107,6 +109,12 @@ export async function runTriageForWindows(
   // Build the grounding context once and reuse for every window.
   const context = buildProjectContext(db) || undefined;
 
+  const windowTextFor = (windowId: string): string | undefined => {
+    const brief = getWindowBrief(db, windowId);
+    if (brief) return serializeWindowBrief(brief, 2500);
+    return getWindowText(db, windowId);
+  };
+
   // Phase 1: triage in batches (one LLM call per `batchSize` windows). Each
   // group falls back to single-window triage if the batch fails to parse, so
   // batching only reduces call count — never coverage.
@@ -115,7 +123,7 @@ export async function runTriageForWindows(
   for (let i = 0; i < windowIds.length; i += batchSize) groups.push(windowIds.slice(i, i + batchSize));
 
   const labeledGroups = await mapPool(groups, limit, (group) =>
-    triageGroup(rt, db, group, context, () => {
+    triageGroup(rt, db, group, context, windowTextFor, () => {
       triageDone++;
       runOpts.onWindow?.(triageDone, windowIds.length);
     }),

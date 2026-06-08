@@ -23,7 +23,9 @@
 import type { Database as SqliteDb } from 'better-sqlite3';
 import { AgentRuntime } from '../agents/runtime.js';
 import { CLUSTERER_AGENT, type ClustererAction } from '../agents/clusterer.js';
+import { CLUSTERER_BATCH_AGENT } from '../agents/clusterer-batch.js';
 import { SUMMARIZER_AGENT } from '../agents/summarizer.js';
+import { resolveIngestConfig } from '../config.js';
 import { DedupeAgent, getKNodeEmbedding } from '../agents/dedupe.js';
 import { upsertConcept, newConceptId, setKNodeCluster, membersOf, nearestConcepts, recountAndCentroid, encodeCentroid } from '../knowledge/concept-store.js';
 import { scopeFromDomain, dominantGrounding, dominantScope } from '../knowledge/scope.js';
@@ -45,11 +47,11 @@ const EVIDENCE_KINDS = [
 
 /** Candidate pool size + the minimum similarity to even consider a concept. */
 const CANDIDATE_K = 5;
-const CANDIDATE_MIN_SCORE = 0.55;
+const CANDIDATE_MIN_SCORE = 0.60;
 /** Top candidate at/above this similarity attaches mechanically (skip the LLM). */
-const AUTO_ATTACH_SCORE = 0.85;
+const AUTO_ATTACH_SCORE = 0.88;
 /** At apply time, re-check for a near-duplicate before creating a new concept. */
-const REFRESH_ATTACH_SCORE = 0.82;
+const REFRESH_ATTACH_SCORE = 0.85;
 /** Stable concepts with <= this many members + an existing summary skip re-summarize. */
 const STABLE_MEMBER_MAX = 3;
 
@@ -60,6 +62,8 @@ export interface ClusterStats {
   merged: number;
   /** Facts attached/created mechanically (no LLM call). */
   mechanical: number;
+  /** LLM cluster decisions (single + batch calls). */
+  llmDecisions: number;
   conceptsSummarized: number;
 }
 
@@ -79,6 +83,12 @@ type FactDecision = {
   mechanical: boolean;
 };
 
+type AmbiguousFact = {
+  fact: FactRow;
+  embedding: Float32Array;
+  candidates: Array<{ id: string; name: string; summary?: string; score: number }>;
+};
+
 export async function runClustererForNewFacts(
   knowDb: SqliteDb, cfg: SubstrateNetConfig, opts: ClusterOpts = {},
 ): Promise<ClusterStats> {
@@ -91,16 +101,20 @@ export async function runClustererForNewFacts(
     ORDER BY created_at ASC
   `).all(...EVIDENCE_KINDS) as FactRow[];
 
-  const stats: ClusterStats = { processed: 0, attached: 0, created: 0, merged: 0, mechanical: 0, conceptsSummarized: 0 };
+  const stats: ClusterStats = {
+    processed: 0, attached: 0, created: 0, merged: 0, mechanical: 0, llmDecisions: 0, conceptsSummarized: 0,
+  };
   const dirty = new Set<string>();
   const limit = Math.max(1, cfg.concurrency ?? 4);
+  const batchSize = Math.max(1, cfg.batchSize ?? 8);
+  const useBatch = resolveIngestConfig(cfg).clusterBatch !== false;
 
-  // Process in waves: decide (parallel, includes LLM for the ambiguous band),
+  // Process in waves: mechanical decisions first, batch LLM for ambiguous band,
   // then apply (sequential writes). Candidates are read at wave start, so a
   // refresh re-check at apply time absorbs intra-wave near-duplicates.
   for (let i = 0; i < facts.length; i += limit) {
     const wave = facts.slice(i, i + limit);
-    const decisions = await mapPool(wave, limit, (fact) => decideFact(rt, knowDb, fact));
+    const decisions = await decideWave(rt, knowDb, wave, batchSize, useBatch, stats);
     for (const d of decisions) {
       stats.processed++;
       if (d.mechanical) stats.mechanical++;
@@ -113,17 +127,40 @@ export async function runClustererForNewFacts(
   return stats;
 }
 
-/** Decide what to do with a fact. Mechanical for clear cases; LLM for the ambiguous band. */
-async function decideFact(rt: AgentRuntime, knowDb: SqliteDb, fact: FactRow): Promise<FactDecision> {
+async function decideWave(
+  rt: AgentRuntime,
+  knowDb: SqliteDb,
+  wave: FactRow[],
+  batchSize: number,
+  useBatch: boolean,
+  stats: ClusterStats,
+): Promise<FactDecision[]> {
+  const mechanical: FactDecision[] = [];
+  const ambiguous: AmbiguousFact[] = [];
+
+  for (const fact of wave) {
+    const partial = decideFactMechanical(knowDb, fact);
+    if ('mechanical' in partial) mechanical.push(partial);
+    else ambiguous.push(partial);
+  }
+
+  const llm = await decideAmbiguousFacts(rt, ambiguous, batchSize, useBatch, stats);
+  return [...mechanical, ...llm];
+}
+
+/** Mechanical path: clear attach/create/no-embedding. Returns ambiguous facts without action. */
+function decideFactMechanical(knowDb: SqliteDb, fact: FactRow): FactDecision | AmbiguousFact {
   const v = getKNodeEmbedding(knowDb, fact.id) ?? undefined;
   if (!v) {
-    // No embedding — bucket mechanically by kind (handled in applyDecision).
-    return { fact, candidates: [], action: { action: 'create', suggestedName: '', confidence: 0, reason: 'no-embedding' }, mechanical: true };
+    return {
+      fact, candidates: [],
+      action: { action: 'create', suggestedName: '', confidence: 0, reason: 'no-embedding' },
+      mechanical: true,
+    };
   }
 
   const candidates = nearestConcepts(knowDb, v, CANDIDATE_K, CANDIDATE_MIN_SCORE);
 
-  // Clear match — attach without an LLM call.
   if (candidates.length > 0 && candidates[0].score >= AUTO_ATTACH_SCORE) {
     return {
       fact, embedding: v, candidates,
@@ -132,7 +169,6 @@ async function decideFact(rt: AgentRuntime, knowDb: SqliteDb, fact: FactRow): Pr
     };
   }
 
-  // No nearby concept — create mechanically.
   if (candidates.length === 0) {
     return {
       fact, embedding: v, candidates,
@@ -141,19 +177,101 @@ async function decideFact(rt: AgentRuntime, knowDb: SqliteDb, fact: FactRow): Pr
     };
   }
 
-  // Ambiguous band — ask the clusterer.
+  return { fact, embedding: v, candidates };
+}
+
+async function decideAmbiguousFacts(
+  rt: AgentRuntime,
+  items: AmbiguousFact[],
+  batchSize: number,
+  useBatch: boolean,
+  stats: ClusterStats,
+): Promise<FactDecision[]> {
+  if (items.length === 0) return [];
+
+  const out: FactDecision[] = [];
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    if (useBatch && batch.length > 1) {
+      const batchDecisions = await decideFactBatch(rt, batch, stats);
+      out.push(...batchDecisions);
+    } else {
+      for (const item of batch) {
+        out.push(await decideFactSingle(rt, item, stats));
+      }
+    }
+  }
+  return out;
+}
+
+/** Batch LLM for the ambiguous band; falls back to per-fact clusterer on parse failure. */
+async function decideFactBatch(
+  rt: AgentRuntime,
+  batch: AmbiguousFact[],
+  stats: ClusterStats,
+): Promise<FactDecision[]> {
+  const payload = {
+    items: batch.map((b) => ({
+      factId: b.fact.id,
+      fact: { kind: b.fact.kind, title: b.fact.title, summary: b.fact.summary ?? undefined },
+      candidates: b.candidates.map(({ id, name, summary }) => ({ id, name, summary })),
+    })),
+  };
+
+  try {
+    const out = await rt.run(CLUSTERER_BATCH_AGENT, { payload });
+    stats.llmDecisions += 1;
+    const byId = new Map(out.output.results.map((r) => [r.factId, r]));
+    const decisions: FactDecision[] = [];
+    const retry: AmbiguousFact[] = [];
+
+    for (const item of batch) {
+      const row = byId.get(item.fact.id);
+      if (row) {
+        const action: ClustererAction = row.action === 'attach'
+          ? { action: 'attach', conceptId: row.conceptId, confidence: row.confidence, reason: row.reason }
+          : row.action === 'merge'
+            ? { action: 'merge', conceptIds: row.conceptIds, suggestedName: row.suggestedName, confidence: row.confidence, reason: row.reason }
+            : { action: 'create', suggestedName: row.suggestedName, confidence: row.confidence, reason: row.reason };
+        decisions.push({ ...item, action, mechanical: false });
+      } else {
+        retry.push(item);
+      }
+    }
+
+    if (decisions.length >= Math.ceil(batch.length / 2)) {
+      for (const item of retry) {
+        decisions.push(await decideFactSingle(rt, item, stats));
+      }
+      return decisions;
+    }
+  } catch { /* fall through to singles */ }
+
+  const decisions: FactDecision[] = [];
+  for (const item of batch) {
+    decisions.push(await decideFactSingle(rt, item, stats));
+  }
+  return decisions;
+}
+
+async function decideFactSingle(
+  rt: AgentRuntime,
+  item: AmbiguousFact,
+  stats: ClusterStats,
+): Promise<FactDecision> {
   try {
     const out = await rt.run(CLUSTERER_AGENT, {
       payload: {
-        fact: { id: fact.id, kind: fact.kind, title: fact.title, summary: fact.summary ?? undefined },
-        candidates,
+        fact: { id: item.fact.id, kind: item.fact.kind, title: item.fact.title, summary: item.fact.summary ?? undefined },
+        candidates: item.candidates,
       },
     });
-    return { fact, embedding: v, candidates, action: out.output, mechanical: false };
+    stats.llmDecisions += 1;
+    return { ...item, action: out.output, mechanical: false };
   } catch {
     return {
-      fact, embedding: v, candidates,
-      action: { action: 'create', suggestedName: fact.title.slice(0, 60), confidence: 0.3, reason: 'fallback' },
+      ...item,
+      action: { action: 'create', suggestedName: item.fact.title.slice(0, 60), confidence: 0.3, reason: 'fallback' },
       mechanical: false,
     };
   }

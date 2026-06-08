@@ -27,6 +27,8 @@ export interface ExtractorOutput {
 export interface ExtractorPayload {
   text: string;
   windowId: string;
+  /** Serialized window brief (preferred over raw text when set). */
+  briefText?: string;
   /** Triage hint: agent may use to focus or skip. */
   domain?: string;
   /** Compact project context for grounding + consistent naming/dedup. */
@@ -52,7 +54,7 @@ export const EXTRACTOR_OUTPUT_SCHEMA: Record<string, unknown> = {
   type: 'object',
   required: ['facts'],
   properties: {
-    facts: { type: 'array', items: FACT_SCHEMA, maxItems: 25 },
+    facts: { type: 'array', items: FACT_SCHEMA, maxItems: 8 },
     rationale: { type: 'string', maxLength: 600 },
   },
   additionalProperties: false,
@@ -77,7 +79,7 @@ export function defineExtractor(opts: DefineExtractorOpts): Agent<ExtractorPaylo
     modelKey: opts.modelKey,
     schema: EXTRACTOR_OUTPUT_SCHEMA,
     prompt(input: AgentInput<ExtractorPayload>): ChatMessage[] {
-      const text = clamp(input.payload.text, 7000);
+      const text = clamp(input.payload.briefText ?? input.payload.text, 3500);
       const allowedList = [...allowedSet].join(' | ');
       return [
         {

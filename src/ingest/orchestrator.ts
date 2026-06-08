@@ -12,7 +12,7 @@
  */
 import type { Database as SqliteDb } from 'better-sqlite3';
 import { openCodeDb, openKnowledgeDb } from '../db/connection.js';
-import { loadConfig } from '../config.js';
+import { loadConfig, resolveIngestConfig, resolveAnalyzeConfig, configModelFingerprint, type AnalyzeTierProfile } from '../config.js';
 import { CursorAdapter } from './cursor.js';
 import { ClaudeCodeAdapter } from './claude-code.js';
 import { CodexAdapter } from './codex.js';
@@ -25,7 +25,6 @@ import { insertWindow, segmentTurnsToWindows } from '../pipeline/segmenter.js';
 import { runSyntaxPass } from '../pipeline/syntax.js';
 import { upsertKNode, insertProvenance } from '../knowledge/store.js';
 import { setPipelineState } from '../knowledge/pipeline-state.js';
-import { configModelFingerprint } from '../config.js';
 import { resolvePath, writeKToCode } from '../pipeline/resolve.js';
 import type { AgentId, Turn } from '../types.js';
 import { runTriageForWindows, type TriageRunResult } from '../pipeline/triage.js';
@@ -36,6 +35,13 @@ import { runClustererForNewFacts } from '../pipeline/cluster.js';
 import { runFactDedupe } from '../pipeline/fact-dedupe.js';
 import { runEnrichment } from '../pipeline/enrich.js';
 import { analyzeWithDbs } from '../pipeline/analyze-code.js';
+import { shouldIngestSession, type SessionFilterState } from '../pipeline/session-filter.js';
+import { normalizeTurnText } from '../pipeline/normalize-turns.js';
+import { buildBriefsForWindows } from '../pipeline/window-brief.js';
+import { preTriageWindowDedupe } from '../pipeline/window-dedupe.js';
+import { bumpPipelineAudit } from '../knowledge/pipeline-audit.js';
+import { resolveIngestQualityProfile } from '../pipeline/profile.js';
+import type { EnrichProfile } from '../pipeline/enrich.js';
 
 export interface IngestProgress {
   stage: 'discover' | 'ingest' | 'segment' | 'triage' | 'extract' | 'cluster' | 'analyze' | 'enrich';
@@ -52,6 +58,10 @@ export interface IngestOpts {
   runEnrich?: boolean;
   /** Skip the code-grounded analysis pass (file summaries + layers). Defaults to running it. */
   runAnalyze?: boolean;
+  /** File analyze scope when runAnalyze is true. */
+  analyzeProfile?: AnalyzeTierProfile;
+  /** Enrich agent stack when runEnrich is true. */
+  enrichProfile?: EnrichProfile;
   /**
    * Re-run triage/extract/cluster over ALL existing windows, not just newly
    * ingested ones. Use after switching models or to finish an interrupted run.
@@ -101,9 +111,16 @@ export async function ingestProject(root: string, opts: IngestOpts = {}): Promis
     const adapters: SessionAdapter[] = buildSessionAdapters(cfg, opts.agentFilter);
     const newWindowIds: string[] = [];
 
+    const ingestCfg = resolveIngestConfig(cfg);
+    const sessionFilter: SessionFilterState = { accepted: 0 };
+
     progress({ stage: 'discover' });
     for (const adapter of adapters) {
       for await (const ref of adapter.discover(root)) {
+        if (!shouldIngestSession(ref, ingestCfg, sessionFilter)) {
+          bumpPipelineAudit(knowDb, { windowsSessionSkipped: 1 });
+          continue;
+        }
         stats.sessionsSeen++;
         const now = Date.now();
         const { id: sessionId, isNew, offset } = upsertSession(knowDb, ref, now);
@@ -125,7 +142,8 @@ export async function ingestProject(root: string, opts: IngestOpts = {}): Promis
         const batch: Array<{ idx: number; raw: any; offsetAfter: number }> = [];
         let idx = firstNewIdx;
         for await (const { turn, offsetAfter } of adapter.read(ref, offset)) {
-          batch.push({ idx, raw: turn, offsetAfter });
+          const cleaned = { ...turn, text: normalizeTurnText(turn.text ?? '', ingestCfg) };
+          batch.push({ idx, raw: cleaned, offsetAfter });
           idx++;
           if (batch.length >= 500) {
             insertTx(batch.splice(0, batch.length));
@@ -145,25 +163,14 @@ export async function ingestProject(root: string, opts: IngestOpts = {}): Promis
 
         const windowTx = knowDb.transaction(() => {
           for (const w of newOnly) {
-            const before = stats.windowsCreated;
             insertWindow(knowDb, w);
-            // detect if it was new by checking if it had previously existed:
-            const existed = knowDb
-              .prepare(`SELECT 1 FROM turn_windows WHERE id=?`)
+            const haveSyntax = knowDb
+              .prepare(`SELECT 1 FROM k_provenance WHERE window_id=? LIMIT 1`)
               .get(w.id);
-            if (existed) {
-              // count as created only if we didn't already process it (heuristic: no syntax facts yet)
-              const haveSyntax = knowDb
-                .prepare(`SELECT 1 FROM k_provenance WHERE window_id=? LIMIT 1`)
-                .get(w.id);
-              if (!haveSyntax) {
-                runSyntaxForWindow(codeDb, knowDb, w.id, w.text);
-                stats.windowsCreated++;
-                newWindowIds.push(w.id);
-              }
-              if (stats.windowsCreated === before) {
-                // window was already present + already had syntax pass; skip
-              }
+            if (!haveSyntax) {
+              runSyntaxForWindow(codeDb, knowDb, w.id, w.text);
+              stats.windowsCreated++;
+              newWindowIds.push(w.id);
             }
           }
         });
@@ -179,10 +186,18 @@ export async function ingestProject(root: string, opts: IngestOpts = {}): Promis
       ? (knowDb.prepare(`SELECT id FROM turn_windows ORDER BY rowid`).all() as Array<{ id: string }>).map((w) => w.id)
       : newWindowIds;
 
+    // Phase 1–2: briefs + pre-triage dedupe (no triage LLM on duplicates).
+    let windowsForTriage = windowsToProcess;
+    if (windowsToProcess.length > 0) {
+      buildBriefsForWindows(knowDb, windowsToProcess, ingestCfg);
+      const deduped = await preTriageWindowDedupe(knowDb, cfg, windowsToProcess);
+      windowsForTriage = deduped.kept;
+    }
+
     // 5. Triage (M3)
-    if (opts.runTriage !== false && windowsToProcess.length > 0) {
-      progress({ stage: 'triage', current: 0, total: windowsToProcess.length });
-      const tri: TriageRunResult = await runTriageForWindows(root, knowDb, cfg, windowsToProcess, {
+    if (opts.runTriage !== false && windowsForTriage.length > 0) {
+      progress({ stage: 'triage', current: 0, total: windowsForTriage.length });
+      const tri: TriageRunResult = await runTriageForWindows(root, knowDb, cfg, windowsForTriage, {
         onWindow: (i, total) => progress({ stage: 'triage', current: i, total }),
       });
       stats.triaged = tri.triaged;
@@ -210,6 +225,12 @@ export async function ingestProject(root: string, opts: IngestOpts = {}): Promis
           if (inc.incidents > 0) exStats.factsProduced += inc.incidents;
         } catch { /* best-effort */ }
 
+        // 6.9 Early fact dedupe before cluster (collapse near-duplicates cheaply).
+        if (exStats.factsProduced > 0) {
+          const early = runFactDedupe(knowDb, { unclusteredOnly: true });
+          if (early.merged > 0) bumpPipelineAudit(knowDb, { factsEarlyDeduped: early.merged });
+        }
+
         // 7. Clusterer + Summarizer over newly-produced facts (M7)
         if (exStats.factsProduced > 0) {
           const clStats = await runClustererForNewFacts(knowDb, cfg);
@@ -222,9 +243,18 @@ export async function ingestProject(root: string, opts: IngestOpts = {}): Promis
     // 7.5 Code-grounded analysis (file summaries + architectural layers).
     //     Depends on the L0 graph (from `sync`); incremental + idempotent.
     //     Runs before enrichment so the domain-analyzer can use layers.
-    if (opts.runAnalyze !== false && opts.runExtract !== false) {
+    const qualityProfile = resolveIngestQualityProfile(
+      opts.analyzeProfile,
+      resolveAnalyzeConfig(cfg).tier,
+    );
+    const lean = qualityProfile === 'lean';
+    const enrichProfile = opts.enrichProfile
+      ?? (qualityProfile === 'deep' ? 'deep' : 'standard');
+
+    if (opts.runAnalyze !== false && opts.runExtract !== false && !lean) {
       try {
         const an = await analyzeWithDbs(codeDb, knowDb, root, cfg, {
+          analyzeProfile: qualityProfile === 'deep' ? 'deep' : 'standard',
           onFile: (i, total) => progress({ stage: 'analyze', current: i, total }),
         });
         stats.filesAnalyzed = an.filesAnalyzed;
@@ -234,11 +264,12 @@ export async function ingestProject(root: string, opts: IngestOpts = {}): Promis
     // 8. Domain enrichment (L2.5). Runs unconditionally — structural
     //    extraction depends on the code graph (updated by `sync`, not ingest),
     //    and is idempotent. Skip only when explicitly disabled.
-    if (opts.runEnrich !== false) {
+    if (opts.runEnrich !== false && !lean) {
       progress({ stage: 'enrich' });
       const enrich = await runEnrichment(root, knowDb, codeDb, cfg, {
         noAgent: opts.runExtract === false,
         force: opts.reprocess === true,
+        enrichProfile,
       });
       stats.domainEntities = enrich.structuralEntities;
       stats.domainRelationships = enrich.structuralRelationships + enrich.agentRelationships;

@@ -4,6 +4,31 @@ All notable changes to Substrate Net. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Pipeline refactor (RFC `docs/workflow-refactor.md`)
+
+- **Pre-triage window dedupe** — embed-dedupe before triage LLM; mechanical drops audited.
+- **Window briefs** — deterministic verbatim quotes + compressed narrative for triage/extract.
+- **Project core pack** — shared evidence context for extract (README, decisions, entities).
+- **Anchor gate** — drop isolated facts; cap **8 facts/window** by default.
+- **Early fact dedupe** — collapse near-duplicates before cluster.
+- **File analyze tiers** — `standard` profile analyzes entrypoints + high fan-in only; `deep`/`--full` analyzes all.
+- **Config** — `ingest` and `analyze` sections in `~/.substrate-net/config.json`.
+- Cluster thresholds tuned (`AUTO_ATTACH` 0.88) for fewer LLM cluster calls.
+- **Setup planner (M6)** — `setup --plan-only` shows per-phase calls, tokens
+  (in/out), OpenRouter cost, and wall time; session-filter-aware window counts;
+  file-tier analyze estimates; embed dedupe excluded from LLM call totals.
+- **Fused enrich (M5)** — standard profile runs two flash-first agents
+  (`domainFuser`, `industryFuser`) instead of eight frontier enrich calls;
+  `--full` / deep profile retains the legacy agent stack.
+- **Batch clusterer (M7)** — ambiguous facts are decided in batched
+  `clustererBatch` calls (`config.ingest.clusterBatch`, default on); planner
+  divides cluster estimates by `batchSize`.
+- **Profile matrix** — `deep` runner profile (incremental deep quality);
+  `setup --profile lean|standard|deep`; `update --deep`; `SUBNET_PROFILE` env
+  for ingest scripts; doctor shows `pipeline_audit` counters.
+
 ## [0.2.0] - Unreleased
 
 ### Workflow revamp

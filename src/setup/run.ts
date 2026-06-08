@@ -1,15 +1,16 @@
 import { ensureGlobalConfig } from '../config.js';
-import { runProjectPipeline, type RunProfile } from '../pipeline/run-project.js';
+import { runProjectPipeline } from '../pipeline/run-project.js';
+import { runProfileFromSetup } from '../pipeline/profile.js';
 import { runGlobalPipeline } from '../pipeline/run-global.js';
 import { writeLastRun } from './last-run.js';
 import type { SetupRunOpts, SetupRunResult } from './types.js';
 import type { AgentId } from '../types.js';
 
 export async function runSetupPipeline(
-  opts: SetupRunOpts & { agentFilter?: AgentId },
+  opts: SetupRunOpts & { agentFilter?: AgentId; profile?: string },
 ): Promise<SetupRunResult> {
   ensureGlobalConfig();
-  const profile: RunProfile = opts.reprocess ? 'full' : 'default';
+  const profile = runProfileFromSetup({ profile: opts.profile, reprocess: opts.reprocess });
   const result: SetupRunResult = { projects: [] };
 
   const projectResults = [];

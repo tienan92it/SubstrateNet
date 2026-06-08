@@ -14,6 +14,7 @@ import './problem-solution.js';
 import './window-extractor.js';
 import './incident.js';
 import './clusterer.js';
+import './clusterer-batch.js';
 import './summarizer.js';
 import './linker.js';
 import './verifier.js';
@@ -27,6 +28,8 @@ import './industry-enricher.js';
 import './file-analyzer.js';
 import './architecture-analyzer.js';
 import './domain-analyzer.js';
+import './domain-fuser.js';
+import './industry-fuser.js';
 import './profile-writer.js';
 // Dedupe is not a chat agent and self-registers when constructed.
 

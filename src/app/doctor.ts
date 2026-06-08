@@ -7,6 +7,7 @@ import { loadConfig, projectConfigDir, configModelFingerprint } from '../config.
 import { validateConfig } from '../config/validate.js';
 import { openCodeDb, openKnowledgeDb } from '../db/connection.js';
 import { getPipelineState } from '../knowledge/pipeline-state.js';
+import { getPipelineAudit, type PipelineAudit } from '../knowledge/pipeline-audit.js';
 import { repairConceptSummaries } from '../pipeline/cluster.js';
 import { runGlobalPipeline } from '../pipeline/run-global.js';
 import { readLastRun } from '../setup/last-run.js';
@@ -22,6 +23,7 @@ export interface ProjectHealth {
   recentFailures: number;
   recentRuns: number;
   modelDrift: boolean;
+  pipelineAudit: PipelineAudit;
 }
 
 export interface DoctorReport {
@@ -89,7 +91,10 @@ export function inspectProject(root: string): ProjectHealth {
         WHERE a.path IS NULL
       `).get() as { n: number }).n;
     } catch { /* file_analysis may be absent */ }
-    return { path: root, name, unclusteredFacts, conceptsMissingSummary, pendingFiles, recentFailures, recentRuns, modelDrift };
+    return {
+      path: root, name, unclusteredFacts, conceptsMissingSummary, pendingFiles,
+      recentFailures, recentRuns, modelDrift, pipelineAudit: getPipelineAudit(knowDb),
+    };
   } finally {
     knowDb.close();
     codeDb.close();

@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 import { resolve } from 'path';
 import { discoverWorkspaces } from '../setup/discover.js';
 import { buildSetupPlan } from '../setup/plan.js';
+import { runProfileFromSetup, resolveQualityProfile } from '../pipeline/profile.js';
 import { runSetupPipeline } from '../setup/run.js';
 import { formatDiscoverTable, formatPlanTable } from '../setup/format.js';
 import type { AgentId } from '../types.js';
@@ -34,7 +35,8 @@ export function registerSetup(program: Command): void {
     .option('--skip-dashboard', 'Skip dashboard build at the end')
     .option('--prose', 'Generate portfolio prose via ProfileWriter', false)
     .option('--verify', 'Run verify after ingest per project', false)
-    .option('--reprocess', 'Re-run triage/extract over all windows', false)
+    .option('--profile <name>', 'Quality profile: lean | standard | deep (default: standard)')
+    .option('--reprocess', 'Re-run triage/extract over all windows (implies deep + full)', false)
     .option('--yes', 'Skip confirmation prompts', false)
     .option('--json', 'Machine-readable JSON output', false)
     .option('--open', 'Open dashboard in browser when done', false)
@@ -46,6 +48,7 @@ export function registerSetup(program: Command): void {
       skipDashboard: boolean;
       prose: boolean;
       verify: boolean;
+      profile?: string;
       reprocess: boolean;
       yes: boolean;
       json: boolean;
@@ -117,7 +120,9 @@ export function registerSetup(program: Command): void {
         process.exit(1);
       }
 
-      const plan = await buildSetupPlan(selected, { prose: opts.prose, profile: opts.reprocess ? 'full' : 'default' });
+      const runProfile = runProfileFromSetup({ profile: opts.profile, reprocess: opts.reprocess });
+      const planProfile = resolveQualityProfile(runProfile);
+      const plan = await buildSetupPlan(selected, { prose: opts.prose, profile: planProfile });
 
       if (opts.planOnly) {
         if (opts.json) {
@@ -155,6 +160,7 @@ export function registerSetup(program: Command): void {
       const result = await runSetupPipeline({
         projects: selected,
         agentFilter: agentFilter,
+        profile: opts.profile,
         reprocess: opts.reprocess,
         verify: opts.verify,
         prose: opts.prose,

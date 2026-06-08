@@ -23,10 +23,11 @@ export function formatDiscoverTable(rows: DiscoveredWorkspace[]): string {
 }
 
 export function formatPlanTable(plan: SetupPlan): string {
-  const lines = [
-    padRow(['Project', 'Files', 'Pending', 'Sessions', 'Windows', 'LLM calls', 'Cache', 'Est. time']),
-    padRow(['-------', '-----', '-------', '--------', '-------', '---------', '-----', '---------']),
-  ];
+  const lines: string[] = [];
+
+  lines.push('Per project');
+  lines.push(padRow(['Project', 'Files', 'Pending', 'Sessions', 'Windows', 'Kept', 'LLM calls', 'Cache', 'Est. time']));
+  lines.push(padRow(['-------', '-----', '-------', '--------', '-------', '----', '---------', '-----', '---------']));
   for (const p of plan.projects) {
     lines.push(padRow([
       p.name,
@@ -34,6 +35,7 @@ export function formatPlanTable(plan: SetupPlan): string {
       String(p.pendingFiles),
       String(p.sessions),
       String(p.estWindows),
+      String(p.estWindowsKept),
       String(p.llmCalls),
       `${p.cacheHitPct}%`,
       formatDuration(p.estWallMs, p.backendMode),
@@ -46,21 +48,48 @@ export function formatPlanTable(plan: SetupPlan): string {
     String(t.pendingFiles),
     String(t.sessions),
     String(t.estWindows),
+    String(t.estWindowsKept),
     String(t.llmCalls),
     `${t.cacheHitPct}%`,
     formatDuration(t.estWallMs, plan.backendMode),
   ]));
-  if (plan.backendMode !== 'local' && t.estTokens > 0) {
-    lines.push(`\nEstimated tokens (frontier): ~${formatNum(t.estTokens)}` +
-      (t.estCostUsd != null ? ` · ~$${t.estCostUsd.toFixed(2)}` : ''));
+
+  lines.push('');
+  lines.push('Per phase');
+  lines.push(padPhaseRow(['Phase', 'Calls', 'Tokens(in)', 'Tokens(out)', 'Est.$', 'Wall', 'Note']));
+  lines.push(padPhaseRow(['-----', '-----', '----------', '-----------', '-----', '----', '----']));
+  for (const ph of plan.phases) {
+    lines.push(padPhaseRow([
+      ph.phase,
+      String(ph.calls),
+      formatNum(ph.tokensIn),
+      formatNum(ph.tokensOut),
+      ph.estCostUsd > 0 ? `$${ph.estCostUsd.toFixed(2)}` : '—',
+      formatDuration(ph.estWallMs, plan.backendMode),
+      ph.note ?? '',
+    ]));
   }
-  lines.push(`Concurrency: ${plan.concurrency} · Backend: ${plan.backendMode}` +
-    (plan.profile ? ` · Profile: ${plan.profile}` : ''));
+
+  if (plan.backendMode !== 'local' && t.estTokens > 0) {
+    lines.push('');
+    lines.push(
+      `OpenRouter est.: ~${formatNum(t.estTokensIn)} in · ~${formatNum(t.estTokensOut)} out` +
+        (t.estCostUsd > 0 ? ` · ~$${t.estCostUsd.toFixed(2)}` : ''),
+    );
+  }
+  lines.push(
+    `Concurrency: ${plan.concurrency} · Backend: ${plan.backendMode} · Profile: ${plan.profile}`,
+  );
   return lines.join('\n');
 }
 
 function padRow(cols: string[]): string {
-  const widths = [14, 8, 8, 9, 8, 10, 6, 12];
+  const widths = [14, 8, 8, 9, 8, 6, 10, 6, 12];
+  return cols.map((c, i) => c.slice(0, widths[i]!).padEnd(widths[i]!)).join(' ');
+}
+
+function padPhaseRow(cols: string[]): string {
+  const widths = [16, 7, 12, 12, 8, 10, 22];
   return cols.map((c, i) => c.slice(0, widths[i]!).padEnd(widths[i]!)).join(' ');
 }
 
@@ -75,8 +104,9 @@ function formatBytes(n: number): string {
 }
 
 function formatDuration(ms: number, mode: string): string {
+  if (ms < 60_000) return ms < 1000 ? '<1s' : `~${Math.round(ms / 1000)}s`;
   const min = Math.max(1, Math.round(ms / 60_000));
-  return mode === 'local' ? `~${min} min` : `~${min} min wall`;
+  return mode === 'local' ? `~${min}m` : `~${min}m wall`;
 }
 
 function formatNum(n: number): string {

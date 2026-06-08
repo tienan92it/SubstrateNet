@@ -28,14 +28,19 @@ const GROUNDING_RANK: Record<string, number> = {
 
 const CHAT_AGENTS = new Set(['cursor', 'claude-code', 'codex', 'copilot']);
 
+export interface FactDedupeOpts {
+  /** Only dedupe facts not yet assigned to a concept (pre-cluster pass). */
+  unclusteredOnly?: boolean;
+}
+
 export interface FactDedupeStats { merged: number; corroborated: number; }
 
 interface FactRow { id: string; kind: string; grounding: string; createdAt: number; vec: Float32Array; }
 
-export function runFactDedupe(knowDb: SqliteDb): FactDedupeStats {
+export function runFactDedupe(knowDb: SqliteDb, opts: FactDedupeOpts = {}): FactDedupeStats {
   const stats: FactDedupeStats = { merged: 0, corroborated: 0 };
   for (const kind of DEDUPE_KINDS) {
-    const rows = loadFacts(knowDb, kind);
+    const rows = loadFacts(knowDb, kind, opts.unclusteredOnly);
     if (rows.length < 2) continue;
     for (const group of clusterBySimilarity(rows)) {
       if (group.length < 2) continue;
@@ -45,12 +50,13 @@ export function runFactDedupe(knowDb: SqliteDb): FactDedupeStats {
   return stats;
 }
 
-function loadFacts(knowDb: SqliteDb, kind: string): FactRow[] {
+function loadFacts(knowDb: SqliteDb, kind: string, unclusteredOnly?: boolean): FactRow[] {
+  const clusterClause = unclusteredOnly ? `AND k.cluster_id IS NULL` : '';
   const rows = knowDb.prepare(`
     SELECT k.id AS id, k.kind AS kind, COALESCE(k.grounding,'stated') AS grounding,
            k.created_at AS createdAt, e.embedding AS emb
     FROM k_nodes k JOIN k_node_embeddings e ON e.k_node_id = k.id
-    WHERE k.kind = ?
+    WHERE k.kind = ? ${clusterClause}
     ORDER BY k.created_at ASC
     LIMIT ?
   `).all(kind, MAX_PER_KIND) as Array<{ id: string; kind: string; grounding: string; createdAt: number; emb: Buffer }>;

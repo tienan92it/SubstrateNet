@@ -26,6 +26,11 @@ import {
 import { DedupeAgent, storeKNodeEmbedding } from '../agents/dedupe.js';
 import { getWindowText, getTriageLabels } from '../knowledge/triage-store.js';
 import { buildProjectContext } from '../knowledge/project-context.js';
+import { renderProjectCorePack, buildProjectCorePack } from './project-core-pack.js';
+import { serializeWindowBrief, getWindowBrief } from './window-brief.js';
+import { filterFactsByAnchor } from './fact-filter.js';
+import { resolveIngestConfig } from '../config.js';
+import { bumpPipelineAudit } from '../knowledge/pipeline-audit.js';
 import { upsertKNode, insertProvenance } from '../knowledge/store.js';
 import { resolvePath, resolveSymbol, writeKToCode } from './resolve.js';
 import { mapPool } from '../util/pool.js';
@@ -110,7 +115,7 @@ export interface ExtractRunOpts {
 }
 
 export async function runExtractorsForKeptWindows(
-  _root: string,
+  root: string,
   knowDb: SqliteDb,
   codeDb: SqliteDb,
   cfg: SubstrateNetConfig,
@@ -138,29 +143,33 @@ export async function runExtractorsForKeptWindows(
   // per-kind agents remain the fallback when no unified extractor is configured.
   const useUnified = Boolean(cfg.agents.windowExtractor);
   const docWindows = docWindowIds(knowDb);
-  const tasks: Array<{ windowId: string; text: string; domain: string; agent: Extractor }> = [];
+  const ingest = resolveIngestConfig(cfg);
+  const tasks: Array<{ windowId: string; text: string; briefText?: string; domain: string; agent: Extractor }> = [];
   for (const windowId of windowIds) {
     const labels = getTriageLabels(knowDb, windowId);
     if (!labels) continue;
     const text = getWindowText(knowDb, windowId);
     if (!text) continue;
-    if (labels.rationale && /\[dup_of:/.test(labels.rationale)) continue; // skip dups
+    if (labels.rationale && /(?:\[dup_of:|mechanical_dup:)/.test(labels.rationale)) continue;
     const { agents } = route(labels.domain, labels.quality, docWindows.has(windowId), labels.activity);
-    if (agents.length === 0) continue; // noise window — nothing to extract
+    if (agents.length === 0) continue;
+    const brief = getWindowBrief(knowDb, windowId);
+    const briefText = brief ? serializeWindowBrief(brief, ingest.maxBriefChars) : undefined;
     if (useUnified) {
-      tasks.push({ windowId, text, domain: labels.domain, agent: WINDOW_EXTRACTOR_AGENT });
+      tasks.push({ windowId, text, briefText, domain: labels.domain, agent: WINDOW_EXTRACTOR_AGENT });
     } else {
-      for (const agent of agents) tasks.push({ windowId, text, domain: labels.domain, agent });
+      for (const agent of agents) tasks.push({ windowId, text, briefText, domain: labels.domain, agent });
     }
   }
 
   const limit = cfg.concurrency ?? 4;
-  const context = buildProjectContext(knowDb) || undefined;
+  const corePack = renderProjectCorePack(buildProjectCorePack(knowDb, root));
+  const context = corePack || buildProjectContext(knowDb) || undefined;
   let taskDone = 0;
   const outcomes = await mapPool(tasks, limit, async (t) => {
     try {
       const out = await rt.run<ExtractorPayload, ExtractorOutput>(t.agent, {
-        payload: { text: t.text, windowId: t.windowId, domain: t.domain, context },
+        payload: { text: t.text, briefText: t.briefText, windowId: t.windowId, domain: t.domain, context },
       });
       taskDone++;
       runOpts.onTask?.(taskDone, tasks.length);
@@ -180,7 +189,11 @@ export async function runExtractorsForKeptWindows(
     const { t, out } = oc;
     const agent = t.agent;
     const windowId = t.windowId;
-    for (const fact of out.output.facts) {
+    const brief = getWindowBrief(knowDb, windowId);
+    const filtered = filterFactsByAnchor(out.output.facts, brief, ingest);
+    if (filtered.rejected > 0) bumpPipelineAudit(knowDb, { factsAnchorRejected: filtered.rejected });
+
+    for (const fact of filtered.kept) {
       const { node, provenance } = factToRows(fact, windowId, agent.name, out.model);
       const tx = knowDb.transaction(() => {
         upsertKNode(knowDb, node);

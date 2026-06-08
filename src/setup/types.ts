@@ -17,6 +17,19 @@ export interface DiscoveredWorkspace {
   unresolvedSlug?: string;
 }
 
+export type PlanProfile = 'lean' | 'standard' | 'deep';
+
+export interface PlanPhaseEstimate {
+  phase: string;
+  calls: number;
+  tokensIn: number;
+  tokensOut: number;
+  estCostUsd: number;
+  estWallMs: number;
+  /** e.g. "frontier (subscription)" or "mechanical" */
+  note?: string;
+}
+
 export interface ProjectPlanEstimate {
   path: string;
   name: string;
@@ -24,31 +37,41 @@ export interface ProjectPlanEstimate {
   pendingFiles: number;
   sessions: number;
   newTurnsEst: number;
+  /** Raw window count before mechanical dedupe. */
   estWindows: number;
+  /** Windows expected after pre-triage dedupe. */
+  estWindowsKept: number;
   llmCalls: number;
   cacheHitPct: number;
   estTokens: number;
+  estTokensIn: number;
+  estTokensOut: number;
   estWallMs: number;
+  estCostUsd: number;
   backendMode: 'local' | 'frontier' | 'mixed';
+  phases: PlanPhaseEstimate[];
 }
 
 export interface SetupPlan {
   projects: ProjectPlanEstimate[];
+  phases: PlanPhaseEstimate[];
   totals: {
     files: number;
     pendingFiles: number;
     sessions: number;
     estWindows: number;
+    estWindowsKept: number;
     llmCalls: number;
     cacheHitPct: number;
     estTokens: number;
+    estTokensIn: number;
+    estTokensOut: number;
     estWallMs: number;
-    estCostUsd?: number;
+    estCostUsd: number;
   };
   backendMode: 'local' | 'frontier' | 'mixed';
   concurrency: number;
-  /** Speed/quality profile the plan was computed for. */
-  profile?: string;
+  profile: PlanProfile;
 }
 
 export type SetupProgressEvent =
@@ -61,6 +84,8 @@ export type SetupProgressFn = (ev: SetupProgressEvent) => void;
 
 export interface SetupRunOpts {
   projects: string[];
+  /** lean | standard | deep (see `subnet setup --profile`) */
+  profile?: string;
   reprocess?: boolean;
   verify?: boolean;
   prose?: boolean;

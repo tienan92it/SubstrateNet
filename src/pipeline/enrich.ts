@@ -30,6 +30,7 @@ import { runManifestParser } from './manifests.js';
 import { runGapDetector } from './gap-detector.js';
 import { runEntityReconciler } from './reconcile.js';
 import { runClustererForNewFacts } from './cluster.js';
+import { runEnrichFused } from './enrich-fused.js';
 import { upsertKNode, insertKEdgeUnique, setGroundingScope } from '../knowledge/store.js';
 import { getPipelineState, setPipelineState } from '../knowledge/pipeline-state.js';
 import { DedupeAgent, storeKNodeEmbedding } from '../agents/dedupe.js';
@@ -79,6 +80,8 @@ export interface EnrichStats {
   techDomains: number;
 }
 
+export type EnrichProfile = 'standard' | 'deep';
+
 export interface EnrichOpts {
   /** Skip all LLM stages (structural + deterministic only). */
   noAgent?: boolean;
@@ -86,6 +89,8 @@ export interface EnrichOpts {
   noEnrichIndustry?: boolean;
   /** Re-run the agent stages even if inputs are unchanged (e.g. --full). */
   force?: boolean;
+  /** standard = 2 fused flash calls; deep = legacy 8-agent frontier stack. */
+  enrichProfile?: EnrichProfile;
   maxEntities?: number;
   maxFacts?: number;
 }
@@ -125,57 +130,26 @@ export async function runEnrichment(
   const prevHash = getPipelineState(knowDb, ENRICH_HASH_KEY);
   const skipAgents = !opts.noAgent && !opts.force && prevHash === inputHash;
 
+  const deepEnrich = opts.enrichProfile === 'deep';
+
   if (!opts.noAgent && !skipAgents) {
-    // ── 4. TechnicalProfiler (technical scope) ─────────────────────────
-    try {
-      stats.technicalSkills = await runTechnicalProfiler(knowDb, codeDb, cfg);
-      producedClusterableFacts ||= stats.technicalSkills > 0;
-    } catch { /* backend down; structural facts still stand */ }
-
-    // ── 5. DomainModeler (relationships + gaps) ────────────────────────
-    try {
-      const ag = await runDomainModeler(knowDb, cfg, opts);
-      stats.agentRelationships = ag.relationships;
-      stats.agentGaps = ag.gaps;
-    } catch { /* ignore */ }
-
-    // ── 5b. ArchitectureModeler (components + structure + lifecycles) ───
-    try {
-      const arch = await runArchitectureModeler(knowDb, codeDb, cfg);
-      stats.architectureComponents = arch.components;
-      stats.architectureRelationships = arch.relationships;
-      producedClusterableFacts ||= arch.components > 0;
-    } catch { /* ignore */ }
-
-    // ── 6. IndustryClassifier (industry scope) ─────────────────────────
-    try {
-      const ind = await runIndustryClassifier(knowDb, codeDb, root, cfg);
-      stats.industry = ind.industry;
-    } catch { /* ignore */ }
-
-    // ── 7. IndustryEnricher (model → external gap-fill) ────────────────
-    if (!opts.noEnrichIndustry && stats.industry) {
-      try {
-        const enr = await runIndustryEnricher(knowDb, cfg, stats.industry);
-        stats.industryConcepts = enr.produced;
-        stats.externalUpgrades = enr.upgraded;
-        producedClusterableFacts ||= enr.produced > 0;
-      } catch { /* ignore */ }
+    if (deepEnrich) {
+      await runDeepEnrichAgents(root, knowDb, codeDb, cfg, opts, stats, (v) => { producedClusterableFacts ||= v; });
+    } else {
+      const fused = await runEnrichFused(root, knowDb, codeDb, cfg, opts);
+      stats.technicalSkills = fused.technicalSkills ?? 0;
+      stats.agentRelationships = fused.agentRelationships ?? 0;
+      stats.agentGaps = fused.agentGaps ?? 0;
+      stats.industry = fused.industry;
+      stats.industryConcepts = fused.industryConcepts ?? 0;
+      stats.externalUpgrades = fused.externalUpgrades ?? 0;
+      stats.domainHighlights = fused.domainHighlights ?? 0;
+      stats.architectureComponents = fused.architectureComponents ?? 0;
+      stats.architectureRelationships = fused.architectureRelationships ?? 0;
+      stats.businessDomains = fused.businessDomains ?? 0;
+      stats.techDomains = fused.techDomains ?? 0;
+      producedClusterableFacts ||= Boolean(fused.producedClusterableFacts);
     }
-
-    // ── 7b. DomainAnalyzer: fuse technical + industry into portfolio highlights ─
-    try {
-      stats.domainHighlights = await runDomainAnalyzer(knowDb, codeDb, cfg, stats.industry);
-    } catch { /* ignore */ }
-
-    // ── 7c. Knowledge zones: business + technical domains run concurrently ─
-    //        (independent agents writing different node kinds).
-    const [biz, tech] = await Promise.all([
-      runBusinessDomainModeler(knowDb, cfg, stats.industry).catch(() => 0),
-      runTechDomainModeler(knowDb, codeDb, cfg).catch(() => 0),
-    ]);
-    stats.businessDomains = biz;
-    stats.techDomains = tech;
 
     // Record the input fingerprint so the next unchanged run can skip agents.
     setPipelineState(knowDb, ENRICH_HASH_KEY, inputHash);
@@ -191,6 +165,59 @@ export async function runEnrichment(
   }
 
   return stats;
+}
+
+async function runDeepEnrichAgents(
+  root: string,
+  knowDb: SqliteDb,
+  codeDb: SqliteDb,
+  cfg: SubstrateNetConfig,
+  opts: EnrichOpts,
+  stats: EnrichStats,
+  onClusterable: (v: boolean) => void,
+): Promise<void> {
+  try {
+    stats.technicalSkills = await runTechnicalProfiler(knowDb, codeDb, cfg);
+    onClusterable(stats.technicalSkills > 0);
+  } catch { /* backend down */ }
+
+  try {
+    const ag = await runDomainModeler(knowDb, cfg, opts);
+    stats.agentRelationships = ag.relationships;
+    stats.agentGaps = ag.gaps;
+  } catch { /* ignore */ }
+
+  try {
+    const arch = await runArchitectureModeler(knowDb, codeDb, cfg);
+    stats.architectureComponents = arch.components;
+    stats.architectureRelationships = arch.relationships;
+    onClusterable(arch.components > 0);
+  } catch { /* ignore */ }
+
+  try {
+    const ind = await runIndustryClassifier(knowDb, codeDb, root, cfg);
+    stats.industry = ind.industry;
+  } catch { /* ignore */ }
+
+  if (!opts.noEnrichIndustry && stats.industry) {
+    try {
+      const enr = await runIndustryEnricher(knowDb, cfg, stats.industry);
+      stats.industryConcepts = enr.produced;
+      stats.externalUpgrades = enr.upgraded;
+      onClusterable(enr.produced > 0);
+    } catch { /* ignore */ }
+  }
+
+  try {
+    stats.domainHighlights = await runDomainAnalyzer(knowDb, codeDb, cfg, stats.industry);
+  } catch { /* ignore */ }
+
+  const [biz, tech] = await Promise.all([
+    runBusinessDomainModeler(knowDb, cfg, stats.industry).catch(() => 0),
+    runTechDomainModeler(knowDb, codeDb, cfg).catch(() => 0),
+  ]);
+  stats.businessDomains = biz;
+  stats.techDomains = tech;
 }
 
 /** Embed a fact (best-effort) so it can be clustered later. */

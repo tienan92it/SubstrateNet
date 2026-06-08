@@ -20,6 +20,9 @@ import type { SubstrateNetConfig } from '../config.js';
 import { openCodeDb, openKnowledgeDb } from '../db/connection.js';
 import { mapPool } from '../util/pool.js';
 import { runArchitecturePass } from './architecture.js';
+import { filterPathsForAnalyze } from '../code/file-tiers.js';
+import type { AnalyzeTierProfile } from '../config.js';
+import { bumpPipelineAudit } from '../knowledge/pipeline-audit.js';
 
 export interface AnalyzeStats {
   filesAnalyzed: number;
@@ -86,6 +89,7 @@ export function upsertFileAnalysis(
 
 export interface AnalyzeOpts {
   full?: boolean;
+  analyzeProfile?: AnalyzeTierProfile;
   onFile?: (current: number, total: number) => void;
 }
 
@@ -122,8 +126,15 @@ export async function analyzeWithDbs(
     for (const r of codeDb.prepare(`SELECT path, content_hash FROM file_analysis`).all() as Array<{ path: string; content_hash: string }>) {
       prior.set(r.path, r.content_hash);
     }
-    const pending = files.filter((f) => opts.full || prior.get(f.path) !== f.content_hash);
+    let pending = files.filter((f) => opts.full || prior.get(f.path) !== f.content_hash);
+    const profile: AnalyzeTierProfile = opts.full ? 'deep' : (opts.analyzeProfile ?? 'standard');
+    const { analyze, skipped } = filterPathsForAnalyze(
+      pending.map((f) => f.path), codeDb, cfg, profile,
+    );
+    const analyzeSet = new Set(analyze);
+    pending = pending.filter((f) => analyzeSet.has(f.path));
     stats.filesSkipped = files.length - pending.length;
+    if (skipped > 0) bumpPipelineAudit(knowDb, { filesAnalyzeSkippedTier: skipped });
 
     const rt = new AgentRuntime({ knowledgeDb: knowDb, config: cfg });
     const limit = cfg.concurrency ?? 4;

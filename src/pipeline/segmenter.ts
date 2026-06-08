@@ -85,10 +85,12 @@ export function segmentTurnsToWindows(
   return windows;
 }
 
-export function insertWindow(db: SqliteDb, w: PendingWindow): void {
-  db.prepare(`
+/** @returns true when the window row was newly inserted. */
+export function insertWindow(db: SqliteDb, w: PendingWindow): boolean {
+  const info = db.prepare(`
     INSERT INTO turn_windows (id, session_id, start_turn, end_turn, text_hash, embedding)
     VALUES (?, ?, ?, ?, ?, NULL)
     ON CONFLICT(id) DO NOTHING
   `).run(w.id, w.sessionId, w.startTurn, w.endTurn, w.textHash);
+  return info.changes > 0;
 }

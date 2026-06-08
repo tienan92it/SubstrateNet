@@ -95,7 +95,12 @@ describe('extract pipeline', () => {
         }
         if (agent.name === 'intent') {
           return {
-            output: { facts: [{ kind: 'intent', title: 'document refund rules', confidence: 0.7 }] },
+            output: {
+              facts: [{
+                kind: 'intent', title: 'document refund rules', confidence: 0.7,
+                file_mentions: ['src/refund.ts'],
+              }],
+            },
             confidence: 0.7, model: 'fake', cached: false,
           } as any;
         }

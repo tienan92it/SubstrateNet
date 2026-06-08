@@ -6,6 +6,7 @@ import type { RunProfile } from '../pipeline/run-project.js';
 
 interface UpdateOpts {
   fast: boolean;
+  deep: boolean;
   full: boolean;
   global: boolean;
   dashboard: boolean;
@@ -21,7 +22,8 @@ export function registerUpdate(program: Command): void {
     .description('Incrementally refresh one project (or all registered): sync, ingest, link, dashboard')
     .argument('[path]', 'Project root (default: every registered project)')
     .option('--fast', 'Transcript-only: skip code analysis + domain enrichment', false)
-    .option('--full', 'Reprocess all windows (e.g. after a model change)', false)
+    .option('--deep', 'Deep quality: analyze all files + legacy enrich (incremental windows)', false)
+    .option('--full', 'Deep + reprocess all windows (e.g. after a model change)', false)
     .option('--global', 'Rebuild the cross-project (global) dashboard too', false)
     .option('--no-dashboard', 'Skip dashboard rebuild')
     .option('--verify', 'Run the verifier pass after ingest', false)
@@ -37,7 +39,7 @@ export function registerUpdate(program: Command): void {
         process.exit(1);
       }
 
-      const profile: RunProfile = opts.fast ? 'fast' : opts.full ? 'full' : 'default';
+      const profile: RunProfile = opts.fast ? 'fast' : opts.full ? 'full' : opts.deep ? 'deep' : 'default';
       const result = await runUpdate({
         projects,
         profile,

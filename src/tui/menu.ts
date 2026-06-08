@@ -95,8 +95,9 @@ async function updateFlow(p: Clack, projects: ReturnType<typeof registeredProjec
     message: 'Profile',
     options: [
       { value: 'fast', label: 'Fast', hint: 'transcripts only; skip analysis + enrichment' },
-      { value: 'default', label: 'Default', hint: 'incremental, full pipeline' },
-      { value: 'full', label: 'Full', hint: 'reprocess everything (after a model change)' },
+      { value: 'default', label: 'Standard', hint: 'incremental; tier-1 analyze + fused enrich' },
+      { value: 'deep', label: 'Deep', hint: 'all files + legacy enrich (no reprocess)' },
+      { value: 'full', label: 'Full', hint: 'deep + reprocess all windows' },
     ],
     initialValue: 'default',
   });
@@ -188,7 +189,13 @@ async function doctorFlow(p: Clack): Promise<void> {
     for (const h of report.health) {
       const rate = h.recentRuns > 0 ? Math.round((h.recentFailures / h.recentRuns) * 100) : 0;
       const drift = h.modelDrift ? ' · model config changed' : '';
-      p.log.info(`${h.name}: unclustered=${h.unclusteredFacts} missingSummaries=${h.conceptsMissingSummary} pendingFiles=${h.pendingFiles} failures=${rate}%${drift}`);
+      const a = h.pipelineAudit;
+      const audit = [
+        a.windowsMechanicalDup ? `dupWin=${a.windowsMechanicalDup}` : '',
+        a.factsAnchorRejected ? `anchorRej=${a.factsAnchorRejected}` : '',
+        a.filesAnalyzeSkippedTier ? `skipAnalyze=${a.filesAnalyzeSkippedTier}` : '',
+      ].filter(Boolean).join(' ');
+      p.log.info(`${h.name}: unclustered=${h.unclusteredFacts} missingSummaries=${h.conceptsMissingSummary} pendingFiles=${h.pendingFiles} failures=${rate}%${drift}${audit ? ` audit[${audit}]` : ''}`);
     }
   }
 

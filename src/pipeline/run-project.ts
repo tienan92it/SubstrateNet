@@ -7,9 +7,9 @@
  *
  * Profiles:
  *   - fast:    transcript-only delta. Skips analyze + enrich (no heavy agents).
- *   - default: incremental. Runs analyze + enrich; their internal hashing skips
- *              unchanged inputs.
- *   - full:    reprocess every window (e.g. after a model swap).
+ *   - default: incremental standard — tier-1 analyze + fused enrich.
+ *   - deep:    incremental deep — all files + legacy 8-agent enrich.
+ *   - full:    deep + reprocess every window (e.g. after a model swap).
  */
 import { resolve, basename } from 'path';
 import { loadConfig } from '../config.js';
@@ -20,8 +20,14 @@ import { openKnowledgeDb } from '../db/connection.js';
 import { ensureProjectInitialized } from '../setup/init-project.js';
 import type { SetupProgressFn } from '../setup/types.js';
 import type { AgentId } from '../types.js';
+import {
+  resolveAnalyzeProfile,
+  resolveEnrichProfile,
+  shouldReprocessWindows,
+  type RunProfile,
+} from './profile.js';
 
-export type RunProfile = 'full' | 'default' | 'fast';
+export type { RunProfile };
 
 export interface RunProjectOpts {
   profile: RunProfile;
@@ -57,7 +63,9 @@ export async function runProjectPipeline(root: string, opts: RunProjectOpts): Pr
   const emit = (stage: string) => opts.onProgress?.({ kind: 'stage', project: name, stage });
 
   const fast = opts.profile === 'fast';
-  const full = opts.profile === 'full';
+  const reprocess = shouldReprocessWindows(opts.profile);
+  const analyzeProfile = resolveAnalyzeProfile(opts.profile);
+  const enrichProfile = resolveEnrichProfile(opts.profile);
 
   try {
     emit('init');
@@ -65,16 +73,18 @@ export async function runProjectPipeline(root: string, opts: RunProjectOpts): Pr
 
     emit('sync');
     let ts = Date.now();
-    await syncProject(abs, { full: full && opts.syncFull });
+    await syncProject(abs, { full: reprocess && opts.syncFull });
     stages.sync = Date.now() - ts;
 
     emit('ingest');
     ts = Date.now();
     await ingestProject(abs, {
       agentFilter: opts.agentFilter,
-      reprocess: full,
+      reprocess,
       runAnalyze: !fast,
       runEnrich: !fast,
+      analyzeProfile,
+      enrichProfile,
       onProgress: (p) => opts.onProgress?.({
         kind: 'progress', project: name, stage: p.stage,
         current: p.current ?? 0, total: p.total ?? 0, detail: p.detail,

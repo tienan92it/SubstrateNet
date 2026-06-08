@@ -42,6 +42,32 @@ export interface ResearchConfig {
   apiKeyEnv?: string;
 }
 
+/** Transcript ingest hygiene and cost controls (RFC workflow-refactor). */
+export interface IngestConfig {
+  maxSessions?: number;
+  sinceDays?: number;
+  minSessionBytes?: number;
+  skipAgents?: string[];
+  maxBriefChars?: number;
+  maxFactsPerWindow?: number;
+  windowDupThreshold?: number;
+  minExtractConfidence?: number;
+  /** Embed-dedupe windows before triage LLM (default true). */
+  preTriageDedupe?: boolean;
+  maxTurnChars?: number;
+  /** Batch ambiguous cluster decisions (default true). */
+  clusterBatch?: boolean;
+}
+
+/** File analyze scope (RFC workflow-refactor). */
+export type AnalyzeTierProfile = 'lean' | 'standard' | 'deep';
+
+export interface AnalyzeConfig {
+  tier?: AnalyzeTierProfile;
+  skipGlobs?: string[];
+  maxFilesPerRun?: number;
+}
+
 export interface SubstrateNetConfig {
   agentBackends: Record<string, AgentBackend>;
   agents: Record<string, AgentSpec>;
@@ -63,6 +89,36 @@ export interface SubstrateNetConfig {
    * auto-detection (git org / parent dir) when grouping projects globally.
    */
   workspace?: string;
+  ingest?: IngestConfig;
+  analyze?: AnalyzeConfig;
+}
+
+export const DEFAULT_INGEST_CONFIG: Required<IngestConfig> = {
+  maxSessions: 200,
+  sinceDays: 365,
+  minSessionBytes: 256,
+  skipAgents: [],
+  maxBriefChars: 2000,
+  maxFactsPerWindow: 8,
+  windowDupThreshold: 0.92,
+  minExtractConfidence: 0.45,
+  preTriageDedupe: true,
+  maxTurnChars: 12_000,
+  clusterBatch: true,
+};
+
+export const DEFAULT_ANALYZE_CONFIG: Required<AnalyzeConfig> = {
+  tier: 'standard',
+  skipGlobs: [],
+  maxFilesPerRun: 500,
+};
+
+export function resolveIngestConfig(cfg: SubstrateNetConfig): Required<IngestConfig> {
+  return { ...DEFAULT_INGEST_CONFIG, ...cfg.ingest };
+}
+
+export function resolveAnalyzeConfig(cfg: SubstrateNetConfig): Required<AnalyzeConfig> {
+  return { ...DEFAULT_ANALYZE_CONFIG, ...cfg.analyze };
 }
 
 export const DEFAULT_CONFIG: SubstrateNetConfig = {
@@ -110,6 +166,9 @@ export const DEFAULT_CONFIG: SubstrateNetConfig = {
     industryClassifier:{ model: 'frontier:composer-2.5', fallback: ['openrouter:google/gemini-3.5-flash', 'default:llama3.1:8b'] },
     industryEnricher:  { model: 'frontier:composer-2.5', fallback: ['openrouter:google/gemini-3.5-flash', 'default:llama3.1:8b'] },
     domainAnalyzer:    { model: 'frontier:composer-2.5', fallback: ['openrouter:google/gemini-3.5-flash', 'default:llama3.1:8b'] },
+    // Fused enrich (standard profile) — flash-first bulk.
+    domainFuser:       { model: 'openrouter:google/gemini-3.5-flash', fallback: 'default:llama3.1:8b' },
+    industryFuser:     { model: 'openrouter:google/gemini-3.5-flash', fallback: 'default:llama3.1:8b' },
     profileWriter:     { model: 'frontier:composer-2.5', fallback: ['openrouter:google/gemini-3.5-flash', 'default:llama3.1:8b'] },
   },
   concurrency: 4,
@@ -120,6 +179,8 @@ export const DEFAULT_CONFIG: SubstrateNetConfig = {
     claudeCode: '~/.claude/projects',
     codex: '~/.codex/sessions',
   },
+  ingest: { ...DEFAULT_INGEST_CONFIG },
+  analyze: { ...DEFAULT_ANALYZE_CONFIG },
 };
 
 export function expandHome(p: string): string {
