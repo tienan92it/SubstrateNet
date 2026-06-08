@@ -19,6 +19,7 @@
       <a href="getting-started.html">start</a>
       <a href="architecture.html">architecture</a>
       <a class="active" href="cli.html">cli</a>
+      <a href="automation.html">automation</a>
       <a href="mcp.html">mcp</a>
       <a href="dashboard.html">dashboard</a>
       <a href="configuration.html">config</a>
@@ -27,17 +28,33 @@
   </header>
 
   <h1>CLI reference</h1>
-  <p class="lede">Every command takes an optional <code>[path]</code> argument (defaults to <code>.</code>). Most accept additional flags listed below.</p>
+  <p class="lede">
+    Run <code>subnet</code> with no arguments for an <strong>interactive menu</strong>
+    (update, add projects, health, dashboards, insights). Otherwise the surface is
+    six essentials; per-stage and maintenance commands still work but are hidden
+    from <code>--help</code> (listed under <a href="#advanced">advanced</a>).
+  </p>
+  <p class="small"><strong>Essentials:</strong>
+    <a href="#setup">setup</a> · <a href="#update">update</a> · <a href="#doctor">doctor</a> ·
+    <a href="#global">global</a> · <a href="#watch">watch</a> · <a href="#serve">serve</a>.</p>
 
   <div class="toc">
-    <h4>commands</h4>
+    <h4>on this page</h4>
     <ul>
-      <li><a href="#init">init</a> · <a href="#sync">sync</a> · <a href="#analyze">analyze</a> · <a href="#ingest">ingest</a> · <a href="#enrich">enrich</a> · <a href="#status">status</a></li>
-      <li><a href="#link">link</a> · <a href="#skills">skills</a> · <a href="#profile">profile</a> · <a href="#learn">learn</a> · <a href="#dashboard">dashboard</a></li>
-      <li><a href="#serve">serve</a> · <a href="#canvas">canvas</a> · <a href="#verify">verify</a> · <a href="#clean">clean</a></li>
-      <li><a href="#triage">triage audit</a> · <a href="#agents">agents (list / eval / run)</a></li>
+      <li><a href="#menu">interactive menu</a></li>
+      <li><strong>essentials:</strong> <a href="#setup">setup</a> · <a href="#update">update</a> · <a href="#doctor">doctor</a> · <a href="#global">global</a> · <a href="#watch">watch</a> · <a href="#serve">serve</a></li>
+      <li><a href="#advanced">advanced (hidden)</a></li>
     </ul>
   </div>
+
+  <h2 id="menu">Interactive menu</h2>
+  <pre><code>subnet</code></pre>
+  <p>
+    With no arguments in a TTY, Substrate Net opens a menu-driven flow built on
+    <code>@clack/prompts</code>: update projects, add projects (<code>setup</code>),
+    run health checks, open dashboards, inspect global insights, and check watch
+    status. Non-TTY invocations print <code>--help</code> so scripts stay deterministic.
+  </p>
 
   <h2 id="setup">setup</h2>
   <pre><code>subnet setup [options]</code></pre>
@@ -60,6 +77,68 @@
     <tr><td><code>--skip-dashboard</code></td><td>Skip dashboard build.</td></tr>
     <tr><td><code>--open</code></td><td>Open dashboard in the browser when done.</td></tr>
   </table>
+
+  <h2 id="update">update</h2>
+  <pre><code>subnet update [path] [--fast|--full] [--global] [--no-dashboard] [--verify] [--invalidate-cache] [--yes]</code></pre>
+  <p>
+    The day-to-day command. Incrementally re-syncs code, ingests new transcripts,
+    re-links cross-project knowledge, and rebuilds dashboards. With no
+    <code>[path]</code> it updates every registered project (serial). Concurrent
+    runs serialize through a lock file.
+  </p>
+  <table>
+    <tr><th>Flag</th><th>Effect</th></tr>
+    <tr><td><code>--fast</code></td><td>Transcript-only: skip code analysis + domain enrichment (seconds-to-minutes).</td></tr>
+    <tr><td><code>--full</code></td><td>Reprocess every window and force enrichment (after a model change).</td></tr>
+    <tr><td><code>--global</code></td><td>Rebuild the cross-project dashboard too.</td></tr>
+    <tr><td><code>--no-dashboard</code></td><td>Skip dashboard rebuild.</td></tr>
+    <tr><td><code>--verify</code></td><td>Run the verifier pass after ingest.</td></tr>
+    <tr><td><code>--invalidate-cache</code></td><td>Clear cached agent runs first (use after switching models).</td></tr>
+  </table>
+  <p class="small">Exits non-zero if a project fails outright or a completed run had &gt; 5% agent failures over a meaningful sample.</p>
+
+  <h2 id="doctor">doctor</h2>
+  <pre><code>subnet doctor [path] [--fix] [--json]</code></pre>
+  <p>
+    Health report: config validation, unclustered facts, concepts missing
+    summaries, pending file analysis, recent agent failure rate, model-config
+    drift, stale registry paths, and last-run age. Read-only by default.
+  </p>
+  <table>
+    <tr><th>Flag</th><th>Effect</th></tr>
+    <tr><td><code>--fix</code></td><td>Re-summarize concepts missing summaries, re-link every project, rebuild dashboards.</td></tr>
+    <tr><td><code>--json</code></td><td>Machine-readable output.</td></tr>
+  </table>
+
+  <h2 id="global">global</h2>
+  <pre><code>subnet global link [path] [--all] [--rebuild]
+subnet global dashboard [--open]
+subnet global profile [--prose] [--out &lt;path&gt;]
+subnet global skills [--scope technical|industry] [--cross] [--limit &lt;n&gt;]</code></pre>
+  <p>Cross-project operations on <code>~/.substrate-net/global.db</code>. Replaces the top-level <code>link</code>, <code>dashboard --global</code>, <code>profile</code>, and <code>skills</code> commands.</p>
+
+  <h2 id="watch">watch</h2>
+  <pre><code>subnet watch [--foreground] [--projects /a,/b] [--interval &lt;ms&gt;] [--global] [--stop]</code></pre>
+  <p>
+    Background daemon that watches project source trees + transcript roots and
+    runs a debounced, serial <code>update --fast</code> for affected projects.
+    See the <a href="automation.html">automation guide</a>.
+  </p>
+
+  <h2 id="serve">serve</h2>
+  <pre><code>subnet serve [path] --mcp</code></pre>
+  <p>Runs the MCP server over stdio. See <a href="mcp.html">MCP integration</a> for client wiring and the tool catalogue.</p>
+
+  <details id="advanced">
+    <summary>Advanced (hidden) commands</summary>
+    <p class="small">
+      These remain available for scripting and debugging but are hidden from
+      <code>subnet --help</code> and the interactive menu. In 0.2.0,
+      <code>ingest</code>, <code>sync</code>+chain, <code>enrich</code>,
+      <code>analyze</code>, <code>link</code>, <code>profile</code>, and
+      <code>skills</code> print a deprecation warning pointing to
+      <code>update</code> / <code>global</code> (removal scheduled for 0.3.0).
+    </p>
 
   <h2 id="init">init</h2>
   <pre><code>subnet init [path]</code></pre>
@@ -142,10 +221,6 @@
   <h2 id="status">status</h2>
   <pre><code>subnet status [path]</code></pre>
   <p>Counts per layer, broken down by <code>scope</code> and <code>grounding</code>. Cheap, read-only.</p>
-
-  <h2 id="serve">serve</h2>
-  <pre><code>subnet serve [path] --mcp</code></pre>
-  <p>Runs the MCP server over stdio. See <a href="mcp.html">MCP integration</a> for client wiring and the tool catalogue.</p>
 
   <h2 id="canvas">canvas</h2>
   <pre><code>subnet canvas &lt;kind&gt; [path]</code></pre>
@@ -244,9 +319,10 @@ subnet agents run &lt;name&gt; [path]</code></pre>
     <code>run</code> executes a single agent over its pending input — handy
     for debugging prompt or schema changes.
   </p>
+  </details>
 
   <footer class="site-footer">
-    <span>v0.1.0 · MIT</span>
+    <span>v0.2.0 · MIT</span>
     <span><a href="https://github.com/tienan92it/SubstrateNet">github.com/tienan92it/SubstrateNet</a></span>
   </footer>
 </div>

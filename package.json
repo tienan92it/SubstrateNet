@@ -1,6 +1,6 @@
 {
   "name": "@substrate-net/cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Cross-project skills. One local view. Grounded skill graph and dashboard from code and AI agent conversations — local SQLite.",
   "homepage": "https://tienan92it.github.io/SubstrateNet/",
   "repository": {

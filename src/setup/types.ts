@@ -47,6 +47,8 @@ export interface SetupPlan {
   };
   backendMode: 'local' | 'frontier' | 'mixed';
   concurrency: number;
+  /** Speed/quality profile the plan was computed for. */
+  profile?: string;
 }
 
 export type SetupProgressEvent =

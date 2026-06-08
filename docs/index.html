@@ -20,6 +20,7 @@
       <a href="getting-started.html">start</a>
       <a href="architecture.html">architecture</a>
       <a href="cli.html">cli</a>
+      <a href="automation.html">automation</a>
       <a href="mcp.html">mcp</a>
       <a href="dashboard.html">dashboard</a>
       <a href="configuration.html">config</a>
@@ -36,7 +37,7 @@
       dashboard. All local, all queryable.
     </p>
     <div class="hero-actions">
-      <a class="primary" href="getting-started.html">$ subnet init →</a>
+      <a class="primary" href="getting-started.html">$ subnet →</a>
       <a href="architecture.html">architecture</a>
       <a href="dashboard.html">dashboard</a>
       <a href="https://github.com/tienan92it/SubstrateNet">source</a>
@@ -76,7 +77,7 @@
     <a class="guide-card" href="getting-started.html">
       <span class="kicker">operate</span>
       <h3>Getting Started</h3>
-      <p>Install, initialize a project, run sync/analyze/ingest, inspect status, and open the dashboard.</p>
+      <p>Install, run the interactive menu or setup wizard, refresh with update, and open dashboards.</p>
     </a>
     <a class="guide-card" href="architecture.html">
       <span class="kicker">system</span>
@@ -86,7 +87,7 @@
     <a class="guide-card" href="cli.html">
       <span class="kicker">commands</span>
       <h3>CLI Reference</h3>
-      <p>Exact command surfaces for sync, analyze, ingest, enrich, link, profile, dashboard, clean, and agents.</p>
+      <p>Interactive menu plus six essentials: setup, update, doctor, global, watch, and serve.</p>
     </a>
     <a class="guide-card" href="mcp.html">
       <span class="kicker">agent api</span>
@@ -103,6 +104,11 @@
       <h3>Configuration</h3>
       <p>Backends, per-agent model routing, OpenRouter, concurrency, transcript roots, and cache behavior.</p>
     </a>
+    <a class="guide-card" href="automation.html">
+      <span class="kicker">operate</span>
+      <h3>Automation</h3>
+      <p>Watch daemon, Cursor hooks, and launchd/cron templates to keep the graph fresh.</p>
+    </a>
   </div>
 
   <h2>Minimal Run</h2>
@@ -115,13 +121,16 @@ ollama pull qwen3:4b-instruct
 ollama pull qwen2.5:14b
 ollama pull qwen3-embedding:0.6b
 
-# 3. Discover → estimate → run (one command)
-subnet setup</code></pre>
+# 3. First run: discover → estimate → full pipeline
+subnet setup
+
+# 4. Day to day (or just run `subnet` for the menu)
+subnet update</code></pre>
 
   <p>Full walkthrough: <a href="getting-started.html">getting started →</a></p>
 
   <footer class="site-footer">
-    <span>v0.1.0 · MIT</span>
+    <span>v0.2.0 · MIT</span>
     <span>
       <a href="https://github.com/tienan92it/SubstrateNet">github.com/tienan92it/SubstrateNet</a>
     </span>

@@ -52,17 +52,12 @@ export const SUMMARIZER_AGENT: Agent<SummarizerPayload, SummarizerOutput> = {
     properties: {
       name: { type: 'string', minLength: 1, maxLength: 120 },
       summary: { type: 'string', minLength: 1, maxLength: 800 },
+      // Sub-fields are coerced to strings in postprocess, so the schema stays
+      // permissive: models sometimes return an array/object (e.g. options as a
+      // list). Accepting those here avoids a hard validation failure.
       structured: {
         type: 'object',
-        properties: {
-          problem: { type: 'string', maxLength: 400 },
-          constraints: { type: 'string', maxLength: 400 },
-          options: { type: 'string', maxLength: 400 },
-          decision: { type: 'string', maxLength: 400 },
-          consequences: { type: 'string', maxLength: 400 },
-          open_questions: { type: 'string', maxLength: 400 },
-        },
-        additionalProperties: false,
+        additionalProperties: true,
       },
       domain: { type: 'string' },
     },
@@ -84,6 +79,28 @@ export const SUMMARIZER_AGENT: Agent<SummarizerPayload, SummarizerOutput> = {
       },
     ];
   },
+  postprocess(o: SummarizerOutput) {
+    // Coerce structured sub-fields to bounded strings; models occasionally
+    // return arrays/objects for fields like `options`.
+    const raw = (o.structured ?? {}) as Record<string, unknown>;
+    const KEYS = ['problem', 'constraints', 'options', 'decision', 'consequences', 'open_questions'] as const;
+    const structured: SummarizerOutput['structured'] = {};
+    for (const k of KEYS) {
+      const v = raw[k];
+      const s = coerceToString(v);
+      if (s) structured[k] = s.slice(0, 400);
+    }
+    return { output: { ...o, structured }, confidence: 0.7 };
+  },
 };
+
+/** Flatten a value to a readable string (arrays -> "; "-joined, objects -> JSON). */
+function coerceToString(v: unknown): string {
+  if (v == null) return '';
+  if (typeof v === 'string') return v.trim();
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  if (Array.isArray(v)) return v.map(coerceToString).filter(Boolean).join('; ');
+  try { return JSON.stringify(v); } catch { return ''; }
+}
 
 registerAgent(SUMMARIZER_AGENT);

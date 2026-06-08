@@ -17,6 +17,7 @@ import { BUSINESS_LOGIC_AGENT } from '../agents/business-logic.js';
 import { INTENT_AGENT } from '../agents/intent.js';
 import { PROBLEM_SOLUTION_AGENT } from '../agents/problem-solution.js';
 import { REQUIREMENTS_AGENT } from '../agents/requirements.js';
+import { WINDOW_EXTRACTOR_AGENT } from '../agents/window-extractor.js';
 import {
   factToRows,
   type ExtractorOutput,
@@ -129,9 +130,13 @@ export async function runExtractorsForKeptWindows(
   let dedupe: DedupeAgent | undefined;
   try { dedupe = new DedupeAgent(cfg); } catch { dedupe = undefined; }
 
-  // Build the full (window × agent) task list first, then run the chat calls
-  // concurrently and persist results sequentially. The clusterer (incremental)
-  // stays serial elsewhere; extractors are independent per window so this is safe.
+  // Build the task list first, then run the chat calls concurrently and persist
+  // results sequentially. Extractors are independent per window so this is safe.
+  //
+  // When a unified `windowExtractor` is configured (the default), each window
+  // that any extractor would touch gets ONE call instead of up to five. The
+  // per-kind agents remain the fallback when no unified extractor is configured.
+  const useUnified = Boolean(cfg.agents.windowExtractor);
   const docWindows = docWindowIds(knowDb);
   const tasks: Array<{ windowId: string; text: string; domain: string; agent: Extractor }> = [];
   for (const windowId of windowIds) {
@@ -141,7 +146,12 @@ export async function runExtractorsForKeptWindows(
     if (!text) continue;
     if (labels.rationale && /\[dup_of:/.test(labels.rationale)) continue; // skip dups
     const { agents } = route(labels.domain, labels.quality, docWindows.has(windowId), labels.activity);
-    for (const agent of agents) tasks.push({ windowId, text, domain: labels.domain, agent });
+    if (agents.length === 0) continue; // noise window — nothing to extract
+    if (useUnified) {
+      tasks.push({ windowId, text, domain: labels.domain, agent: WINDOW_EXTRACTOR_AGENT });
+    } else {
+      for (const agent of agents) tasks.push({ windowId, text, domain: labels.domain, agent });
+    }
   }
 
   const limit = cfg.concurrency ?? 4;
@@ -162,64 +172,63 @@ export async function runExtractorsForKeptWindows(
     }
   });
 
-  // Persist sequentially (DB writes + code resolution + embeddings).
+  // Persist sequentially (DB writes + code resolution). Embeddings are deferred
+  // and computed in batches afterwards to cut per-fact round-trips.
+  const toEmbed: Array<{ id: string; text: string }> = [];
   for (const oc of outcomes) {
     if (!oc) continue;
     const { t, out } = oc;
     const agent = t.agent;
     const windowId = t.windowId;
-    {
-      for (const fact of out.output.facts) {
-        const { node, provenance } = factToRows(fact, windowId, agent.name, out.model);
-        const tx = knowDb.transaction(() => {
-          upsertKNode(knowDb, node);
-          insertProvenance(knowDb, provenance);
-        });
-        tx();
-        stats.factsProduced++;
-        stats.factsByAgent[agent.name] = (stats.factsByAgent[agent.name] ?? 0) + 1;
-        stats.factsByKind[fact.kind] = (stats.factsByKind[fact.kind] ?? 0) + 1;
+    for (const fact of out.output.facts) {
+      const { node, provenance } = factToRows(fact, windowId, agent.name, out.model);
+      const tx = knowDb.transaction(() => {
+        upsertKNode(knowDb, node);
+        insertProvenance(knowDb, provenance);
+      });
+      tx();
+      stats.factsProduced++;
+      stats.factsByAgent[agent.name] = (stats.factsByAgent[agent.name] ?? 0) + 1;
+      stats.factsByKind[fact.kind] = (stats.factsByKind[fact.kind] ?? 0) + 1;
 
-        // L2 -> L0 bridging
-        if (fact.file_mentions) {
-          for (const path of fact.file_mentions) {
-            const r = resolvePath(codeDb, path);
-            if (r) {
-              writeKToCode(knowDb, {
-                kNodeId: node.id,
-                codeNodeId: r.codeNodeId,
-                codeFile: r.codeFile,
-              });
-              stats.codeLinks++;
-            }
-          }
-        }
-        if (fact.symbol_mentions) {
-          for (const name of fact.symbol_mentions) {
-            for (const cand of resolveSymbol(codeDb, name)) {
-              writeKToCode(knowDb, {
-                kNodeId: node.id,
-                codeNodeId: cand.id,
-                codeFile: cand.file,
-                weight: 0.6, // lower weight: symbol-name match can be ambiguous
-              });
-              stats.codeLinks++;
-            }
-          }
-        }
-
-        // Per-fact embedding for future dedupe / clustering.
-        if (dedupe) {
-          try {
-            const v = await dedupe.embedText(
-              `${fact.kind}: ${fact.title}\n${fact.summary ?? ''}`,
-            );
-            storeKNodeEmbedding(knowDb, node.id, v, dedupe.modelRef);
-          } catch {
-            // ignore embedding failure
+      // L2 -> L0 bridging
+      if (fact.file_mentions) {
+        for (const path of fact.file_mentions) {
+          const r = resolvePath(codeDb, path);
+          if (r) {
+            writeKToCode(knowDb, { kNodeId: node.id, codeNodeId: r.codeNodeId, codeFile: r.codeFile });
+            stats.codeLinks++;
           }
         }
       }
+      if (fact.symbol_mentions) {
+        for (const name of fact.symbol_mentions) {
+          for (const cand of resolveSymbol(codeDb, name)) {
+            writeKToCode(knowDb, {
+              kNodeId: node.id, codeNodeId: cand.id, codeFile: cand.file,
+              weight: 0.6, // lower weight: symbol-name match can be ambiguous
+            });
+            stats.codeLinks++;
+          }
+        }
+      }
+
+      if (dedupe) toEmbed.push({ id: node.id, text: `${fact.kind}: ${fact.title}\n${fact.summary ?? ''}` });
+    }
+  }
+
+  // Batch embeddings for future dedupe / clustering.
+  if (dedupe && toEmbed.length > 0) {
+    const batchSize = Math.max(1, cfg.batchSize ?? 8);
+    for (let i = 0; i < toEmbed.length; i += batchSize) {
+      const slice = toEmbed.slice(i, i + batchSize);
+      try {
+        const vectors = await dedupe.embedBatch(slice.map((s) => s.text));
+        for (let j = 0; j < slice.length; j++) {
+          const v = vectors[j];
+          if (v) storeKNodeEmbedding(knowDb, slice[j].id, v, dedupe.modelRef);
+        }
+      } catch { /* embedding failure is non-fatal; clustering falls back to lexical */ }
     }
   }
   return stats;

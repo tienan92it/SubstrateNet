@@ -117,7 +117,7 @@ export function registerSetup(program: Command): void {
         process.exit(1);
       }
 
-      const plan = await buildSetupPlan(selected, { prose: opts.prose });
+      const plan = await buildSetupPlan(selected, { prose: opts.prose, profile: opts.reprocess ? 'full' : 'default' });
 
       if (opts.planOnly) {
         if (opts.json) {
@@ -154,6 +154,7 @@ export function registerSetup(program: Command): void {
       let spinnerActive = false;
       const result = await runSetupPipeline({
         projects: selected,
+        agentFilter: agentFilter,
         reprocess: opts.reprocess,
         verify: opts.verify,
         prose: opts.prose,

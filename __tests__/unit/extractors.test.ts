@@ -72,6 +72,8 @@ describe('extract pipeline', () => {
       });
 
       const cfg = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+      // Legacy per-agent fan-out (no unified window extractor configured).
+      delete cfg.agents.windowExtractor;
       // Patch AgentRuntime to use a fake backend that returns kind-appropriate JSON
       const origRun = AgentRuntime.prototype.run;
       AgentRuntime.prototype.run = async function (agent: any, _input: any) {
@@ -113,6 +115,50 @@ describe('extract pipeline', () => {
 
         const provCount = (knowDb.prepare(`SELECT COUNT(*) AS n FROM k_provenance WHERE window_id='w1'`).get() as any).n;
         expect(provCount).toBe(stats.factsProduced);
+      } finally {
+        AgentRuntime.prototype.run = origRun;
+      }
+    } finally {
+      knowDb.close();
+      codeDb.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('uses one unified windowExtractor call per window when configured', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'subnet-ex-'));
+    const knowDb = openKnowledgeDb(dir);
+    const codeDb = openCodeDb(dir);
+    try {
+      seedWindow(knowDb, 'w1', '[user] refund rules?\n[assistant] Refund is final after processor succeeds.');
+      upsertTriageLabels(knowDb, {
+        windowId: 'w1', relevance: 'on_topic', domain: 'business_logic',
+        quality: 'decision_grade', linkage: 'this_project',
+        confidence: 0.9, model: 'test', producedAt: Date.now(), kept: true,
+      });
+
+      const cfg = JSON.parse(JSON.stringify(DEFAULT_CONFIG)); // keeps windowExtractor
+      const calls: string[] = [];
+      const origRun = AgentRuntime.prototype.run;
+      AgentRuntime.prototype.run = async function (agent: any) {
+        calls.push(agent.name);
+        if (agent.name === 'windowExtractor') {
+          return {
+            output: { facts: [
+              { kind: 'business_rule', title: 'refund finality', confidence: 0.9 },
+              { kind: 'decision', title: 'use succeeded event', confidence: 0.8 },
+            ] },
+            confidence: 0.9, model: 'fake', cached: false,
+          } as any;
+        }
+        return { output: { facts: [] }, confidence: 0, model: 'fake', cached: false } as any;
+      };
+      try {
+        const stats = await runExtractorsForKeptWindows(dir, knowDb, codeDb, cfg, ['w1']);
+        // Exactly one extractor call, attributed to the unified agent.
+        expect(calls.filter((c) => c === 'windowExtractor')).toHaveLength(1);
+        expect(calls).not.toContain('businessLogic');
+        expect(stats.factsByAgent.windowExtractor).toBe(2);
       } finally {
         AgentRuntime.prototype.run = origRun;
       }

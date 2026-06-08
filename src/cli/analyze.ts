@@ -2,6 +2,7 @@ import type { Command } from 'commander';
 import { resolve } from 'path';
 import { loadConfig } from '../config.js';
 import { analyzeProject } from '../pipeline/analyze-code.js';
+import { warnDeprecated } from './deprecate.js';
 
 export function registerAnalyze(program: Command): void {
   program
@@ -10,6 +11,7 @@ export function registerAnalyze(program: Command): void {
     .argument('[path]', 'Project root path', '.')
     .option('--full', 'Re-analyze every file, ignoring content hashes', false)
     .action(async (path: string, opts: { full: boolean }) => {
+      warnDeprecated('analyze', 'update');
       const root = resolve(path);
       const cfg = loadConfig(root);
       const stats = await analyzeProject(root, cfg, { full: opts.full });

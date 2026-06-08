@@ -1,6 +1,7 @@
 import type { Command } from 'commander';
 import { resolve } from 'path';
 import { ingestProject } from '../ingest/orchestrator.js';
+import { warnDeprecated } from './deprecate.js';
 
 export function registerIngest(program: Command): void {
   program
@@ -14,6 +15,7 @@ export function registerIngest(program: Command): void {
     .option('--no-analyze', 'Skip code-grounded analysis pass (file summaries + layers)')
     .option('--reprocess', 'Re-run triage/extract/cluster over ALL existing windows (after a model swap or interrupted run), not just newly ingested ones', false)
     .action(async (path: string, opts: { agent?: string; triage?: boolean; extract?: boolean; enrich?: boolean; analyze?: boolean; reprocess?: boolean }) => {
+      warnDeprecated('ingest', 'update');
       const root = resolve(path);
       const stats = await ingestProject(root, {
         agentFilter: opts.agent as any,

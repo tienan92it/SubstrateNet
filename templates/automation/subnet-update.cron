@@ -1,0 +1,10 @@
+# SubstrateNet daily refresh (Linux cron).
+#
+# Install:
+#   crontab -e
+#   # paste the line below, adjusting the `subnet` path (run `which subnet`)
+#
+# Runs a full update of every registered project + the global dashboard at 02:00.
+# The `subnet update` lock prevents overlap with the watch daemon or hooks.
+
+0 2 * * *  /usr/local/bin/subnet update --global --yes >> "$HOME/.substrate-net/cron-update.log" 2>&1

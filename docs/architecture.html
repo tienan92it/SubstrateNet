@@ -26,6 +26,7 @@
       <a href="getting-started.html">start</a>
       <a class="active" href="architecture.html">architecture</a>
       <a href="cli.html">cli</a>
+      <a href="automation.html">automation</a>
       <a href="mcp.html">mcp</a>
       <a href="dashboard.html">dashboard</a>
       <a href="configuration.html">config</a>
@@ -300,14 +301,14 @@ interface AgentRuntime {
   <ul>
     <li><strong>Local-only.</strong> No cloud sync. The hard runtime dependency is a local (or pluggable) LLM. The alternative would be regex-based NL understanding, which drifts the moment anyone tries to maintain it.</li>
     <li><strong>Cached, not deterministic.</strong> Agent output is stable per <code>(agent, model, input_hash, prompt_version)</code>. Bumping the prompt version invalidates the cache by design.</li>
-    <li><strong>Incremental clustering.</strong> The Clusterer attaches greedily and may drift; <code>subnet link --rebuild</code> triggers a full recompute when the drift becomes visible.</li>
-    <li><strong>Pull-based ingest.</strong> No real-time chat hooks; re-run <code>subnet ingest</code> (or call <code>subnet_ingest</code> via MCP) to pick up new sessions.</li>
+    <li><strong>Incremental clustering.</strong> The Clusterer attaches greedily and may drift; <code>subnet global link --rebuild</code> triggers a full recompute when the drift becomes visible.</li>
+    <li><strong>Pull-based ingest.</strong> No real-time chat hooks by default; run <code>subnet update</code> (or <code>subnet watch</code> / automation) to pick up new sessions. MCP <code>subnet_ingest</code> still works.</li>
     <li><strong>Code DB stays codegraph-compatible.</strong> New code-side fields go in <code>project_metadata</code> JSON rather than schema changes.</li>
     <li><strong>Conservative triage by default.</strong> Windows are kept unless an axis is firmly negative with confidence ≥ 0.6. <code>triage audit --dropped</code> lets you tune.</li>
   </ul>
 
   <footer class="site-footer">
-    <span>v0.1.0 · MIT</span>
+    <span>v0.2.0 · MIT</span>
     <span><a href="https://github.com/tienan92it/SubstrateNet">github.com/tienan92it/SubstrateNet</a></span>
   </footer>
 </div>

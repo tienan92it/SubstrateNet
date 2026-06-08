@@ -6,6 +6,7 @@ import { listSkills, listIndustries, listHighlights } from '../global/skills.js'
 import { globalConfigDir, loadConfig } from '../config.js';
 import { AgentRuntime } from '../agents/runtime.js';
 import { PROFILE_WRITER_AGENT } from '../agents/profile-writer.js';
+import { warnDeprecated } from './deprecate.js';
 import '../agents/index.js';
 
 export function registerProfile(program: Command): void {
@@ -17,6 +18,7 @@ export function registerProfile(program: Command): void {
     .option('--cross', 'Only skills present in more than one project', false)
     .option('--limit <n>', 'Max rows', '60')
     .action(async (opts: { scope?: string; cross: boolean; limit: string }) => {
+      warnDeprecated('skills', 'global skills');
       const gdb = openGlobalDb();
       try {
         const skills = listSkills(gdb, { scope: opts.scope, crossOnly: opts.cross, limit: parseInt(opts.limit, 10) });
@@ -41,6 +43,7 @@ export function registerProfile(program: Command): void {
     .option('--prose', 'Generate portfolio/background prose via the ProfileWriter agent', false)
     .option('--out <path>', 'Where to write the prose markdown', join(globalConfigDir(), 'profile.md'))
     .action(async (opts: { prose: boolean; out: string }) => {
+      warnDeprecated('profile', 'global profile');
       if (opts.prose) return writeProse(opts.out);
       const gdb = openGlobalDb();
       try {

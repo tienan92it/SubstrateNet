@@ -8,6 +8,14 @@ CREATE TABLE IF NOT EXISTS schema_versions (
 INSERT OR IGNORE INTO schema_versions (version, applied_at, description)
 VALUES (1, strftime('%s', 'now') * 1000, 'Initial knowledge schema');
 
+-- Pipeline bookkeeping: small key/value state (e.g. enrich input hash,
+-- model fingerprint) used to skip work when inputs are unchanged.
+CREATE TABLE IF NOT EXISTS pipeline_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
 -- L1: raw conversation log
 CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,

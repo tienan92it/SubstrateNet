@@ -24,6 +24,8 @@ import { insertTurn, nextTurnIdx, turnsForSession, updateOffset, upsertSession }
 import { insertWindow, segmentTurnsToWindows } from '../pipeline/segmenter.js';
 import { runSyntaxPass } from '../pipeline/syntax.js';
 import { upsertKNode, insertProvenance } from '../knowledge/store.js';
+import { setPipelineState } from '../knowledge/pipeline-state.js';
+import { configModelFingerprint } from '../config.js';
 import { resolvePath, writeKToCode } from '../pipeline/resolve.js';
 import type { AgentId, Turn } from '../types.js';
 import { runTriageForWindows, type TriageRunResult } from '../pipeline/triage.js';
@@ -234,7 +236,10 @@ export async function ingestProject(root: string, opts: IngestOpts = {}): Promis
     //    and is idempotent. Skip only when explicitly disabled.
     if (opts.runEnrich !== false) {
       progress({ stage: 'enrich' });
-      const enrich = await runEnrichment(root, knowDb, codeDb, cfg, { noAgent: opts.runExtract === false });
+      const enrich = await runEnrichment(root, knowDb, codeDb, cfg, {
+        noAgent: opts.runExtract === false,
+        force: opts.reprocess === true,
+      });
       stats.domainEntities = enrich.structuralEntities;
       stats.domainRelationships = enrich.structuralRelationships + enrich.agentRelationships;
       stats.knowledgeGaps = enrich.detectedGaps + enrich.agentGaps;
@@ -247,6 +252,9 @@ export async function ingestProject(root: string, opts: IngestOpts = {}): Promis
         stats.factsCorroborated = dd.corroborated;
       } catch { /* best-effort */ }
     }
+
+    // Record the model routing fingerprint so doctor can detect config drift.
+    try { setPipelineState(knowDb, 'config_model_fingerprint', configModelFingerprint(cfg)); } catch { /* ignore */ }
   } finally {
     codeDb.close();
     knowDb.close();

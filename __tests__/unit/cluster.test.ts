@@ -84,6 +84,48 @@ describe('Cluster pipeline', () => {
     }
   });
 
+  it('attaches a highly-similar fact mechanically without calling the clusterer', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'subnet-cl-'));
+    const db = openKnowledgeDb(dir);
+    try {
+      insertFact(db, 'f1', 'decision', 'use redis for sessions');
+      storeKNodeEmbedding(db, 'f1', Float32Array.from([1, 0, 0, 0]));
+
+      let clustererCalls = 0;
+      const origRun = AgentRuntime.prototype.run;
+      AgentRuntime.prototype.run = async function (agent: any) {
+        if (agent.name === 'clusterer') clustererCalls++;
+        if (agent.name === 'summarizer') {
+          return { output: { name: 'session caching', summary: 'Redis sessions.', structured: {} }, confidence: 0.9, model: 'fake', cached: false } as any;
+        }
+        return { output: {}, confidence: 0, model: 'fake', cached: false } as any;
+      };
+      try {
+        const cfg = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+        // First pass: f1 creates its concept (mechanically — no candidates).
+        await runClustererForNewFacts(db, cfg);
+
+        // Second pass: f2 is near-identical to f1's concept centroid, so it
+        // attaches mechanically. The clusterer must NOT be consulted.
+        insertFact(db, 'f2', 'decision', 'redis chosen for session store');
+        storeKNodeEmbedding(db, 'f2', Float32Array.from([1, 0, 0, 0]));
+        const stats = await runClustererForNewFacts(db, cfg);
+
+        expect(clustererCalls).toBe(0);
+        expect(stats.mechanical).toBe(1);
+        expect(stats.attached).toBe(1);
+        const concepts = listConcepts(db);
+        expect(concepts).toHaveLength(1);
+        expect(concepts[0].memberCount).toBe(2);
+      } finally {
+        AgentRuntime.prototype.run = origRun;
+      }
+    } finally {
+      db.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('uses uncategorized concept for facts without embeddings', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'subnet-cl-'));
     const db = openKnowledgeDb(dir);

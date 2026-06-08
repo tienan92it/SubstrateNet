@@ -19,6 +19,7 @@
       <a href="getting-started.html">start</a>
       <a href="architecture.html">architecture</a>
       <a href="cli.html">cli</a>
+      <a href="automation.html">automation</a>
       <a href="mcp.html">mcp</a>
       <a class="active" href="dashboard.html">dashboard</a>
       <a href="configuration.html">config</a>
@@ -62,19 +63,18 @@ subnet dashboard            # writes .substrate-net/dashboard/index.html + graph
 subnet dashboard --open     # and open it in your browser</code></pre>
   <p>
     The graph snapshot is inlined into <code>index.html</code>, so it opens
-    directly from disk (<code>file://</code>) with no server. Run it again after
-    <code>sync</code> / <code>analyze</code> / <code>ingest</code> to refresh.
+    directly from disk (<code>file://</code>) with no server. Run
+    <code>subnet update</code> to refresh.
   </p>
 
   <h2 id="global">Global dashboard: Profile &amp; Map</h2>
   <p>
-    <code>subnet dashboard --global</code> builds the cross-project view from
-    <code>~/.substrate-net/global.db</code>. Run <code>subnet link</code> in your
-    projects first so the global zones, skills, and highlights are populated.
+    <code>subnet global dashboard</code> builds the cross-project view from
+    <code>~/.substrate-net/global.db</code>. <code>subnet update --global</code>
+    (or <code>subnet global link</code>) populates global zones, skills, and highlights.
   </p>
-  <pre class="shell"><code>subnet link                 # in each project: export skills + knowledge zones
-subnet dashboard --global   # writes ~/.substrate-net/dashboard/index.html
-subnet dashboard --global --open</code></pre>
+  <pre class="shell"><code>subnet update --global        # link all projects + rebuild global dashboard
+subnet global dashboard --open  # writes ~/.substrate-net/dashboard/index.html</code></pre>
 
   <h3>Profile — the second brain</h3>
   <p>
@@ -136,7 +136,7 @@ subnet dashboard --global --open</code></pre>
   </p>
 
   <footer class="site-footer">
-    <span>v0.1.0 · MIT</span>
+    <span>v0.2.0 · MIT</span>
     <span><a href="https://github.com/tienan92it/SubstrateNet">github.com/tienan92it/SubstrateNet</a></span>
   </footer>
 </div>

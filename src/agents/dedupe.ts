@@ -66,6 +66,17 @@ export class DedupeAgent {
   }
 
   /**
+   * Embed many texts in one backend call. OpenAI-compatible backends embed the
+   * whole batch in a single request; Ollama loops internally. Returns one vector
+   * per input (undefined where the backend returned nothing).
+   */
+  async embedBatch(texts: string[]): Promise<Array<Float32Array | undefined>> {
+    if (texts.length === 0) return [];
+    const res = await this.backend.embed!({ model: this.model, texts });
+    return texts.map((_, i) => (res.vectors[i] ? Float32Array.from(res.vectors[i]) : undefined));
+  }
+
+  /**
    * Find the top-K nearest existing k_nodes (by stored embedding) to the
    * given query embedding. Brute-force cosine; fine up to ~50K facts.
    */

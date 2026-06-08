@@ -31,11 +31,32 @@ import { runGapDetector } from './gap-detector.js';
 import { runEntityReconciler } from './reconcile.js';
 import { runClustererForNewFacts } from './cluster.js';
 import { upsertKNode, insertKEdgeUnique, setGroundingScope } from '../knowledge/store.js';
+import { getPipelineState, setPipelineState } from '../knowledge/pipeline-state.js';
 import { DedupeAgent, storeKNodeEmbedding } from '../agents/dedupe.js';
 import { gapId, domainNodeId } from '../knowledge/domain-store.js';
 import { createResearchBackend, cachedLookup } from '../research/backend.js';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
+
+const ENRICH_HASH_KEY = 'enrich_input_hash';
+
+/**
+ * Fingerprint the inputs the enrich agent stages depend on. When this is
+ * unchanged since the last enrich, the LLM stages are skipped. Cheap counts +
+ * latest-update timestamps are enough to detect "nothing new to enrich".
+ */
+function computeEnrichInputHash(knowDb: SqliteDb, codeDb: SqliteDb): string {
+  const k = knowDb.prepare(`SELECT COUNT(*) AS n, COALESCE(MAX(updated_at),0) AS mx FROM k_nodes`).get() as { n: number; mx: number };
+  const e = knowDb.prepare(`SELECT COUNT(*) AS n FROM k_edges`).get() as { n: number };
+  let files = { n: 0, mx: 0 };
+  try {
+    files = codeDb.prepare(`SELECT COUNT(*) AS n, COALESCE(MAX(updated_at),0) AS mx FROM file_analysis`).get() as { n: number; mx: number };
+  } catch { /* file_analysis may not exist yet */ }
+  return createHash('sha1')
+    .update(`${k.n}:${k.mx}:${e.n}:${files.n}:${files.mx}`)
+    .digest('hex')
+    .slice(0, 16);
+}
 
 export interface EnrichStats {
   dependencies: number;
@@ -63,6 +84,8 @@ export interface EnrichOpts {
   noAgent?: boolean;
   /** Skip the model/web industry enrichment stage specifically. */
   noEnrichIndustry?: boolean;
+  /** Re-run the agent stages even if inputs are unchanged (e.g. --full). */
+  force?: boolean;
   maxEntities?: number;
   maxFacts?: number;
 }
@@ -96,7 +119,13 @@ export async function runEnrichment(
 
   let producedClusterableFacts = false;
 
-  if (!opts.noAgent) {
+  // Incremental gate: skip the LLM agent stages when their inputs are unchanged
+  // since the last successful enrich. Deterministic stages above always run.
+  const inputHash = computeEnrichInputHash(knowDb, codeDb);
+  const prevHash = getPipelineState(knowDb, ENRICH_HASH_KEY);
+  const skipAgents = !opts.noAgent && !opts.force && prevHash === inputHash;
+
+  if (!opts.noAgent && !skipAgents) {
     // ── 4. TechnicalProfiler (technical scope) ─────────────────────────
     try {
       stats.technicalSkills = await runTechnicalProfiler(knowDb, codeDb, cfg);
@@ -139,13 +168,17 @@ export async function runEnrichment(
       stats.domainHighlights = await runDomainAnalyzer(knowDb, codeDb, cfg, stats.industry);
     } catch { /* ignore */ }
 
-    // ── 7c. Knowledge zones: group facts into business + technical domains ─
-    try {
-      stats.businessDomains = await runBusinessDomainModeler(knowDb, cfg, stats.industry);
-    } catch { /* ignore */ }
-    try {
-      stats.techDomains = await runTechDomainModeler(knowDb, codeDb, cfg);
-    } catch { /* ignore */ }
+    // ── 7c. Knowledge zones: business + technical domains run concurrently ─
+    //        (independent agents writing different node kinds).
+    const [biz, tech] = await Promise.all([
+      runBusinessDomainModeler(knowDb, cfg, stats.industry).catch(() => 0),
+      runTechDomainModeler(knowDb, codeDb, cfg).catch(() => 0),
+    ]);
+    stats.businessDomains = biz;
+    stats.techDomains = tech;
+
+    // Record the input fingerprint so the next unchanged run can skip agents.
+    setPipelineState(knowDb, ENRICH_HASH_KEY, inputHash);
   }
 
   // ── 8. Gap detector (deterministic) ──────────────────────────────────

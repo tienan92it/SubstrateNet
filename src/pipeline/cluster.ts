@@ -3,20 +3,26 @@
  *
  * For each newly-created (or updated) L2 fact:
  *   1. Compute candidate concepts via embedding proximity (top-K).
- *   2. Call the Clusterer Agent to decide attach / create / merge.
+ *   2. Decide attach / create / merge:
+ *        - score >= AUTO_ATTACH_SCORE      -> mechanical attach (no LLM)
+ *        - no candidates                    -> mechanical create (no LLM)
+ *        - otherwise (the ambiguous band)   -> Clusterer Agent decides
  *   3. Apply the decision: write cluster_id, possibly merge two concepts.
  *   4. Mark affected concepts dirty.
  *
- * After all facts in a batch are clustered:
- *   5. For each dirty concept, recompute centroid + member_count,
- *      then call the Summarizer Agent to refresh its name/summary.
+ * Facts are processed in waves of `concurrency`: the (parallel) LLM decisions
+ * for a wave resolve first, then writes apply sequentially. This removes the
+ * old per-fact serial LLM dependency while keeping DB writes single-threaded.
+ *
+ * After clustering, each dirty concept is re-centroided and (re-)summarized.
+ * Stable small concepts that already have a summary are skipped.
  *
  * Idempotent: facts already assigned to a cluster are skipped unless
  * `opts.reCluster` is true.
  */
 import type { Database as SqliteDb } from 'better-sqlite3';
 import { AgentRuntime } from '../agents/runtime.js';
-import { CLUSTERER_AGENT } from '../agents/clusterer.js';
+import { CLUSTERER_AGENT, type ClustererAction } from '../agents/clusterer.js';
 import { SUMMARIZER_AGENT } from '../agents/summarizer.js';
 import { DedupeAgent, getKNodeEmbedding } from '../agents/dedupe.js';
 import { upsertConcept, newConceptId, setKNodeCluster, membersOf, nearestConcepts, recountAndCentroid, encodeCentroid } from '../knowledge/concept-store.js';
@@ -37,11 +43,23 @@ const EVIDENCE_KINDS = [
   'incident', 'root_cause',
 ];
 
+/** Candidate pool size + the minimum similarity to even consider a concept. */
+const CANDIDATE_K = 5;
+const CANDIDATE_MIN_SCORE = 0.55;
+/** Top candidate at/above this similarity attaches mechanically (skip the LLM). */
+const AUTO_ATTACH_SCORE = 0.85;
+/** At apply time, re-check for a near-duplicate before creating a new concept. */
+const REFRESH_ATTACH_SCORE = 0.82;
+/** Stable concepts with <= this many members + an existing summary skip re-summarize. */
+const STABLE_MEMBER_MAX = 3;
+
 export interface ClusterStats {
   processed: number;
   attached: number;
   created: number;
   merged: number;
+  /** Facts attached/created mechanically (no LLM call). */
+  mechanical: number;
   conceptsSummarized: number;
 }
 
@@ -49,90 +67,158 @@ export interface ClusterOpts {
   reCluster?: boolean;
 }
 
+type FactRow = { id: string; kind: string; title: string; summary: string | null };
+
+/** A clustering decision for one fact, resolved (possibly via LLM) before writes. */
+type FactDecision = {
+  fact: FactRow;
+  embedding?: Float32Array;
+  candidates: Array<{ id: string; name: string; summary?: string; score: number }>;
+  action: ClustererAction;
+  /** Whether the action was decided without an LLM call. */
+  mechanical: boolean;
+};
+
 export async function runClustererForNewFacts(
   knowDb: SqliteDb, cfg: SubstrateNetConfig, opts: ClusterOpts = {},
 ): Promise<ClusterStats> {
   const rt = new AgentRuntime({ knowledgeDb: knowDb, config: cfg });
-
-  let dedupe: DedupeAgent | undefined;
-  try { dedupe = new DedupeAgent(cfg); } catch { dedupe = undefined; }
 
   const exclusion = `kind NOT IN (${EVIDENCE_KINDS.map(() => '?').join(',')})`;
   const where = opts.reCluster ? `WHERE ${exclusion}` : `WHERE cluster_id IS NULL AND ${exclusion}`;
   const facts = knowDb.prepare(`
     SELECT id, kind, title, summary FROM k_nodes ${where}
     ORDER BY created_at ASC
-  `).all(...EVIDENCE_KINDS) as Array<{ id: string; kind: string; title: string; summary: string | null }>;
+  `).all(...EVIDENCE_KINDS) as FactRow[];
 
-  const stats: ClusterStats = { processed: 0, attached: 0, created: 0, merged: 0, conceptsSummarized: 0 };
+  const stats: ClusterStats = { processed: 0, attached: 0, created: 0, merged: 0, mechanical: 0, conceptsSummarized: 0 };
   const dirty = new Set<string>();
+  const limit = Math.max(1, cfg.concurrency ?? 4);
 
-  for (const fact of facts) {
-    stats.processed++;
+  // Process in waves: decide (parallel, includes LLM for the ambiguous band),
+  // then apply (sequential writes). Candidates are read at wave start, so a
+  // refresh re-check at apply time absorbs intra-wave near-duplicates.
+  for (let i = 0; i < facts.length; i += limit) {
+    const wave = facts.slice(i, i + limit);
+    const decisions = await mapPool(wave, limit, (fact) => decideFact(rt, knowDb, fact));
+    for (const d of decisions) {
+      stats.processed++;
+      if (d.mechanical) stats.mechanical++;
+      const touched = applyDecision(knowDb, d, stats);
+      if (touched) dirty.add(touched);
+    }
+  }
 
-    // Get the fact's embedding (skip facts without one — we can't cluster them).
-    const v = getKNodeEmbedding(knowDb, fact.id);
-    if (!v) {
-      // Without embedding, we still want SOMEWHERE to live. Put in a per-kind concept.
-      const fallbackName = `${fact.kind} (uncategorized)`;
-      const existing = knowDb.prepare(`SELECT id FROM concepts WHERE name=?`).get(fallbackName) as { id: string } | undefined;
-      const cid = existing?.id ?? newConceptId(fallbackName);
-      if (!existing) {
-        upsertConcept(knowDb, { id: cid, name: fallbackName, summary: undefined, memberCount: 0 });
-        stats.created++;
-      }
-      setKNodeCluster(knowDb, fact.id, cid);
+  stats.conceptsSummarized = await recomputeAndSummarize(rt, knowDb, [...dirty], limit, { skipStable: true });
+  return stats;
+}
+
+/** Decide what to do with a fact. Mechanical for clear cases; LLM for the ambiguous band. */
+async function decideFact(rt: AgentRuntime, knowDb: SqliteDb, fact: FactRow): Promise<FactDecision> {
+  const v = getKNodeEmbedding(knowDb, fact.id) ?? undefined;
+  if (!v) {
+    // No embedding — bucket mechanically by kind (handled in applyDecision).
+    return { fact, candidates: [], action: { action: 'create', suggestedName: '', confidence: 0, reason: 'no-embedding' }, mechanical: true };
+  }
+
+  const candidates = nearestConcepts(knowDb, v, CANDIDATE_K, CANDIDATE_MIN_SCORE);
+
+  // Clear match — attach without an LLM call.
+  if (candidates.length > 0 && candidates[0].score >= AUTO_ATTACH_SCORE) {
+    return {
+      fact, embedding: v, candidates,
+      action: { action: 'attach', conceptId: candidates[0].id, confidence: candidates[0].score, reason: 'mechanical-attach' },
+      mechanical: true,
+    };
+  }
+
+  // No nearby concept — create mechanically.
+  if (candidates.length === 0) {
+    return {
+      fact, embedding: v, candidates,
+      action: { action: 'create', suggestedName: fact.title.slice(0, 60), confidence: 0.4, reason: 'mechanical-create' },
+      mechanical: true,
+    };
+  }
+
+  // Ambiguous band — ask the clusterer.
+  try {
+    const out = await rt.run(CLUSTERER_AGENT, {
+      payload: {
+        fact: { id: fact.id, kind: fact.kind, title: fact.title, summary: fact.summary ?? undefined },
+        candidates,
+      },
+    });
+    return { fact, embedding: v, candidates, action: out.output, mechanical: false };
+  } catch {
+    return {
+      fact, embedding: v, candidates,
+      action: { action: 'create', suggestedName: fact.title.slice(0, 60), confidence: 0.3, reason: 'fallback' },
+      mechanical: false,
+    };
+  }
+}
+
+/** Apply a resolved decision. Returns the touched concept id (added to dirty). */
+function applyDecision(knowDb: SqliteDb, d: FactDecision, stats: ClusterStats): string | undefined {
+  const { fact, embedding, candidates, action } = d;
+
+  // No-embedding fact: per-kind uncategorized bucket.
+  if (!embedding) {
+    const fallbackName = `${fact.kind} (uncategorized)`;
+    const existing = knowDb.prepare(`SELECT id FROM concepts WHERE name=?`).get(fallbackName) as { id: string } | undefined;
+    const cid = existing?.id ?? newConceptId(fallbackName);
+    if (!existing) {
+      upsertConcept(knowDb, { id: cid, name: fallbackName, summary: undefined, memberCount: 0 });
+      stats.created++;
+    }
+    setKNodeCluster(knowDb, fact.id, cid);
+    stats.attached++;
+    refreshCentroid(knowDb, cid);
+    return cid;
+  }
+
+  let touched: string | undefined;
+
+  if (action.action === 'attach') {
+    // Mechanical attaches reference the live top candidate; LLM attaches must
+    // reference a candidate we offered.
+    const ok = candidates.find((c) => c.id === action.conceptId);
+    if (ok) {
+      setKNodeCluster(knowDb, fact.id, action.conceptId);
+      touched = action.conceptId;
       stats.attached++;
-      dirty.add(cid);
-      continue;
     }
-
-    // Mechanical candidate pool: top-5 concepts by embedding similarity.
-    const candidates = nearestConcepts(knowDb, v, 5, 0.55);
-
-    let action;
-    try {
-      const out = await rt.run(CLUSTERER_AGENT, {
-        payload: {
-          fact: { id: fact.id, kind: fact.kind, title: fact.title, summary: fact.summary ?? undefined },
-          candidates,
-        },
-      });
-      action = out.output;
-    } catch {
-      // Backend unavailable: fall back to "create new concept named after fact title".
-      action = { action: 'create' as const, suggestedName: fact.title.slice(0, 60), confidence: 0.3, reason: 'fallback' };
+  } else if (action.action === 'merge') {
+    const [a, b] = action.conceptIds;
+    const validA = candidates.find((c) => c.id === a);
+    const validB = candidates.find((c) => c.id === b);
+    if (validA && validB) {
+      knowDb.transaction(() => {
+        knowDb.prepare(`UPDATE k_nodes SET cluster_id=? WHERE cluster_id=?`).run(a, b);
+        knowDb.prepare(`DELETE FROM concepts WHERE id=?`).run(b);
+        knowDb.prepare(`UPDATE concepts SET name=? WHERE id=?`).run(action.suggestedName, a);
+      })();
+      setKNodeCluster(knowDb, fact.id, a);
+      touched = a;
+      stats.attached++;
+      stats.merged++;
     }
+  }
 
-    let touched: string | undefined;
-
-    if (action.action === 'attach') {
-      const ok = candidates.find((c) => c.id === action.conceptId);
-      if (ok) {
-        setKNodeCluster(knowDb, fact.id, action.conceptId);
-        touched = action.conceptId;
-        stats.attached++;
-      }
-    } else if (action.action === 'merge') {
-      const [a, b] = action.conceptIds;
-      const validA = candidates.find((c) => c.id === a);
-      const validB = candidates.find((c) => c.id === b);
-      if (validA && validB) {
-        knowDb.transaction(() => {
-          knowDb.prepare(`UPDATE k_nodes SET cluster_id=? WHERE cluster_id=?`).run(a, b);
-          knowDb.prepare(`DELETE FROM concepts WHERE id=?`).run(b);
-          knowDb.prepare(`UPDATE concepts SET name=? WHERE id=?`).run(action.suggestedName, a);
-        })();
-        setKNodeCluster(knowDb, fact.id, a);
-        touched = a;
-        stats.attached++;
-        stats.merged++;
-      }
-    }
-
-    if (!touched) {
-      // create (also acts as fallback when attach/merge couldn't be applied)
-      const suggestedName = action.action === 'create' ? action.suggestedName : fact.title.slice(0, 60);
+  if (!touched) {
+    // create (also acts as fallback when attach/merge couldn't be applied).
+    // Refresh re-check: a concept created earlier in this wave may now be a
+    // strong match, so attach instead of creating a duplicate.
+    const refreshed = nearestConcepts(knowDb, embedding, 1, REFRESH_ATTACH_SCORE);
+    if (refreshed.length > 0) {
+      setKNodeCluster(knowDb, fact.id, refreshed[0].id);
+      touched = refreshed[0].id;
+      stats.attached++;
+    } else {
+      const suggestedName = action.action === 'create' && action.suggestedName
+        ? action.suggestedName
+        : fact.title.slice(0, 60);
       const cid = newConceptId(suggestedName);
       upsertConcept(knowDb, { id: cid, name: suggestedName, memberCount: 0 });
       setKNodeCluster(knowDb, fact.id, cid);
@@ -140,74 +226,109 @@ export async function runClustererForNewFacts(
       stats.created++;
       stats.attached++;
     }
-
-    // Incrementally refresh the touched concept's centroid + member count so
-    // subsequent facts can find it as a candidate.
-    const { memberCount, centroid } = recountAndCentroid(knowDb, touched);
-    knowDb.prepare(`UPDATE concepts SET member_count=?, embedding=? WHERE id=?`)
-      .run(memberCount, centroid ? encodeCentroid(centroid) : null, touched);
-
-    dirty.add(touched);
   }
 
-  // Re-centroid + summarize each dirty concept. Summarizer calls (independent
-  // per concept) run concurrently; persistence stays sequential.
-  const limit = cfg.concurrency ?? 4;
-  const summarized = await mapPool([...dirty], limit, async (cid) => {
+  refreshCentroid(knowDb, touched);
+  return touched;
+}
+
+/** Recompute member_count + centroid for one concept. */
+function refreshCentroid(knowDb: SqliteDb, conceptId: string): void {
+  const { memberCount, centroid } = recountAndCentroid(knowDb, conceptId);
+  knowDb.prepare(`UPDATE concepts SET member_count=?, embedding=? WHERE id=?`)
+    .run(memberCount, centroid ? encodeCentroid(centroid) : null, conceptId);
+}
+
+/**
+ * Re-centroid + (re-)summarize the given concepts. Summarizer calls run
+ * concurrently; DB writes apply sequentially. Returns count actually summarized.
+ *
+ * Concepts with no members get their stale member_count zeroed and are skipped.
+ * When `skipStable`, small concepts that already have a summary are left as-is.
+ */
+async function recomputeAndSummarize(
+  rt: AgentRuntime, knowDb: SqliteDb, ids: string[], limit: number, opts: { skipStable: boolean },
+): Promise<number> {
+  const summarized = await mapPool(ids, limit, async (cid) => {
     const members = membersOf(knowDb, cid).slice(0, 25);
-    const currentRow = knowDb.prepare(`SELECT name FROM concepts WHERE id=?`).get(cid) as { name: string } | undefined;
-    let name = currentRow?.name ?? '';
-    let summary: string | undefined;
-    let domain: string | undefined;
-    let structured: Record<string, string> | undefined;
-    let didSummarize = false;
-    if (members.length > 0) {
-      try {
-        const out = await rt.run(SUMMARIZER_AGENT, {
-          payload: {
-            conceptId: cid,
-            currentName: name,
-            facts: members.map((m) => ({ kind: m.kind, title: m.title, summary: m.summary ?? undefined })),
-          },
-        });
-        name = out.output.name || name;
-        summary = out.output.summary;
-        domain = out.output.domain;
-        structured = pruneStructured(out.output.structured);
-        didSummarize = true;
-      } catch { /* leave name/summary as-is on backend failure */ }
+    const currentRow = knowDb.prepare(`SELECT name, summary, domain, structured FROM concepts WHERE id=?`).get(cid) as
+      { name: string; summary: string | null; domain: string | null; structured: string | null } | undefined;
+
+    if (members.length === 0) {
+      // Orphaned concept (e.g. after a merge): clear stale count, skip summarize.
+      knowDb.prepare(`UPDATE concepts SET member_count=0 WHERE id=?`).run(cid);
+      return { cid, skip: true as const };
     }
-    return { cid, name, summary, domain, structured, didSummarize };
+
+    let name = currentRow?.name ?? '';
+    let summary = currentRow?.summary ?? undefined;
+    let domain = currentRow?.domain ?? undefined;
+    let structured = currentRow?.structured ? JSON.parse(currentRow.structured) as Record<string, string> : undefined;
+
+    const stable = Boolean(currentRow?.summary && currentRow.summary.trim()) && members.length <= STABLE_MEMBER_MAX;
+    if (opts.skipStable && stable) {
+      return { cid, name, summary, domain, structured, didSummarize: false };
+    }
+
+    try {
+      const out = await rt.run(SUMMARIZER_AGENT, {
+        payload: {
+          conceptId: cid,
+          currentName: name,
+          facts: members.map((m) => ({ kind: m.kind, title: m.title, summary: m.summary ?? undefined })),
+        },
+      });
+      name = out.output.name || name;
+      summary = out.output.summary;
+      domain = out.output.domain;
+      structured = pruneStructured(out.output.structured);
+      return { cid, name, summary, domain, structured, didSummarize: true };
+    } catch {
+      return { cid, name, summary, domain, structured, didSummarize: false };
+    }
   });
 
+  let count = 0;
   for (const s of summarized) {
+    if ('skip' in s) continue;
     const cid = s.cid;
     const { memberCount, centroid } = recountAndCentroid(knowDb, cid);
-    const name = s.name;
-    const summary = s.summary;
-    const domain = s.domain;
-    const structured = s.structured;
-    if (s.didSummarize) stats.conceptsSummarized++;
+    if (s.didSummarize) count++;
 
-    // Place the concept in the scope x grounding matrix. Scope prefers the
-    // members' explicit scope (set by producing agents), falling back to the
-    // triage domain. Grounding is the strongest member tier.
     const memberMeta = knowDb.prepare(
       `SELECT grounding, scope FROM k_nodes WHERE cluster_id=?`,
     ).all(cid) as Array<{ grounding: string | null; scope: string | null }>;
-    const scope = dominantScope(memberMeta.map((m) => m.scope)) ?? scopeFromDomain(domain);
+    const scope = dominantScope(memberMeta.map((m) => m.scope)) ?? scopeFromDomain(s.domain);
     const grounding = dominantGrounding(memberMeta.map((m) => m.grounding));
 
     knowDb.prepare(`
       UPDATE concepts SET name=?, summary=?, domain=?, scope=?, grounding=?, structured=?, member_count=?, embedding=? WHERE id=?
     `).run(
-      name, summary ?? null, domain ?? null, scope, grounding,
-      structured ? JSON.stringify(structured) : null,
+      s.name, s.summary ?? null, s.domain ?? null, scope, grounding,
+      s.structured ? JSON.stringify(s.structured) : null,
       memberCount, centroid ? encodeCentroid(centroid) : null, cid,
     );
   }
+  return count;
+}
 
-  return stats;
+/**
+ * Re-summarize concepts that still lack a summary (e.g. after a failed or
+ * interrupted summarizer pass). Used by `subnet doctor --fix`.
+ */
+export async function repairConceptSummaries(
+  knowDb: SqliteDb, cfg: SubstrateNetConfig,
+): Promise<{ attempted: number; summarized: number }> {
+  const rows = knowDb.prepare(`
+    SELECT id FROM concepts
+    WHERE (summary IS NULL OR TRIM(summary) = '') AND member_count > 0
+  `).all() as Array<{ id: string }>;
+  if (rows.length === 0) return { attempted: 0, summarized: 0 };
+
+  const rt = new AgentRuntime({ knowledgeDb: knowDb, config: cfg });
+  const limit = Math.max(1, cfg.concurrency ?? 4);
+  const summarized = await recomputeAndSummarize(rt, knowDb, rows.map((r) => r.id), limit, { skipStable: false });
+  return { attempted: rows.length, summarized };
 }
 
 /** Keep only non-empty structured fields; return undefined if all empty. */

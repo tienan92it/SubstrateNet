@@ -72,10 +72,10 @@ export class AgentRuntime {
     const resolved = this.resolveModel(agent);
     const validator = this.getValidator(agent);
 
-    // Candidate chain: primary, then optional fallback (e.g. frontier -> local).
-    // The fallback lets heavy agents default to a subscribed backend yet still
-    // run on local Ollama when that backend is unavailable (no API key, etc.).
-    const candidates = [resolved.primary, ...(resolved.fallback ? [resolved.fallback] : [])];
+    // Candidate chain: primary, then ordered fallbacks (e.g. frontier -> flash
+    // -> local). The chain lets heavy agents default to a subscribed backend
+    // yet still run on local Ollama when earlier tiers are unavailable.
+    const candidates = [resolved.primary, ...resolved.fallbacks];
 
     // 1. cache lookup — across all candidate model refs.
     for (const cand of candidates) {
@@ -101,6 +101,12 @@ export class AgentRuntime {
     let raw: { content: string; tokensIn?: number; tokensOut?: number } | undefined;
     let lastError: Error | undefined;
     for (const cand of candidates) {
+      // Skip a remote candidate with no resolvable key so a tiered config falls
+      // through to its local fallback instead of burning a guaranteed-401 call.
+      if (!this.backendUsable(cand.backendName)) {
+        lastError = new Error(`backend "${cand.backendName}" has no resolvable API key`);
+        continue;
+      }
       try {
         const b = this.getBackend(cand.backendName);
         raw = await b.chat({ model: cand.model, messages, jsonMode: true });
@@ -175,13 +181,18 @@ export class AgentRuntime {
 
   // ------------------------------------------------------------------------
 
-  private resolveModel<I, O>(agent: Agent<I, O>): { primary: ResolvedModel; fallback?: ResolvedModel } {
+  private resolveModel<I, O>(agent: Agent<I, O>): { primary: ResolvedModel; fallbacks: ResolvedModel[] } {
     const key = agent.modelKey ?? agent.name;
     const spec = this.config.agents[key];
     if (!spec) throw new Error(`Agent "${key}" missing in config.agents`);
     const primary = this.parseResolved(spec.model, key)!; // non-soft: throws, never undefined
-    const fallback = spec.fallback ? this.parseResolved(spec.fallback, key, true) : undefined;
-    return { primary, fallback };
+    const refs = spec.fallback === undefined
+      ? []
+      : Array.isArray(spec.fallback) ? spec.fallback : [spec.fallback];
+    const fallbacks = refs
+      .map((ref) => this.parseResolved(ref, key, true))
+      .filter((r): r is ResolvedModel => r !== undefined);
+    return { primary, fallbacks };
   }
 
   /** Parse a "<backend>:<model>" ref; for the primary, the backend must exist. */
@@ -202,6 +213,14 @@ export class AgentRuntime {
       this.validators.set(key, v);
     }
     return v;
+  }
+
+  /** A backend is usable if it is local (ollama) or has a resolvable API key. */
+  private backendUsable(name: string): boolean {
+    const spec = this.config.agentBackends[name];
+    if (!spec) return false;
+    if (spec.kind === 'ollama') return true;
+    return Boolean(resolveApiKey(spec));
   }
 
   private getBackend(name: string): Backend {

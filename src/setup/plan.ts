@@ -7,14 +7,22 @@ import { openCodeDb, openKnowledgeDb } from '../db/connection.js';
 import { buildSessionAdapters } from '../ingest/orchestrator.js';
 import type { SetupPlan, ProjectPlanEstimate } from './types.js';
 
-const ENRICH_AGENT_CALLS = 7;
+const ENRICH_AGENT_CALLS = 8;
 const FALLBACK_MS_PER_CALL = 12_000;
 const FALLBACK_TOKENS_PER_CALL = 4_000;
 const EXTRACT_RATIO = 0.65;
 const KEEP_RATIO = 0.75;
+/** Facts produced per kept window (rough). */
+const AVG_FACTS_PER_WINDOW = 2;
+/** Fraction of facts attached/created mechanically (no LLM cluster call). */
+const MECHANICAL_ATTACH_RATIO = 0.8;
+/** Fraction of facts that trigger a (re-)summarize. */
+const SUMMARIZE_RATIO = 0.3;
+const DEFAULT_BATCH_SIZE = 8;
 
 /** Rough $/1M tokens (input+output blended) for estimates only. */
 const MODEL_COST_PER_M: Record<string, number> = {
+  'google/gemini-3.5-flash': 0.30,
   'google/gemini-2.5-flash': 0.35,
   'anthropic/claude-sonnet-4': 3.0,
   'openai/gpt-4o': 2.5,
@@ -22,6 +30,8 @@ const MODEL_COST_PER_M: Record<string, number> = {
 
 export interface PlanOpts {
   prose?: boolean;
+  /** Speed/quality profile this plan is for ('full' | 'default' | 'fast'). */
+  profile?: string;
 }
 
 function backendKind(cfg: SubstrateNetConfig, agentName: string): 'local' | 'frontier' {
@@ -144,12 +154,23 @@ async function planProject(root: string, cfg: SubstrateNetConfig, opts: PlanOpts
       Math.ceil(transcript.estNewTurns / 10),
     );
     const newWindows = Math.ceil(transcript.estNewTurns / 10);
-    const triageCalls = newWindows;
-    const extractCalls = Math.ceil(newWindows * EXTRACT_RATIO * 1.5);
-    const dedupeCalls = Math.ceil(newWindows * KEEP_RATIO);
+    const batchSize = Math.max(1, cfg.batchSize ?? DEFAULT_BATCH_SIZE);
+    const keptWindows = Math.ceil(newWindows * KEEP_RATIO);
+    const unified = Boolean(cfg.agents.windowExtractor);
+
+    // Triage is batched; embeddings are batched.
+    const triageCalls = Math.ceil(newWindows / batchSize);
+    // Unified extractor: one call per kept window. Legacy: ~1.5 agents/window.
+    const extractCalls = unified
+      ? keptWindows
+      : Math.ceil(keptWindows * EXTRACT_RATIO * 1.5);
+    const factsEst = extractCalls * AVG_FACTS_PER_WINDOW;
+    const clusterCalls = Math.ceil(factsEst * (1 - MECHANICAL_ATTACH_RATIO));
+    const summarizeCalls = Math.ceil(factsEst * SUMMARIZE_RATIO);
+    const embedCalls = Math.ceil(keptWindows / batchSize) + Math.ceil(factsEst / batchSize);
     const analyzeCalls = pending + (pending > 0 ? 1 : 0);
     const enrichCalls = ENRICH_AGENT_CALLS;
-    let llmCalls = triageCalls + extractCalls + dedupeCalls + analyzeCalls + enrichCalls;
+    let llmCalls = triageCalls + extractCalls + clusterCalls + summarizeCalls + embedCalls + analyzeCalls + enrichCalls;
 
     const hist = avgAgentStats(knowDb);
     const modes = [
@@ -241,5 +262,6 @@ export async function buildSetupPlan(
     totals: { ...totals, estCostUsd },
     backendMode,
     concurrency: cfg.concurrency ?? 4,
+    profile: opts.profile ?? 'full',
   };
 }

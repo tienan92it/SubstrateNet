@@ -54,7 +54,8 @@ export function formatPlanTable(plan: SetupPlan): string {
     lines.push(`\nEstimated tokens (frontier): ~${formatNum(t.estTokens)}` +
       (t.estCostUsd != null ? ` · ~$${t.estCostUsd.toFixed(2)}` : ''));
   }
-  lines.push(`Concurrency: ${plan.concurrency} · Backend: ${plan.backendMode}`);
+  lines.push(`Concurrency: ${plan.concurrency} · Backend: ${plan.backendMode}` +
+    (plan.profile ? ` · Profile: ${plan.profile}` : ''));
   return lines.join('\n');
 }
 
