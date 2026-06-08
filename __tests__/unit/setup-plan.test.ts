@@ -4,7 +4,14 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { buildSetupPlan } from '../../src/setup/plan.js';
 import { formatPlanTable } from '../../src/setup/format.js';
-import { MODEL_PRICING } from '../../src/setup/plan-cost.js';
+import {
+  MODEL_PRICING,
+  PLAN_AGENT_ALIASES,
+  billingModelRef,
+  costUsdForAgent,
+  resolveAgentSpec,
+} from '../../src/setup/plan-cost.js';
+import { DEFAULT_CONFIG } from '../../src/config.js';
 
 describe('setup plan', () => {
   it('estimates work for a minimal project tree', async () => {
@@ -56,8 +63,7 @@ describe('setup plan', () => {
     writeFileSync(join(root, 'index.ts'), 'export const x = 1;\n');
 
     const plan = await buildSetupPlan([root], { profile: 'lean' });
-    const analyze = plan.phases.find((ph) => ph.phase === 'analyze')!;
-    expect(analyze?.calls).toBe(0);
+    expect(plan.phases.find((ph) => ph.phase === 'analyze')).toBeUndefined();
     expect(plan.phases.find((ph) => ph.phase === 'enrich-fused')).toBeUndefined();
     expect(plan.phases.find((ph) => ph.phase === 'enrich')).toBeUndefined();
   });
@@ -101,5 +107,33 @@ describe('setup plan', () => {
   it('uses output-heavy flash pricing', () => {
     const flash = MODEL_PRICING['google/gemini-3.5-flash']!;
     expect(flash.outputPerM).toBeGreaterThan(flash.inputPerM * 3);
+  });
+
+  it('resolves batch agents from parent config entries', () => {
+    const cfg = { ...DEFAULT_CONFIG, agents: { ...DEFAULT_CONFIG.agents } };
+    delete (cfg.agents as Record<string, unknown>).clustererBatch;
+    expect(resolveAgentSpec(cfg, 'clustererBatch')?.model).toBe(cfg.agents.clusterer.model);
+    expect(PLAN_AGENT_ALIASES.triageBatch).toBe('triage');
+    expect(billingModelRef(cfg, 'clustererBatch')).toContain('gemini-3.5-flash');
+  });
+
+  it('prices cluster phase when only parent clusterer is configured', () => {
+    const cfg = { ...DEFAULT_CONFIG, agents: { ...DEFAULT_CONFIG.agents } };
+    delete (cfg.agents as Record<string, unknown>).clustererBatch;
+    const usd = costUsdForAgent(cfg, 'clustererBatch', 28_000, 18_000);
+    expect(usd).toBeGreaterThan(0.2);
+  });
+
+  it('prices frontier agents at flash fallback for OpenRouter estimate', () => {
+    const cfg = { ...DEFAULT_CONFIG };
+    const usd = costUsdForAgent(cfg, 'sourceClassifierBatch', 25_000, 8_000);
+    expect(usd).toBeGreaterThan(0.1);
+  });
+
+  it('first-run plan uses zero cache before triage completes', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'subnet-setup-cache-'));
+    writeFileSync(join(root, 'index.ts'), 'export const x = 1;\n');
+    const plan = await buildSetupPlan([root]);
+    expect(plan.projects[0]!.cacheHitPct).toBe(0);
   });
 });
