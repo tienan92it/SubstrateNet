@@ -60,13 +60,14 @@
   <pre><code>subnet setup [options]</code></pre>
   <p>
     Interactive first-run wizard: discover local AI workspaces, select projects,
-    show a pre-flight estimate (tokens/API calls for frontier models, wall time for
-    local Ollama), then run init → sync → ingest → link → dashboard.
+    show a per-phase pre-flight estimate (calls, tokens in/out, OpenRouter cost,
+    wall time), then run init → sync → ingest → link → dashboard.
   </p>
   <table>
     <tr><th>Flag</th><th>Effect</th></tr>
     <tr><td><code>--discover-only</code></td><td>List discoverable workspaces and exit.</td></tr>
-    <tr><td><code>--plan-only</code></td><td>Estimate work without running the pipeline (requires <code>--projects</code>).</td></tr>
+    <tr><td><code>--plan-only</code></td><td>Per-phase estimate table + JSON; requires <code>--projects</code>.</td></tr>
+    <tr><td><code>--profile &lt;name&gt;</code></td><td>Quality profile: <code>lean</code> · <code>standard</code> (default) · <code>deep</code>. <code>--reprocess</code> implies deep + full window re-triage.</td></tr>
     <tr><td><code>--projects &lt;paths&gt;</code></td><td>Comma-separated roots (non-interactive selection).</td></tr>
     <tr><td><code>--agents &lt;id&gt;</code></td><td>Limit discovery: <code>cursor</code>, <code>claude-code</code>, <code>codex</code>, <code>copilot</code>.</td></tr>
     <tr><td><code>--yes</code></td><td>Skip confirmation after the plan.</td></tr>
@@ -79,7 +80,7 @@
   </table>
 
   <h2 id="update">update</h2>
-  <pre><code>subnet update [path] [--fast|--full] [--global] [--no-dashboard] [--verify] [--invalidate-cache] [--yes]</code></pre>
+  <pre><code>subnet update [path] [--fast|--deep|--full] [--global] [--no-dashboard] [--verify] [--invalidate-cache] [--yes]</code></pre>
   <p>
     The day-to-day command. Incrementally re-syncs code, ingests new transcripts,
     re-links cross-project knowledge, and rebuilds dashboards. With no
@@ -88,8 +89,9 @@
   </p>
   <table>
     <tr><th>Flag</th><th>Effect</th></tr>
-    <tr><td><code>--fast</code></td><td>Transcript-only: skip code analysis + domain enrichment (seconds-to-minutes).</td></tr>
-    <tr><td><code>--full</code></td><td>Reprocess every window and force enrichment (after a model change).</td></tr>
+    <tr><td><code>--fast</code></td><td><strong>Lean</strong> — transcript-only; skip file analyze + enrich.</td></tr>
+    <tr><td><code>--deep</code></td><td><strong>Deep</strong> — analyze all pending files + legacy 8-agent enrich (incremental windows).</td></tr>
+    <tr><td><code>--full</code></td><td><strong>Deep + reprocess</strong> — re-triage every window (after a model change).</td></tr>
     <tr><td><code>--global</code></td><td>Rebuild the cross-project dashboard too.</td></tr>
     <tr><td><code>--no-dashboard</code></td><td>Skip dashboard rebuild.</td></tr>
     <tr><td><code>--verify</code></td><td>Run the verifier pass after ingest.</td></tr>
@@ -102,7 +104,9 @@
   <p>
     Health report: config validation, unclustered facts, concepts missing
     summaries, pending file analysis, recent agent failure rate, model-config
-    drift, stale registry paths, and last-run age. Read-only by default.
+    drift, <strong>pipeline audit</strong> counters (mechanical window drops,
+    anchor rejects, tier-skipped files), stale registry paths, and last-run age.
+    Read-only by default.
   </p>
   <table>
     <tr><th>Flag</th><th>Effect</th></tr>

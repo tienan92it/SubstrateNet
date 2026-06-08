@@ -88,14 +88,18 @@ Two commands cover almost everything when scripting:
   cost/time estimate, then runs the full pipeline and builds the global dashboard.
 - **`subnet update [path]`** — the day-to-day command. Incrementally re-syncs
   code, ingests new transcripts, re-links, and rebuilds dashboards.
-  - `--fast` — transcript-only (skips code analysis + enrichment)
-  - `--full` — reprocess everything (after a model change)
+  - `--fast` — **lean**: transcript-only (skips file analyze + enrich)
+  - default — **standard**: tier-1 file analyze + fused enrich (2 LLM calls)
+  - `--deep` — all pending files + legacy 8-agent enrich (incremental windows)
+  - `--full` — **deep + reprocess** every window (after a model change)
   - `--global` — also rebuild the cross-project dashboard
+- **`subnet setup --plan-only`** — per-phase cost table (calls, tokens in/out,
+  est. $, wall time) before a first run
 
 Health and cross-project views:
 
 ```bash
-subnet doctor                 # health report; --fix repairs summaries + re-links
+subnet doctor                 # health + pipeline audit counters; --fix repairs
 subnet global dashboard --open  # cross-project hierarchy
 subnet global profile           # industries + top skills
 ```
@@ -133,15 +137,20 @@ deterministic. Meaning is agent-driven.**
 | **L1** Conversations + docs + diagrams | sessions, turns, tool calls; in-repo docs (README / BRD / ADRs) and diagrams (mermaid / drawio / excalidraw / plantuml) | deterministic (file parsers + Docs/Diagrams adapters) |
 | **L1.5** Triage | relevance / domain / quality / linkage / **activity** per window; **doc-kind** for source artifacts | **agents** (Triage · SourceClassifier) |
 | **L2** Facts | decisions, business rules, intents, problems / solutions; BRD actors / processes / metrics; **incidents → root cause → resolution** | **agents** (Decision · BusinessLogic · Requirements · Intent · ProblemSolution · Incident) + syntax pass |
-| **L2.5** Domain enrichment | dependencies, skills, entities, relationships, industry, components + lifecycles, gaps; cross-source **dedup + corroboration** | manifests + SQL (structural) · reconciler · fact-dedupe · **agents** (TechnicalProfiler · DomainModeler · ArchitectureModeler · IndustryClassifier · IndustryEnricher) |
+| **L2.5** Domain enrichment | dependencies, skills, entities, relationships, industry, components + lifecycles, gaps; cross-source **dedup + corroboration** | manifests + SQL (structural) · reconciler · fact-dedupe · **standard:** fused enrich (`domainFuser` + `industryFuser`) · **deep:** legacy 8-agent stack |
 | **L2.6** Knowledge zones | business domains + tech domains, grouping facts by bounded context / capability | **agents** (BusinessDomainModeler · TechDomainModeler) |
 | **L3** Concepts | clustered facts with names + structured summaries, scope-tagged | **agents** (Clusterer · Summarizer) |
 | **L4** Cross-project | shared concepts, **workspace umbrellas**, emergent project links | mechanical (exact + SimHash + shared-signal clustering) + **agent** (Linker) |
 | **L5** Global skill graph + hierarchy | technical + industry skills, and the workspace → industry → business → tech → project zone tree | mechanical aggregation over L2.5/L2.6 evidence |
 
-Agents run **tiered**: bulk work (triage, embeddings, extractors) defaults to fast
-cloud models (Gemini Flash via OpenRouter); heavy reasoning (domain/architecture
-modeling, linking, portfolio prose) routes to a **Cursor SDK backend**
+The ingest pipeline **cleans and packages evidence before any LLM call**: session
+filter → turn normalize → window briefs → pre-triage dedupe → triage/extract on
+briefs → anchor gate → early fact dedupe → batch clusterer. See
+[`docs/workflow-refactor.md`](docs/workflow-refactor.md) for the full RFC.
+
+Agents run **tiered**: bulk work (triage, extractors, fused enrich, clusterer
+batch) defaults to Gemini Flash via OpenRouter; heavy reasoning (linking,
+portfolio prose, optional deep enrich) routes to a **Cursor SDK backend**
 (`frontier`, set `CURSOR_API_KEY`). Every agent falls back to local Ollama
 automatically when a backend is unavailable.
 
@@ -174,8 +183,8 @@ use the essentials below. Per-stage commands still work but are hidden from
 `--help` (see [migration](#migrating-from-01x)).
 
 ```
-subnet setup [--projects ...] [--yes]   # first-run wizard
-subnet update [path] [--fast|--full]    # day-to-day incremental refresh
+subnet setup [--projects ...] [--profile lean|standard|deep] [--plan-only] [--yes]
+subnet update [path] [--fast|--deep|--full]   # day-to-day incremental refresh
 subnet doctor [--fix]                   # health report + optional repair
 subnet global link|dashboard|profile|skills
 subnet watch [--foreground]             # background daemon (see automation guide)
@@ -245,9 +254,21 @@ deep-merge over global.
     "dedupe":            { "model": "local:nomic-embed-text" },
     "businessLogic":     { "model": "openrouter:anthropic/claude-sonnet-4", "fallback": "local:qwen2.5:14b" },
     "technicalProfiler": { "model": "openrouter:anthropic/claude-sonnet-4" },
-    "industryClassifier":{ "model": "openrouter:anthropic/claude-sonnet-4" }
-    // ... decision, problemSolution, domainModeler, industryEnricher,
-    //     clusterer, summarizer, linker, verifier, skillSynthesizer
+    "industryClassifier":{ "model": "openrouter:anthropic/claude-sonnet-4" },
+    "domainFuser":       { "model": "openrouter:google/gemini-3.5-flash" },
+    "industryFuser":     { "model": "openrouter:google/gemini-3.5-flash" }
+    // ... decision, clusterer, summarizer, linker, verifier, skillSynthesizer
+  },
+  "ingest": {
+    "maxSessions": 200,
+    "sinceDays": 365,
+    "maxFactsPerWindow": 8,
+    "preTriageDedupe": true,
+    "clusterBatch": true
+  },
+  "analyze": {
+    "tier": "standard",
+    "maxFilesPerRun": 500
   }
 }
 ```
@@ -270,7 +291,7 @@ Bumping a model invalidates that agent's cache on the next run; old runs stay in
 ```
 <project>/.substrate-net/
 ├── code.db          # L0 — codegraph-compatible schema
-├── knowledge.db     # L1, L1.5, L2, L2.5, L3 + agent_runs cache
+├── knowledge.db     # L1–L3 + window_briefs + agent_runs cache
 ├── canvas/          # generated .canvas.tsx files
 └── config.json      # per-project agent overrides
 

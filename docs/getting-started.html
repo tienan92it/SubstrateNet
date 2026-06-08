@@ -97,11 +97,14 @@ subnet setup</code></pre>
   <p>Non-interactive:</p>
   <pre class="shell"><code>subnet setup --discover-only
 subnet setup --plan-only --projects /path/a,/path/b
-subnet setup --projects /path/a,/path/b --yes --open</code></pre>
+subnet setup --profile standard --projects /path/a --yes --open</code></pre>
   <p class="small">
-    Flags: <code>--prose</code> (portfolio markdown), <code>--verify</code>,
-    <code>--reprocess</code>, <code>--skip-dashboard</code>, <code>--json</code>.
-    See <a href="cli.html#setup">CLI → setup</a>.
+    <code>--plan-only</code> prints a per-phase table (triage, extract, cluster,
+    analyze, enrich-fused, …) with token and cost estimates. Flags:
+    <code>--profile lean|standard|deep</code>, <code>--prose</code>,
+    <code>--verify</code>, <code>--reprocess</code>, <code>--skip-dashboard</code>,
+    <code>--json</code>. See <a href="cli.html#setup">CLI → setup</a> and
+    <a href="workflow-refactor.md">pipeline refactor RFC</a>.
   </p>
 
   <h2 id="daily">4. Day to day</h2>
@@ -109,9 +112,10 @@ subnet setup --projects /path/a,/path/b --yes --open</code></pre>
     After setup, one command keeps every registered project fresh. Or run
     <code>subnet</code> with no arguments for the interactive menu.
   </p>
-  <pre class="shell"><code>subnet update                 # all projects, incremental
-subnet update --fast          # transcript-only (seconds)
-subnet update --full          # reprocess everything (after a model change)
+  <pre class="shell"><code>subnet update                 # standard: tier-1 analyze + fused enrich
+subnet update --fast          # lean: transcript-only (seconds)
+subnet update --deep          # all files + legacy enrich (incremental)
+subnet update --full          # deep + reprocess all windows (model change)
 subnet update --global --open # also rebuild + open the global dashboard
 
 subnet doctor                 # health report

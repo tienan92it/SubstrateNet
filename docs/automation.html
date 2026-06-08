@@ -45,18 +45,19 @@
 
   <h2 id="update">The update command</h2>
   <pre><code>subnet update [path]        # one project, or all registered if omitted
-  --fast                    # transcript-only: skip code analysis + enrichment
-  --full                    # reprocess every window (e.g. after a model change)
+  --fast                    # lean: transcript-only
+  --deep                    # all files + legacy enrich (incremental windows)
+  --full                    # deep + reprocess every window
   --global                  # also rebuild the cross-project dashboard
   --no-dashboard            # skip dashboard rebuild
   --verify                  # run the verifier pass after ingest
   -y, --yes                 # non-interactive</code></pre>
   <p>
-    Profiles trade speed for depth. <code>--fast</code> only ingests new
-    transcript windows and re-links — it never calls the heavy domain/architecture
-    agents, so it finishes in seconds-to-minutes. The default profile also runs
-    code analysis and domain enrichment (both skip unchanged inputs). Use
-    <code>--full</code> after switching models to invalidate prior work.
+    Profiles trade speed for depth. <code>--fast</code> (lean) only ingests
+    transcripts. The default <strong>standard</strong> profile runs tier-1 file
+    analyze and <strong>fused enrich</strong> (two flash calls). <code>--deep</code>
+    analyzes all pending files and runs the legacy eight-agent enrich stack.
+    <code>--full</code> adds re-triage of every window — use after a model change.
   </p>
   <p class="small">
     Concurrent invocations are serialized through

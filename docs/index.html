@@ -102,7 +102,7 @@
     <a class="guide-card" href="configuration.html">
       <span class="kicker">runtime</span>
       <h3>Configuration</h3>
-      <p>Backends, per-agent model routing, OpenRouter, concurrency, transcript roots, and cache behavior.</p>
+      <p>Backends, per-agent model routing, ingest/analyze knobs, OpenRouter, concurrency, and cache behavior.</p>
     </a>
     <a class="guide-card" href="automation.html">
       <span class="kicker">operate</span>
@@ -122,12 +122,18 @@ ollama pull qwen2.5:14b
 ollama pull qwen3-embedding:0.6b
 
 # 3. First run: discover → estimate → full pipeline
+subnet setup --plan-only   # optional per-phase cost table
 subnet setup
 
 # 4. Day to day (or just run `subnet` for the menu)
-subnet update</code></pre>
+subnet update              # standard: tier-1 analyze + fused enrich
+subnet update --fast       # lean: transcripts only</code></pre>
 
-  <p>Full walkthrough: <a href="getting-started.html">getting started →</a></p>
+  <p>
+    Full walkthrough: <a href="getting-started.html">getting started →</a>
+    · Pipeline cost model:
+    <a href="workflow-refactor.md">workflow-refactor.md</a>
+  </p>
 
   <footer class="site-footer">
     <span>v0.2.0 · MIT</span>

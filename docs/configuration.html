@@ -45,6 +45,7 @@
       <li><a href="#hardware-budgets">hardware budgets</a></li>
       <li><a href="#frontier">frontier-quality routing</a></li>
       <li><a href="#transcript-roots">transcript roots</a></li>
+      <li><a href="#ingest-analyze">ingest + analyze</a></li>
       <li><a href="#cache">cache invalidation</a></li>
     </ul>
   </div>
@@ -70,6 +71,18 @@
     "cursor":     "~/.cursor/projects",
     "claudeCode": "~/.claude/projects",
     "codex":      "~/.codex/sessions"
+  },
+  "ingest": {
+    "maxSessions": 200,
+    "sinceDays": 365,
+    "maxFactsPerWindow": 8,
+    "preTriageDedupe": true,
+    "clusterBatch": true
+  },
+  "analyze": {
+    "tier": "standard",
+    "maxFilesPerRun": 500,
+    "skipGlobs": []
   }
 }</code></pre>
 
@@ -197,6 +210,9 @@
     "triage":             { "model": "openrouter:google/gemini-2.5-flash" },
     "intent":             { "model": "openrouter:google/gemini-2.5-flash" },
     "clusterer":          { "model": "openrouter:google/gemini-2.5-flash" },
+    "clustererBatch":     { "model": "openrouter:google/gemini-2.5-flash" },
+    "domainFuser":        { "model": "openrouter:google/gemini-2.5-flash" },
+    "industryFuser":      { "model": "openrouter:google/gemini-2.5-flash" },
     "summarizer":         { "model": "openrouter:google/gemini-2.5-flash" },
     "decision":           { "model": "openrouter:anthropic/claude-sonnet-4" },
     "businessLogic":      { "model": "openrouter:anthropic/claude-sonnet-4" },
@@ -215,6 +231,28 @@
     errors. If agents return nothing, check <code>agent_runs</code> for errors
     (a wrong model slug 400s; a missing/misplaced key fails with "requires
     apiKey") — see the <a href="#backends">key gotcha</a> above.
+  </p>
+
+  <h2 id="ingest-analyze">Ingest + analyze</h2>
+  <p>
+    Cost-control knobs for the refactored pipeline. See
+    <a href="workflow-refactor.md">workflow-refactor.md</a> for rationale.
+  </p>
+  <table>
+    <tr><th>Key</th><th>Default</th><th>Effect</th></tr>
+    <tr><td><code>ingest.maxSessions</code></td><td>200</td><td>Cap sessions ingested per run (session filter).</td></tr>
+    <tr><td><code>ingest.sinceDays</code></td><td>365</td><td>Skip sessions older than N days (by mtime).</td></tr>
+    <tr><td><code>ingest.maxFactsPerWindow</code></td><td>8</td><td>Anchor gate cap after extract.</td></tr>
+    <tr><td><code>ingest.preTriageDedupe</code></td><td>true</td><td>Embed-dedupe windows before triage LLM.</td></tr>
+    <tr><td><code>ingest.clusterBatch</code></td><td>true</td><td>Batch ambiguous cluster decisions (<code>clustererBatch</code>).</td></tr>
+    <tr><td><code>analyze.tier</code></td><td>standard</td><td><code>lean</code> skips analyze; <code>standard</code> tier-1 files; <code>deep</code> all pending (capped).</td></tr>
+    <tr><td><code>analyze.maxFilesPerRun</code></td><td>500</td><td>Upper bound on <code>fileAnalyzer</code> calls per run.</td></tr>
+  </table>
+  <p class="small">
+    Standard enrich uses <code>domainFuser</code> + <code>industryFuser</code>
+    (flash-first). Deep profile (<code>subnet update --deep</code>) uses the
+    legacy <code>domainModeler</code> / <code>technicalProfiler</code> / … stack.
+    Hidden <code>subnet ingest</code> honors <code>SUBNET_PROFILE=lean|standard|deep</code>.
   </p>
 
   <h2 id="transcript-roots">Transcript roots</h2>
