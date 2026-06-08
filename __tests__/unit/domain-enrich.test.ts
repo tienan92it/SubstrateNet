@@ -217,7 +217,7 @@ describe('full enrichment (no agent)', () => {
         return { output: {}, confidence: 0, model: 'fake', cached: false } as any;
       };
       try {
-        const stats = await runEnrichment(root, knowDb, codeDb, cfg, {});
+        const stats = await runEnrichment(root, knowDb, codeDb, cfg, { enrichProfile: 'deep' });
         expect(stats.agentRelationships).toBe(1);
         expect(stats.agentGaps).toBe(1);
         // the stated relationship is persisted with grounding 'stated'

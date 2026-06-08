@@ -26,6 +26,7 @@
       <a href="getting-started.html">start</a>
       <a class="active" href="architecture.html">architecture</a>
       <a href="cli.html">cli</a>
+      <a href="automation.html">automation</a>
       <a href="mcp.html">mcp</a>
       <a href="dashboard.html">dashboard</a>
       <a href="configuration.html">config</a>
@@ -100,8 +101,11 @@
   <h2 id="pipeline">Pipeline</h2>
   <p>
     Each ingest run pulls new turns, segments them into windows, and routes
-    each window through the deterministic syntax pass and the agent stack.
-    Inputs flow top-down; outputs accumulate as edges back into earlier layers.
+    each window through mechanical cleaning <em>before</em> any classification
+    LLM: session filter → turn normalize → <strong>window briefs</strong> →
+    pre-triage embed dedupe → triage on briefs → extract with anchor gate →
+    early fact dedupe → <strong>batch clusterer</strong> → tiered file analyze →
+    fused or deep enrich. See <a href="workflow-refactor.md">workflow-refactor.md</a>.
   </p>
 
   <div class="mermaid">
@@ -138,8 +142,8 @@ flowchart TB
     <li><em>Manifest parser</em> — walks the project (depth-limited) for dependency manifests and infra files; emits <code>dependency</code> / <code>tool</code> facts (structural). Monorepos with nested manifests are fully covered.</li>
     <li><em>Domain-from-code</em> — promotes SQL tables to <code>entity</code> facts and foreign keys to <code>relates_to</code> edges (structural).</li>
     <li><em>Reconciler</em> — matches stated entities to structural ones by normalized name; links <code>same_as</code> and upgrades grounding to <code>corroborated</code>.</li>
-    <li><em>TechnicalProfiler</em> — synthesizes higher-level skills from languages + declared dependencies.</li>
-    <li><em>IndustryClassifier / IndustryEnricher</em> — names the business domain from any available signal; proposes industry-standard concepts as <code>model</code>/<code>external</code> learning targets.</li>
+    <li><em>Standard profile:</em> <code>domainFuser</code> + <code>industryFuser</code> — two flash-first calls replacing eight frontier enrich agents.</li>
+    <li><em>Deep profile:</em> legacy stack — <code>TechnicalProfiler</code>, <code>DomainModeler</code>, <code>ArchitectureModeler</code>, <code>IndustryClassifier</code>, <code>IndustryEnricher</code>, domain modelers, etc.</li>
     <li><em>Gap detector</em> — evidence-cited <code>knowledge_gap</code> nodes; names the gap, never the answer.</li>
   </ul>
 
@@ -152,10 +156,11 @@ flowchart TB
 
   <p><strong>Agent stages</strong></p>
   <ul>
-    <li><em>Triage</em> — drops noise and labels each window on four axes.</li>
-    <li><em>Dedupe</em> — embedding similarity against prior windows and prior facts.</li>
+    <li><em>Triage</em> — drops noise and labels each window (batched; reads window briefs).</li>
+    <li><em>Pre-triage dedupe</em> — mechanical window drop via embeddings (before triage LLM).</li>
+    <li><em>Dedupe</em> — embedding similarity for facts; early dedupe before cluster.</li>
     <li><em>Extractors</em> — Decision, BusinessLogic, Intent, ProblemSolution. Routed by triage domain so business-logic agents don't waste tokens on chitchat.</li>
-    <li><em>Clusterer</em> — for each new fact, picks attach / create / merge against top-K nearest concepts.</li>
+    <li><em>Clusterer</em> — mechanical attach for high-confidence matches; <code>clustererBatch</code> for the ambiguous band.</li>
     <li><em>Summarizer</em> — names and writes a structured summary for each touched concept.</li>
     <li><em>Linker</em> — proposes cross-project links the mechanical pass missed.</li>
     <li><em>Verifier</em> — periodic sweep for contradictions, supersessions, low-confidence pruning.</li>
@@ -178,7 +183,9 @@ flowchart TB
     <tr><td><code>businessLogic</code></td><td>window</td><td>business rules / entities / constraints</td><td>domain ∈ {business_logic, architecture}</td></tr>
     <tr><td><code>intent</code></td><td>window</td><td>user intents</td><td>most engineering domains</td></tr>
     <tr><td><code>problemSolution</code></td><td>window</td><td>(problem, solution) pairs</td><td>domain ∈ {debugging, implementation}</td></tr>
-    <tr><td><code>clusterer</code></td><td>new fact + top-K candidate concepts</td><td>attach / create / merge</td><td>each new fact</td></tr>
+    <tr><td><code>clusterer</code> / <code>clustererBatch</code></td><td>new fact(s) + top-K candidates</td><td>attach / create / merge</td><td>ambiguous facts (batched by default)</td></tr>
+    <tr><td><code>domainFuser</code></td><td>core pack + concepts + entities</td><td>relationships, domains, highlights</td><td>standard enrich</td></tr>
+    <tr><td><code>industryFuser</code></td><td>core pack + deps + README</td><td>industry, skills, architecture, glossary</td><td>standard enrich</td></tr>
     <tr><td><code>summarizer</code></td><td>concept + member facts</td><td>name + structured summary</td><td>each touched concept</td></tr>
     <tr><td><code>fileAnalyzer</code></td><td>file defs + imports + calls + source slice</td><td>summary + layer + tags + concepts</td><td>analysis (L0.5), per file</td></tr>
     <tr><td><code>architectureAnalyzer</code></td><td>per-directory layer histogram</td><td>canonical layer per directory</td><td>analysis (L0.5)</td></tr>
@@ -300,14 +307,14 @@ interface AgentRuntime {
   <ul>
     <li><strong>Local-only.</strong> No cloud sync. The hard runtime dependency is a local (or pluggable) LLM. The alternative would be regex-based NL understanding, which drifts the moment anyone tries to maintain it.</li>
     <li><strong>Cached, not deterministic.</strong> Agent output is stable per <code>(agent, model, input_hash, prompt_version)</code>. Bumping the prompt version invalidates the cache by design.</li>
-    <li><strong>Incremental clustering.</strong> The Clusterer attaches greedily and may drift; <code>subnet link --rebuild</code> triggers a full recompute when the drift becomes visible.</li>
-    <li><strong>Pull-based ingest.</strong> No real-time chat hooks; re-run <code>subnet ingest</code> (or call <code>subnet_ingest</code> via MCP) to pick up new sessions.</li>
+    <li><strong>Incremental clustering.</strong> The Clusterer attaches greedily and may drift; <code>subnet global link --rebuild</code> triggers a full recompute when the drift becomes visible.</li>
+    <li><strong>Pull-based ingest.</strong> No real-time chat hooks by default; run <code>subnet update</code> (or <code>subnet watch</code> / automation) to pick up new sessions. MCP <code>subnet_ingest</code> still works.</li>
     <li><strong>Code DB stays codegraph-compatible.</strong> New code-side fields go in <code>project_metadata</code> JSON rather than schema changes.</li>
     <li><strong>Conservative triage by default.</strong> Windows are kept unless an axis is firmly negative with confidence ≥ 0.6. <code>triage audit --dropped</code> lets you tune.</li>
   </ul>
 
   <footer class="site-footer">
-    <span>v0.1.0 · MIT</span>
+    <span>v0.2.0 · MIT</span>
     <span><a href="https://github.com/tienan92it/SubstrateNet">github.com/tienan92it/SubstrateNet</a></span>
   </footer>
 </div>

@@ -50,7 +50,8 @@ export class CursorBackend implements Backend {
   async chat(req: ChatRequest): Promise<ChatResponse> {
     const prompt = buildPrompt(req);
     const cwd = this.getSandbox();
-    const result = await this.runner(prompt, { model: req.model, cwd, apiKey: this.apiKey });
+    const model = normalizeCursorModel(req.model);
+    const result = await this.runner(prompt, { model, cwd, apiKey: this.apiKey });
     if (result.status === 'error') {
       // Run executed but failed mid-flight — surface so the runtime records it.
       throw new Error(`Cursor agent run failed (status=error)`);
@@ -65,6 +66,17 @@ export class CursorBackend implements Backend {
     }
     return this.sandboxCwd;
   }
+}
+
+/** Account-available Cursor model ids (used for validation + aliasing). */
+export const CURSOR_MODELS = [
+  'auto', 'default', 'composer-2.5', 'claude-opus-4-8', 'gpt-5.5', 'claude-sonnet-4.5',
+];
+
+/** Map deprecated/alias slugs to account-available Cursor model ids. */
+export function normalizeCursorModel(model: string): string {
+  if (model === 'composer-2.5-fast') return 'composer-2.5';
+  return model;
 }
 
 /** Flatten system+user messages into a single prompt with a JSON-only guard. */

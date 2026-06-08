@@ -1,5 +1,6 @@
 import type { Command } from 'commander';
 import { resolve } from 'path';
+import { warnDeprecated } from './deprecate.js';
 import { loadConfig } from '../config.js';
 import { openCodeDb, openKnowledgeDb } from '../db/connection.js';
 import { runEnrichment } from '../pipeline/enrich.js';
@@ -11,6 +12,7 @@ export function registerEnrich(program: Command): void {
     .argument('[path]', 'Project root path', '.')
     .option('--no-agent', 'Structural + deterministic gaps only (no LLM)')
     .action(async (path: string, opts: { agent?: boolean }) => {
+      warnDeprecated('enrich', 'update');
       const root = resolve(path);
       const cfg = loadConfig(root);
       const codeDb = openCodeDb(root);

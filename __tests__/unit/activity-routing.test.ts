@@ -40,7 +40,10 @@ describe('activity-driven routing', () => {
         quality: 'signal', linkage: 'this_project', activity: 'bugfix',
         confidence: 0.9, model: 'test', producedAt: Date.now(), kept: true,
       });
-      await runExtractorsForKeptWindows(dir, knowDb, codeDb, JSON.parse(JSON.stringify(DEFAULT_CONFIG)), ['w1']);
+      // Exercise the legacy per-agent path so the routing decision is observable.
+      const cfg = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+      delete cfg.agents.windowExtractor;
+      await runExtractorsForKeptWindows(dir, knowDb, codeDb, cfg, ['w1']);
       expect(called).toContain('problemSolution');
     } finally {
       AgentRuntime.prototype.run = orig;

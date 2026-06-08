@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  macOS launchd agent: run a full daily SubstrateNet refresh at 02:00.
+
+  Install:
+    cp templates/automation/com.substrate-net.update.plist ~/Library/LaunchAgents/
+    # Edit the `subnet` path below to your install (run `which subnet`).
+    launchctl load ~/Library/LaunchAgents/com.substrate-net.update.plist
+
+  Uninstall:
+    launchctl unload ~/Library/LaunchAgents/com.substrate-net.update.plist
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.substrate-net.update</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <!-- Replace with the absolute path from `which subnet`. -->
+        <string>/usr/local/bin/subnet</string>
+        <string>update</string>
+        <string>--global</string>
+        <string>--yes</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>2</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/substrate-net-update.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/substrate-net-update.err</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

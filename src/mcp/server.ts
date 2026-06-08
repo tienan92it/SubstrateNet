@@ -30,7 +30,7 @@ import '../agents/index.js';
 
 export async function startMcpServer(root: string): Promise<void> {
   const server = new McpServer(
-    { name: 'subnet', version: '0.1.0' },
+    { name: 'subnet', version: '0.2.0' },
     { capabilities: { tools: {} } },
   );
 
@@ -293,6 +293,52 @@ export async function startMcpServer(root: string): Promise<void> {
         const stats = await runVerify(db, loadConfig(root), { pruneBelowConfidence: pruneBelow });
         return text(JSON.stringify(stats, null, 2));
       } finally { db.close(); }
+    },
+  );
+
+  server.tool(
+    'subnet_update',
+    'Refresh this project end-to-end (sync + ingest + link + dashboard). profile: fast | default | full.',
+    { profile: z.enum(['fast', 'default', 'full']).optional() },
+    async ({ profile }) => {
+      const { runProjectPipeline } = await import('../pipeline/run-project.js');
+      const { runGlobalPipeline } = await import('../pipeline/run-global.js');
+      const r = await runProjectPipeline(root, { profile: profile ?? 'default' });
+      let global: unknown;
+      if (r.ok) {
+        global = await runGlobalPipeline({ projects: [root], linkAllProjects: false, projectDashboard: true });
+      }
+      return text(JSON.stringify({ project: r, global }, null, 2));
+    },
+  );
+
+  server.tool(
+    'subnet_doctor',
+    'Health report for this project: unclustered facts, missing summaries, pending files, recent agent failures, model-config drift.',
+    {},
+    async () => {
+      const knowDb = openKnowledgeDb(root);
+      const codeDb = openCodeDb(root);
+      try {
+        const { getPipelineState } = await import('../knowledge/pipeline-state.js');
+        const { configModelFingerprint } = await import('../config.js');
+        const cfg = loadConfig(root);
+        const since = Date.now() - 24 * 3_600_000;
+        const runs = knowDb.prepare(`SELECT ok, COUNT(*) AS n FROM agent_runs WHERE produced_at > ? GROUP BY ok`).all(since) as Array<{ ok: number; n: number }>;
+        const fp = getPipelineState(knowDb, 'config_model_fingerprint');
+        let pendingFiles = 0;
+        try {
+          pendingFiles = (codeDb.prepare(`SELECT COUNT(*) AS n FROM files f LEFT JOIN file_analysis a ON a.path=f.path AND a.content_hash=f.content_hash WHERE a.path IS NULL`).get() as { n: number }).n;
+        } catch { /* file_analysis absent */ }
+        return text(JSON.stringify({
+          unclusteredFacts: cnt(knowDb, 'k_nodes WHERE cluster_id IS NULL'),
+          conceptsMissingSummary: cnt(knowDb, "concepts WHERE (summary IS NULL OR TRIM(summary)='') AND member_count > 0"),
+          pendingFiles,
+          recentFailures: runs.find((r) => r.ok === 0)?.n ?? 0,
+          recentRuns: runs.reduce((s, r) => s + r.n, 0),
+          modelDrift: Boolean(fp) && fp !== configModelFingerprint(cfg),
+        }, null, 2));
+      } finally { knowDb.close(); codeDb.close(); }
     },
   );
 

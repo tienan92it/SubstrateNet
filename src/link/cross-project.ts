@@ -22,6 +22,8 @@ export interface LinkStats {
   techDomains: number;
   workspace?: string;
   projectLinks: number;
+  /** Non-fatal issues (e.g. semantic linking backend unavailable). */
+  warnings?: string[];
 }
 
 export async function rebuildLinks(root: string, opts: { full?: boolean } = {}): Promise<LinkStats> {
@@ -38,11 +40,13 @@ export async function rebuildLinks(root: string, opts: { full?: boolean } = {}):
     }
     const mech = runMechanicalLinking(gdb);
     let semantic = 0;
+    const warnings: string[] = [];
     try {
       const sem = await runSemanticLinking(gdb, cfg);
       semantic = sem.linksWritten;
-    } catch {
-      // Backend down: mechanical-only result is still useful.
+    } catch (e) {
+      // Backend down: mechanical-only result is still useful, but surface it.
+      warnings.push(`semantic linking skipped: ${(e as Error).message}`);
     }
     // Aggregate skill evidence across all projects into the global skill graph.
     const synth = synthesizeSkills(gdb);
@@ -60,6 +64,7 @@ export async function rebuildLinks(root: string, opts: { full?: boolean } = {}):
       techDomains: tax.techDomains,
       workspace: ws.name,
       projectLinks: emergent.links,
+      warnings,
     };
   } finally {
     gdb.close();

@@ -19,6 +19,7 @@
       <a class="active" href="getting-started.html">start</a>
       <a href="architecture.html">architecture</a>
       <a href="cli.html">cli</a>
+      <a href="automation.html">automation</a>
       <a href="mcp.html">mcp</a>
       <a href="dashboard.html">dashboard</a>
       <a href="configuration.html">config</a>
@@ -27,7 +28,11 @@
   </header>
 
   <h1>Getting started</h1>
-  <p class="lede">Install the CLI, run <code>subnet setup</code>, or use the per-step pipeline below.</p>
+  <p class="lede">
+    Install the CLI, run <code>subnet</code> for the interactive menu, or
+    <code>subnet setup</code> on first run. Day-to-day refresh is
+    <code>subnet update</code>.
+  </p>
 
   <div class="toc">
     <h4>on this page</h4>
@@ -35,10 +40,10 @@
       <li><a href="#prereqs">prerequisites</a></li>
       <li><a href="#install">1. install</a></li>
       <li><a href="#llm">2. local llm</a></li>
-      <li><a href="#setup">3. setup wizard (recommended)</a></li>
-      <li><a href="#init">4. init a project (manual)</a></li>
-      <li><a href="#index">5. index code + ingest (manual)</a></li>
-      <li><a href="#inspect">6. inspect the result</a></li>
+      <li><a href="#setup">3. setup wizard (first run)</a></li>
+      <li><a href="#daily">4. day to day</a></li>
+      <li><a href="#inspect">5. inspect the result</a></li>
+      <li><a href="#manual">advanced: manual pipeline</a></li>
       <li><a href="#troubleshooting">troubleshooting</a></li>
     </ul>
   </div>
@@ -59,8 +64,8 @@ npm link              # exposes `subnet` on $PATH</code></pre>
   <p>
     Verify:
   </p>
-  <pre class="shell"><code>subnet --version     # 0.1.0
-subnet agents list   # 17 chat agents + dedupe</code></pre>
+  <pre class="shell"><code>subnet --version     # 0.2.0
+subnet --help        # six essentials; run `subnet` for the menu</code></pre>
 
   <h2 id="llm">2. Local LLM</h2>
   <p>
@@ -81,7 +86,7 @@ ollama pull qwen3-embedding:0.6b   # embeddings — dedupe, clustering</code></p
 launchctl setenv OLLAMA_MAX_LOADED_MODELS 3
 # restart Ollama after these</code></pre>
 
-  <h2 id="setup">3. Setup wizard (recommended)</h2>
+  <h2 id="setup">3. Setup wizard (first run)</h2>
   <p>
     One command discovers local workspaces (Cursor, Claude Code, Codex, VS Code/Cursor
     workspace storage), lets you select projects, estimates LLM cost or local
@@ -92,65 +97,35 @@ subnet setup</code></pre>
   <p>Non-interactive:</p>
   <pre class="shell"><code>subnet setup --discover-only
 subnet setup --plan-only --projects /path/a,/path/b
-subnet setup --projects /path/a,/path/b --yes --open</code></pre>
+subnet setup --profile standard --projects /path/a --yes --open</code></pre>
   <p class="small">
-    Flags: <code>--prose</code> (portfolio markdown), <code>--verify</code>,
-    <code>--reprocess</code>, <code>--skip-dashboard</code>, <code>--json</code>.
-    See <a href="cli.html#setup">CLI → setup</a>.
+    <code>--plan-only</code> prints a per-phase table (triage, extract, cluster,
+    analyze, enrich-fused, …) with token and cost estimates. Flags:
+    <code>--profile lean|standard|deep</code>, <code>--prose</code>,
+    <code>--verify</code>, <code>--reprocess</code>, <code>--skip-dashboard</code>,
+    <code>--json</code>. See <a href="cli.html#setup">CLI → setup</a> and
+    <a href="workflow-refactor.md">pipeline refactor RFC</a>.
   </p>
 
-  <h2 id="init">4. Init a project (manual)</h2>
-  <pre class="shell"><code>cd /path/to/your/project
-subnet init</code></pre>
-  <p>This creates:</p>
-  <pre><code>your-project/.substrate-net/
-├── code.db          # L0 — code structure
-├── knowledge.db     # L1 → L3 + L2.5 — conversations, facts, domain, concepts
-└── config.json      # per-project agent overrides (empty by default)
-
-~/.substrate-net/
-├── global.db        # L4 links + L5 skill graph + project registry
-└── config.json      # global defaults</code></pre>
-
-  <h2 id="index">5. Index code + ingest conversations (manual)</h2>
-  <p><strong>L0 — code structure</strong></p>
-  <pre class="shell"><code>subnet sync</code></pre>
+  <h2 id="daily">4. Day to day</h2>
   <p>
-    Walks the project honoring <code>.gitignore</code>, parses every supported
-    file with tree-sitter (or the SQL DDL regex parser), writes symbols + edges
-    to <code>code.db</code>. Incremental by content hash — re-running only
-    re-parses changed files.
+    After setup, one command keeps every registered project fresh. Or run
+    <code>subnet</code> with no arguments for the interactive menu.
   </p>
+  <pre class="shell"><code>subnet update                 # standard: tier-1 analyze + fused enrich
+subnet update --fast          # lean: transcript-only (seconds)
+subnet update --deep          # all files + legacy enrich (incremental)
+subnet update --full          # deep + reprocess all windows (model change)
+subnet update --global --open # also rebuild + open the global dashboard
 
-  <p><strong>L1 → L3 + L2.5 — conversations through concepts and domain</strong></p>
-  <pre class="shell"><code>subnet ingest</code></pre>
-  <p>This runs the full pipeline:</p>
-  <ol>
-    <li><em>Discover</em> sessions from every configured adapter (Cursor / Claude Code / Codex / Copilot)</li>
-    <li><em>Read</em> new turns incrementally (per-session byte offset)</li>
-    <li><em>Segment</em> each session into windows on user-turn boundaries</li>
-    <li><em>Syntax pass</em> on each window (paths, code blocks, shell commands, URLs, ticket IDs)</li>
-    <li><em>Triage</em> each window — drop noise, keep signal</li>
-    <li><em>Dedupe</em> kept windows by embedding similarity</li>
-    <li><em>Extract</em> facts via Decision / BusinessLogic / Intent / ProblemSolution agents (routed by triage domain)</li>
-    <li><em>Cluster</em> each new fact into a concept; <em>Summarize</em> affected concepts</li>
-    <li><em>Analyze</em> (L0.5) — per-file summaries + architectural layers + tags from the tree-sitter graph (FileAnalyzer · ArchitectureAnalyzer)</li>
-    <li><em>Enrich</em> (L2.5) — manifests + SQL → entities/skills, reconcile stated ↔ structural, classify industry, fuse domain highlights, detect gaps</li>
-  </ol>
+subnet doctor                 # health report
+subnet doctor --fix           # repair summaries + re-link + rebuild dashboards</code></pre>
   <p class="small">
-    <code>ingest</code> is incremental — only new windows are processed. Use
-    <code>subnet ingest --reprocess</code> after a model swap or interrupted run
-    to re-pass every window; <code>--no-analyze</code> and <code>--no-enrich</code>
-    skip those passes. Run <code>subnet analyze --full</code> to force a complete
-    re-analysis independent of ingest.
+    Keep it fresh automatically with <code>subnet watch</code>, a Cursor hook, or
+    a nightly cron/launchd job — see <a href="automation.html">automation →</a>.
   </p>
 
-  <p><strong>L4 → L5 — cross-project links + the local skill view</strong></p>
-  <pre class="shell"><code>subnet link          # export concepts + skills to global.db, link across repos
-subnet profile       # industries + top skills across all projects
-subnet skills --cross # skills demonstrated in more than one project</code></pre>
-
-  <h2 id="inspect">6. Inspect the result</h2>
+  <h2 id="inspect">5. Inspect the result</h2>
   <pre class="shell"><code>subnet status .
 
 # Substrate Net status
@@ -178,9 +153,30 @@ subnet skills --cross # skills demonstrated in more than one project</code></pre
   <p>Inspect what got dropped vs kept and why:</p>
   <pre class="shell"><code>subnet triage audit --dropped</code></pre>
 
-  <p>Open the interactive graph dashboard (build the viewer bundle once with <code>npm run build:dashboard</code>):</p>
-  <pre class="shell"><code>subnet dashboard --open</code></pre>
+  <p>Open dashboards (build the viewer bundle once with <code>npm run build:dashboard</code>):</p>
+  <pre class="shell"><code>subnet global dashboard --open   # cross-project Profile + Map
+subnet dashboard --open          # per-project knowledge graph (hidden command)</code></pre>
   <p class="small">See the <a href="dashboard.html">dashboard guide</a> for the views and the shareable <code>graph.json</code>.</p>
+
+  <h2 id="manual">Advanced: manual pipeline</h2>
+  <p class="small">
+    The per-stage commands below still work but are hidden from
+    <code>subnet --help</code> and deprecated in favor of <code>update</code> /
+    <code>global</code> (removal scheduled for 0.3.0). Prefer
+    <code>subnet setup</code> or <code>subnet update</code> unless you are
+    debugging a single stage.
+  </p>
+  <pre class="shell"><code>subnet init                    # create .substrate-net/ + register in global.db
+subnet sync                    # L0 code graph
+subnet ingest                  # L1 → L3 + L2.5 agent pipeline
+subnet global link             # L4 cross-project links + L5 skill graph
+subnet global profile          # industries + top skills
+subnet global skills --cross   # skills in more than one project</code></pre>
+  <p>
+    <code>ingest</code> is incremental — only new windows are processed. Use
+    <code>subnet update --full</code> (or <code>subnet ingest --reprocess</code>)
+    after a model swap or interrupted run.
+  </p>
 
   <p>Generate canvases (open in Cursor's canvas pane):</p>
   <pre class="shell"><code>subnet canvas triage-audit
@@ -201,7 +197,7 @@ subnet canvas business-logic</code></pre>
     </tr>
     <tr>
       <td><code>L1 conversations: 0 sessions</code></td>
-      <td>No agent has written transcripts for this project path yet. Run the agent against the project once, then re-ingest.</td>
+      <td>No agent has written transcripts for this project path yet. Run the agent against the project once, then <code>subnet update</code>.</td>
     </tr>
     <tr>
       <td><code>L3 concepts: 0</code> while facts &gt; 0</td>
@@ -217,7 +213,7 @@ subnet canvas business-logic</code></pre>
     </tr>
     <tr>
       <td><code>enrich</code> reports zeros on a re-run</td>
-      <td>Expected — the report counts rows added <em>this run</em>. The data already exists; check <code>subnet status</code> for totals. Use <code>subnet ingest --reprocess</code> to force a full re-pass.</td>
+      <td>Expected — the report counts rows added <em>this run</em>. The data already exists; check <code>subnet status</code> for totals. Use <code>subnet update --full</code> to force a full re-pass.</td>
     </tr>
     <tr>
       <td><code>Dependencies: 0</code> in a monorepo</td>
@@ -235,7 +231,7 @@ subnet canvas business-logic</code></pre>
   </p>
 
   <footer class="site-footer">
-    <span>v0.1.0 · MIT</span>
+    <span>v0.2.0 · MIT</span>
     <span><a href="https://github.com/tienan92it/SubstrateNet">github.com/tienan92it/SubstrateNet</a></span>
   </footer>
 </div>

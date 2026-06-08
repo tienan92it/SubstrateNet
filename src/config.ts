@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 import { join, resolve } from 'path';
+import { createHash } from 'crypto';
 
 export type BackendKind = 'ollama' | 'openai-compatible' | 'anthropic' | 'cursor-agent';
 
@@ -29,7 +30,8 @@ export function resolveApiKey(spec: { apiKey?: string; apiKeyEnv?: string }): st
 export interface AgentSpec {
   /** model ref of the form "<backend>:<model>" e.g. "default:llama3.1:8b" */
   model: string;
-  fallback?: string;
+  /** Ordered fallback model ref(s). Tried in order when earlier tiers are unusable. */
+  fallback?: string | string[];
   windowTokens?: number;
 }
 
@@ -40,11 +42,39 @@ export interface ResearchConfig {
   apiKeyEnv?: string;
 }
 
+/** Transcript ingest hygiene and cost controls (RFC workflow-refactor). */
+export interface IngestConfig {
+  maxSessions?: number;
+  sinceDays?: number;
+  minSessionBytes?: number;
+  skipAgents?: string[];
+  maxBriefChars?: number;
+  maxFactsPerWindow?: number;
+  windowDupThreshold?: number;
+  minExtractConfidence?: number;
+  /** Embed-dedupe windows before triage LLM (default true). */
+  preTriageDedupe?: boolean;
+  maxTurnChars?: number;
+  /** Batch ambiguous cluster decisions (default true). */
+  clusterBatch?: boolean;
+}
+
+/** File analyze scope (RFC workflow-refactor). */
+export type AnalyzeTierProfile = 'lean' | 'standard' | 'deep';
+
+export interface AnalyzeConfig {
+  tier?: AnalyzeTierProfile;
+  skipGlobs?: string[];
+  maxFilesPerRun?: number;
+}
+
 export interface SubstrateNetConfig {
   agentBackends: Record<string, AgentBackend>;
   agents: Record<string, AgentSpec>;
   /** Max concurrent agent (LLM) calls in the pipeline. 1 = serial. Default 4. */
   concurrency?: number;
+  /** Windows/items per batched agent call (triage, source classifier). Default 8. */
+  batchSize?: number;
   /** Opt-in external research backend for industry enrichment. Off by default. */
   research?: ResearchConfig;
   /** Paths for cross-agent transcript discovery; resolved with ~ expansion. */
@@ -59,52 +89,98 @@ export interface SubstrateNetConfig {
    * auto-detection (git org / parent dir) when grouping projects globally.
    */
   workspace?: string;
+  ingest?: IngestConfig;
+  analyze?: AnalyzeConfig;
+}
+
+export const DEFAULT_INGEST_CONFIG: Required<IngestConfig> = {
+  maxSessions: 200,
+  sinceDays: 365,
+  minSessionBytes: 256,
+  skipAgents: [],
+  maxBriefChars: 2000,
+  maxFactsPerWindow: 8,
+  windowDupThreshold: 0.92,
+  minExtractConfidence: 0.45,
+  preTriageDedupe: true,
+  maxTurnChars: 12_000,
+  clusterBatch: true,
+};
+
+export const DEFAULT_ANALYZE_CONFIG: Required<AnalyzeConfig> = {
+  tier: 'standard',
+  skipGlobs: [],
+  maxFilesPerRun: 500,
+};
+
+export function resolveIngestConfig(cfg: SubstrateNetConfig): Required<IngestConfig> {
+  return { ...DEFAULT_INGEST_CONFIG, ...cfg.ingest };
+}
+
+export function resolveAnalyzeConfig(cfg: SubstrateNetConfig): Required<AnalyzeConfig> {
+  return { ...DEFAULT_ANALYZE_CONFIG, ...cfg.analyze };
 }
 
 export const DEFAULT_CONFIG: SubstrateNetConfig = {
   agentBackends: {
+    // Local Ollama — always usable, no key. The safe fallback for every agent.
     default: { kind: 'ollama', endpoint: 'http://localhost:11434' },
+    // Flash-first bulk backend. Used when OPENROUTER_API_KEY is set; otherwise
+    // agents transparently fall through to `default` (local) at runtime.
+    openrouter: {
+      kind: 'openai-compatible',
+      endpoint: 'https://openrouter.ai/api/v1',
+      apiKeyEnv: 'OPENROUTER_API_KEY',
+    },
     // Higher-tier reasoning via the user's Cursor subscription (@cursor/sdk).
-    // Heavy agents route here and fall back to `default` (local) when
-    // CURSOR_API_KEY is unset or the SDK is unavailable.
+    // Heavy agents route here and fall back to flash/local when CURSOR_API_KEY
+    // is unset or the SDK is unavailable.
     frontier: { kind: 'cursor-agent', apiKeyEnv: 'CURSOR_API_KEY' },
   },
   agents: {
-    // Bulk / high-volume — stay local (cheap, private, fast enough).
-    triage:         { model: 'default:llama3.1:8b', windowTokens: 2000 },
+    // Embeddings stay local (cheap, private, no key).
     dedupe:         { model: 'default:nomic-embed-text' },
-    decision:       { model: 'default:llama3.1:8b' },
-    businessLogic:  { model: 'default:llama3.1:8b' },
-    requirements:   { model: 'default:llama3.1:8b' },
-    intent:         { model: 'default:llama3.1:8b' },
-    problemSolution:{ model: 'default:llama3.1:8b' },
-    clusterer:      { model: 'default:llama3.1:8b' },
-    summarizer:     { model: 'default:llama3.1:8b' },
-    verifier:       { model: 'default:llama3.1:8b' },
-    skillSynthesizer:  { model: 'default:llama3.1:8b' },
-    fileAnalyzer:      { model: 'default:llama3.1:8b' },
-    architectureAnalyzer: { model: 'default:llama3.1:8b' },
-    // Heavy reasoning — prefer frontier (Cursor), fall back to local.
-    sourceClassifier:  { model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
-    incident:          { model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
-    linker:            { model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
-    domainModeler:     { model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
-    architectureModeler: { model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
-    businessDomainModeler: { model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
-    techDomainModeler: { model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
-    technicalProfiler: { model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
-    industryClassifier:{ model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
-    industryEnricher:  { model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
-    domainAnalyzer:    { model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
-    profileWriter:     { model: 'frontier:auto', fallback: 'default:llama3.1:8b' },
+    // Bulk / high-volume — flash-first, fall back to local Ollama.
+    triage:         { model: 'openrouter:google/gemini-3.5-flash', fallback: 'default:llama3.1:8b', windowTokens: 2000 },
+    windowExtractor:{ model: 'openrouter:google/gemini-3.5-flash', fallback: 'default:llama3.1:8b' },
+    decision:       { model: 'openrouter:google/gemini-3.5-flash', fallback: 'default:llama3.1:8b' },
+    businessLogic:  { model: 'openrouter:google/gemini-3.5-flash', fallback: 'default:llama3.1:8b' },
+    requirements:   { model: 'openrouter:google/gemini-3.5-flash', fallback: 'default:llama3.1:8b' },
+    intent:         { model: 'openrouter:google/gemini-3.5-flash', fallback: 'default:llama3.1:8b' },
+    problemSolution:{ model: 'openrouter:google/gemini-3.5-flash', fallback: 'default:llama3.1:8b' },
+    clusterer:      { model: 'openrouter:google/gemini-3.5-flash', fallback: 'default:llama3.1:8b' },
+    summarizer:     { model: 'openrouter:google/gemini-3.5-flash', fallback: 'default:llama3.1:8b' },
+    verifier:       { model: 'openrouter:google/gemini-3.5-flash', fallback: 'default:llama3.1:8b' },
+    skillSynthesizer:  { model: 'openrouter:google/gemini-3.5-flash', fallback: 'default:llama3.1:8b' },
+    fileAnalyzer:      { model: 'openrouter:google/gemini-3.5-flash', fallback: 'default:llama3.1:8b' },
+    architectureAnalyzer: { model: 'openrouter:google/gemini-3.5-flash', fallback: 'default:llama3.1:8b' },
+    // Heavy reasoning — prefer frontier (Cursor), fall back to flash then local.
+    sourceClassifier:  { model: 'frontier:composer-2.5', fallback: ['openrouter:google/gemini-3.5-flash', 'default:llama3.1:8b'] },
+    incident:          { model: 'frontier:composer-2.5', fallback: ['openrouter:google/gemini-3.5-flash', 'default:llama3.1:8b'] },
+    linker:            { model: 'frontier:composer-2.5', fallback: ['openrouter:google/gemini-3.5-flash', 'default:llama3.1:8b'] },
+    domainModeler:     { model: 'frontier:composer-2.5', fallback: ['openrouter:google/gemini-3.5-flash', 'default:llama3.1:8b'] },
+    architectureModeler: { model: 'frontier:composer-2.5', fallback: ['openrouter:google/gemini-3.5-flash', 'default:llama3.1:8b'] },
+    businessDomainModeler: { model: 'frontier:composer-2.5', fallback: ['openrouter:google/gemini-3.5-flash', 'default:llama3.1:8b'] },
+    techDomainModeler: { model: 'frontier:composer-2.5', fallback: ['openrouter:google/gemini-3.5-flash', 'default:llama3.1:8b'] },
+    technicalProfiler: { model: 'frontier:composer-2.5', fallback: ['openrouter:google/gemini-3.5-flash', 'default:llama3.1:8b'] },
+    industryClassifier:{ model: 'frontier:composer-2.5', fallback: ['openrouter:google/gemini-3.5-flash', 'default:llama3.1:8b'] },
+    industryEnricher:  { model: 'frontier:composer-2.5', fallback: ['openrouter:google/gemini-3.5-flash', 'default:llama3.1:8b'] },
+    domainAnalyzer:    { model: 'frontier:composer-2.5', fallback: ['openrouter:google/gemini-3.5-flash', 'default:llama3.1:8b'] },
+    // Fused enrich (standard profile) — flash-first bulk.
+    domainFuser:       { model: 'openrouter:google/gemini-3.5-flash', fallback: 'default:llama3.1:8b' },
+    industryFuser:     { model: 'openrouter:google/gemini-3.5-flash', fallback: 'default:llama3.1:8b' },
+    profileWriter:     { model: 'frontier:composer-2.5', fallback: ['openrouter:google/gemini-3.5-flash', 'default:llama3.1:8b'] },
   },
   concurrency: 4,
+  batchSize: 8,
   research: { kind: 'none' },
   transcriptRoots: {
     cursor: '~/.cursor/projects',
     claudeCode: '~/.claude/projects',
     codex: '~/.codex/sessions',
   },
+  ingest: { ...DEFAULT_INGEST_CONFIG },
+  analyze: { ...DEFAULT_ANALYZE_CONFIG },
 };
 
 export function expandHome(p: string): string {
@@ -167,6 +243,20 @@ function deepMerge(target: any, source: any): void {
       target[k] = sv;
     }
   }
+}
+
+/**
+ * Fingerprint the agent model routing (primary + fallbacks). When this changes,
+ * cached agent_runs are stale — doctor warns and `update --full` is advised.
+ */
+export function configModelFingerprint(cfg: SubstrateNetConfig): string {
+  const entries = Object.entries(cfg.agents ?? {})
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([name, spec]) => {
+      const fb = spec.fallback === undefined ? '' : Array.isArray(spec.fallback) ? spec.fallback.join(',') : spec.fallback;
+      return `${name}=${spec.model}|${fb}`;
+    });
+  return createHash('sha1').update(entries.join(';')).digest('hex').slice(0, 16);
 }
 
 /** Parse "<backend>:<model>" into {backend, model}. */

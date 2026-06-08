@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Automation — Substrate Net</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23b25a3c' d='M12 2 L14 12 L12 22 L10 12 Z M2 12 L12 14 L22 12 L12 10 Z'/%3E%3C/svg%3E">
+</head>
+<body>
+<div class="shell">
+  <header class="site-header">
+    <a class="brand" href="./">
+      <svg class="brand-mark" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2 L14 12 L12 22 L10 12 Z M2 12 L12 14 L22 12 L12 10 Z"/></svg>
+      subnet
+    </a>
+    <nav class="site-nav">
+      <a href="./">overview</a>
+      <a href="getting-started.html">start</a>
+      <a href="architecture.html">architecture</a>
+      <a href="cli.html">cli</a>
+      <a class="active" href="automation.html">automation</a>
+      <a href="mcp.html">mcp</a>
+      <a href="dashboard.html">dashboard</a>
+      <a href="configuration.html">config</a>
+      <a href="https://github.com/tienan92it/SubstrateNet">github →</a>
+    </nav>
+  </header>
+
+  <h1>Automation</h1>
+  <p class="lede">
+    After the first <code>subnet setup</code>, keep the graph fresh without
+    running commands by hand. Three mechanisms, smallest to largest blast radius:
+    a watch daemon, a Cursor hook, and a daily scheduled job. All route through
+    <code>subnet update</code>, which holds a lock so they never overlap.
+  </p>
+
+  <div class="toc">
+    <h4>contents</h4>
+    <ul>
+      <li><a href="#update">the update command</a> · <a href="#watch">watch daemon</a></li>
+      <li><a href="#hook">cursor hook</a> · <a href="#cron">launchd / cron</a></li>
+    </ul>
+  </div>
+
+  <h2 id="update">The update command</h2>
+  <pre><code>subnet update [path]        # one project, or all registered if omitted
+  --fast                    # lean: transcript-only
+  --deep                    # all files + legacy enrich (incremental windows)
+  --full                    # deep + reprocess every window
+  --global                  # also rebuild the cross-project dashboard
+  --no-dashboard            # skip dashboard rebuild
+  --verify                  # run the verifier pass after ingest
+  -y, --yes                 # non-interactive</code></pre>
+  <p>
+    Profiles trade speed for depth. <code>--fast</code> (lean) only ingests
+    transcripts. The default <strong>standard</strong> profile runs tier-1 file
+    analyze and <strong>fused enrich</strong> (two flash calls). <code>--deep</code>
+    analyzes all pending files and runs the legacy eight-agent enrich stack.
+    <code>--full</code> adds re-triage of every window — use after a model change.
+  </p>
+  <p class="small">
+    Concurrent invocations are serialized through
+    <code>~/.substrate-net/update.lock</code>; a second <code>update</code> exits
+    rather than racing the first.
+  </p>
+
+  <h2 id="watch">Watch daemon</h2>
+  <pre><code>subnet watch                       # background daemon, all registered projects
+subnet watch --foreground          # run inline (logs to stdout)
+subnet watch --projects /a,/b      # limit scope
+subnet watch --interval 120000     # debounce window (ms, default 60s)
+subnet watch --global              # rebuild global dashboard after each drain
+subnet watch --stop                # stop the running daemon</code></pre>
+  <p>
+    The daemon watches each project's source tree plus your transcript roots
+    (Cursor / Claude Code / Codex). File changes enqueue the affected project;
+    a transcript change enqueues every watched project. After the debounce window
+    settles, queued projects run a serial <code>update --fast</code>.
+  </p>
+  <ul>
+    <li>PID file: <code>~/.substrate-net/watch.pid</code></li>
+    <li>Logs (background mode): <code>~/.substrate-net/watch.log</code></li>
+    <li>Source noise (<code>.git</code>, <code>node_modules</code>, <code>dist</code>, <code>.substrate-net</code>) is ignored.</li>
+  </ul>
+
+  <h2 id="hook">Cursor hook</h2>
+  <p>
+    Refresh the graph the moment a Cursor conversation ends. The hook fires on the
+    <code>stop</code> event and kicks a detached <code>subnet update --fast --yes</code>,
+    so it never delays the agent.
+  </p>
+  <pre><code>mkdir -p ~/.cursor/hooks
+cp templates/cursor-hooks/subnet-update.sh ~/.cursor/hooks/
+chmod +x ~/.cursor/hooks/subnet-update.sh
+# merge templates/cursor-hooks/hooks.json into ~/.cursor/hooks.json</code></pre>
+  <p class="small">
+    Requires <code>subnet</code> on <code>$PATH</code> (via <code>npm link</code> or a
+    global install). Output is appended to <code>~/.substrate-net/hook-update.log</code>.
+  </p>
+
+  <h2 id="cron">launchd / cron</h2>
+  <p>
+    For a nightly full refresh (heavy agents + global dashboard), schedule
+    <code>subnet update --global --yes</code>.
+  </p>
+  <p><strong>macOS (launchd):</strong></p>
+  <pre><code>cp templates/automation/com.substrate-net.update.plist ~/Library/LaunchAgents/
+# edit the subnet path inside (use `which subnet`)
+launchctl load ~/Library/LaunchAgents/com.substrate-net.update.plist</code></pre>
+  <p><strong>Linux (cron):</strong></p>
+  <pre><code>crontab -e
+# paste, adjusting the subnet path:
+0 2 * * *  /usr/local/bin/subnet update --global --yes >> "$HOME/.substrate-net/cron-update.log" 2>&1</code></pre>
+
+  <p class="small">
+    Recommended layering: a Cursor hook for instant freshness on the project you
+    are actively working in, plus a nightly cron/launchd job for a full
+    cross-project rebuild. The watch daemon is an alternative to the hook when you
+    work outside Cursor.
+  </p>
+
+  <footer class="site-footer">
+    <span>v0.2.0 · MIT</span>
+    <span><a href="https://github.com/tienan92it/SubstrateNet">github.com/tienan92it/SubstrateNet</a></span>
+  </footer>
+</div>
+<script src="assets/substrate-bg.js" defer></script>
+</body>
+</html>

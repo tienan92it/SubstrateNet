@@ -7,7 +7,7 @@
 [![CI](https://github.com/tienan92it/SubstrateNet/actions/workflows/ci.yml/badge.svg)](https://github.com/tienan92it/SubstrateNet/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)](https://nodejs.org/)
-[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](./CHANGELOG.md)
 
 **[Documentation →](https://tienan92it.github.io/SubstrateNet/)**
 
@@ -38,7 +38,7 @@ OpenAI-compatible endpoint (OpenRouter, OpenAI, Together, Groq) works too.
 ## The dashboard
 
 A self-contained, offline view built for humans. The global dashboard
-(`subnet dashboard --global`) opens on a **Profile** — your cross-project skills,
+(`subnet global dashboard`) opens on a **Profile** — your cross-project skills,
 industries, and portfolio highlights — and a **Map** of
 `industry → business domain → tech domain → project` you can drill into. Each
 project also renders its own **knowledge graph** (domains → concepts/entities →
@@ -64,29 +64,63 @@ rules/skills); the file dependency graph stays in `graph.json` for agents.
 git clone https://github.com/tienan92it/SubstrateNet && cd SubstrateNet
 npm install && npm run build:all && npm link   # exposes `subnet` on $PATH
 
-# 2. Bring up a local LLM (or configure OpenRouter in ~/.substrate-net/config.json)
+# 2. Pick a backend. Flash-first by default (set OPENROUTER_API_KEY), or stay
+#    fully local with Ollama (every agent falls back to local automatically):
 ollama pull qwen3:4b-instruct
 ollama pull qwen2.5:14b
 ollama pull qwen3-embedding:0.6b
 
-# 3. One-shot setup: discover workspaces → estimate → run full pipeline
+# 3. First run: discover workspaces → estimate → full pipeline
 subnet setup
+
+# 4. From then on: one command keeps everything fresh
+subnet update            # all registered projects, incremental
 ```
 
-`subnet setup` scans Cursor, Claude Code, Codex, and VS Code/Cursor workspace
-storage, lets you pick projects, shows a pre-flight cost/time estimate, then runs
-init → sync → ingest → link → dashboard. Use `--projects /path/a,/path/b --yes`
-for non-interactive runs.
+Or just run `subnet` with no arguments for an **interactive menu** (update,
+add projects, health, dashboards, insights) — the menu drives the same pipeline
+the commands do.
 
-**Per-step (advanced):**
+Two commands cover almost everything when scripting:
+
+- **`subnet setup`** — first-run wizard. Scans Cursor, Claude Code, Codex, and
+  VS Code/Cursor workspace storage, lets you pick projects, shows a pre-flight
+  cost/time estimate, then runs the full pipeline and builds the global dashboard.
+- **`subnet update [path]`** — the day-to-day command. Incrementally re-syncs
+  code, ingests new transcripts, re-links, and rebuilds dashboards.
+  - `--fast` — **lean**: transcript-only (skips file analyze + enrich)
+  - default — **standard**: tier-1 file analyze + fused enrich (2 LLM calls)
+  - `--deep` — all pending files + legacy 8-agent enrich (incremental windows)
+  - `--full` — **deep + reprocess** every window (after a model change)
+  - `--global` — also rebuild the cross-project dashboard
+- **`subnet setup --plan-only`** — per-phase cost table (calls, tokens in/out,
+  est. $, wall time) before a first run
+
+Health and cross-project views:
 
 ```bash
-cd /path/to/your/project
-subnet init && subnet sync && subnet ingest && subnet link
-subnet profile && subnet dashboard --open
+subnet doctor                 # health + pipeline audit counters; --fix repairs
+subnet global dashboard --open  # cross-project hierarchy
+subnet global profile           # industries + top skills
 ```
 
+Keep it fresh automatically with a watch daemon, a Cursor hook, or a nightly
+cron/launchd job — see the [automation guide](https://tienan92it.github.io/SubstrateNet/automation.html).
+
 To make Substrate Net callable from your AI agents, see [MCP integration](#mcp-integration).
+
+### Migrating from 0.1.x
+
+The pipeline commands were unified in 0.2.0. The old commands still work but
+print a deprecation warning and are scheduled for removal in **0.3.0**:
+
+| 0.1.x | 0.2.0 |
+|---|---|
+| `subnet ingest` / `sync` + manual chain | `subnet update` |
+| `subnet enrich`, `subnet analyze` | folded into `subnet update` |
+| `subnet link` | `subnet global link` |
+| `subnet dashboard --global` | `subnet global dashboard` |
+| `subnet profile`, `subnet skills` | `subnet global profile` / `subnet global skills` |
 
 ---
 
@@ -103,13 +137,22 @@ deterministic. Meaning is agent-driven.**
 | **L1** Conversations + docs + diagrams | sessions, turns, tool calls; in-repo docs (README / BRD / ADRs) and diagrams (mermaid / drawio / excalidraw / plantuml) | deterministic (file parsers + Docs/Diagrams adapters) |
 | **L1.5** Triage | relevance / domain / quality / linkage / **activity** per window; **doc-kind** for source artifacts | **agents** (Triage · SourceClassifier) |
 | **L2** Facts | decisions, business rules, intents, problems / solutions; BRD actors / processes / metrics; **incidents → root cause → resolution** | **agents** (Decision · BusinessLogic · Requirements · Intent · ProblemSolution · Incident) + syntax pass |
-| **L2.5** Domain enrichment | dependencies, skills, entities, relationships, industry, components + lifecycles, gaps; cross-source **dedup + corroboration** | manifests + SQL (structural) · reconciler · fact-dedupe · **agents** (TechnicalProfiler · DomainModeler · ArchitectureModeler · IndustryClassifier · IndustryEnricher) |
+| **L2.5** Domain enrichment | dependencies, skills, entities, relationships, industry, components + lifecycles, gaps; cross-source **dedup + corroboration** | manifests + SQL (structural) · reconciler · fact-dedupe · **standard:** fused enrich (`domainFuser` + `industryFuser`) · **deep:** legacy 8-agent stack |
 | **L2.6** Knowledge zones | business domains + tech domains, grouping facts by bounded context / capability | **agents** (BusinessDomainModeler · TechDomainModeler) |
 | **L3** Concepts | clustered facts with names + structured summaries, scope-tagged | **agents** (Clusterer · Summarizer) |
 | **L4** Cross-project | shared concepts, **workspace umbrellas**, emergent project links | mechanical (exact + SimHash + shared-signal clustering) + **agent** (Linker) |
 | **L5** Global skill graph + hierarchy | technical + industry skills, and the workspace → industry → business → tech → project zone tree | mechanical aggregation over L2.5/L2.6 evidence |
 
-Agents run **tiered**: bulk work (triage, embeddings, extractors) stays on local Ollama; heavy reasoning (classification, domain/architecture modeling, linking, RCA) routes to a **Cursor SDK backend** (`frontier`, set `CURSOR_API_KEY`) and falls back to local automatically when unavailable.
+The ingest pipeline **cleans and packages evidence before any LLM call**: session
+filter → turn normalize → window briefs → pre-triage dedupe → triage/extract on
+briefs → anchor gate → early fact dedupe → batch clusterer. See
+[`docs/workflow-refactor.md`](docs/workflow-refactor.md) for the full RFC.
+
+Agents run **tiered**: bulk work (triage, extractors, fused enrich, clusterer
+batch) defaults to Gemini Flash via OpenRouter; heavy reasoning (linking,
+portfolio prose, optional deep enrich) routes to a **Cursor SDK backend**
+(`frontier`, set `CURSOR_API_KEY`). Every agent falls back to local Ollama
+automatically when a backend is unavailable.
 
 ### Scope × grounding
 
@@ -134,40 +177,31 @@ knowledge never gets mistaken for "what your project actually does."
 
 ## CLI
 
+Run `subnet` with no arguments in a terminal for the **interactive menu** (update,
+add projects, health, dashboards, insights). In scripts or non-TTY environments,
+use the essentials below. Per-stage commands still work but are hidden from
+`--help` (see [migration](#migrating-from-01x)).
+
 ```
-subnet setup [--projects ...] [--yes]  # discover workspaces → estimate → full pipeline
-subnet init [path]                  # writes .substrate-net/{code.db,knowledge.db,config.json}
-subnet sync [path] [--full]         # re-index code (L0)
-subnet analyze [path] [--full]      # code-grounded LLM pass: file summaries + layers + tags
-subnet ingest [path]                # conversations + agent pipeline + analyze + enrichment
-  [--agent X] [--no-triage] [--no-extract] [--no-analyze] [--no-enrich] [--reprocess]
-subnet enrich [path] [--no-agent]   # run the L2.5 enrichment pass on its own
-subnet link [path] [--rebuild]      # rebuild cross-project links (L4) + skill graph (L5)
-subnet skills [--scope X] [--cross] # global skill graph, weighted by evidence
-subnet profile [--prose] [--out p]  # industries + top skills; --prose writes a portfolio
-subnet learn [path]                 # industry-standard knowledge not yet in your work
-subnet dashboard [path] [--open]    # per-project interactive graph dashboard
-subnet dashboard --global [--open]  # cross-project hierarchy: industry → domain → project → file
-subnet serve [path] --mcp           # MCP server over stdio
-subnet status [path]                # counts per layer, with scope + grounding breakdown
-subnet triage audit [path]          # show triaged windows with labels and rationale
-subnet verify [path]                # contradiction detection + low-confidence pruning
-subnet canvas <kind> [path]         # generate .canvas.tsx (triage-audit / project-map / ...)
-subnet clean [path]                 # remove project data (--local-only / --global-only / --all)
-subnet agents list | eval | run     # inspect / test / debug agents
+subnet setup [--projects ...] [--profile lean|standard|deep] [--plan-only] [--yes]
+subnet update [path] [--fast|--deep|--full]   # day-to-day incremental refresh
+subnet doctor [--fix]                   # health report + optional repair
+subnet global link|dashboard|profile|skills
+subnet watch [--foreground]             # background daemon (see automation guide)
+subnet serve [path] --mcp               # MCP server over stdio
 ```
 
-The `dashboard` command needs the viewer bundle built once: `npm run build:dashboard`
-(or `npm run build:all`). It then emits a single self-contained `index.html` (graph
-inlined) plus a shareable `graph.json` to `<project>/.substrate-net/dashboard/`. With
-`--global` it reads `~/.substrate-net/global.db` (populated by `subnet link`) and
-writes the cross-project hierarchy to `~/.substrate-net/dashboard/` — an
-overview-to-detail view that merges shared business and tech domains across projects
-and drills into each project's file graph.
+Hidden but still runnable for scripting: `init`, `sync`, `ingest`, `enrich`,
+`analyze`, `link`, `dashboard`, `profile`, `skills`, `status`, `clean`, `canvas`,
+`triage audit`, `agents`, `verify`, `learn`. Several print a deprecation warning
+and are scheduled for removal in **0.3.0**.
 
-`ingest` is incremental: it only processes newly pulled windows. Use
-`--reprocess` to re-run the pipeline over **all** existing windows after a model
-swap or an interrupted run.
+`subnet global dashboard --open` opens the cross-project Profile + Map from
+`~/.substrate-net/global.db`. Per-project dashboards are rebuilt by `subnet update`
+(or the menu). Build the viewer bundle once: `npm run build:dashboard`
+(or `npm run build:all`).
+
+Full reference: [CLI docs](https://tienan92it.github.io/SubstrateNet/cli.html).
 
 ---
 
@@ -201,7 +235,7 @@ and `subnet_workspace` (umbrella + related projects). Full catalogue in the
 ## Configuration
 
 Per-agent model selection lives in `~/.substrate-net/config.json` (auto-created on
-first `init`). Per-project overrides go in `<project>/.substrate-net/config.json` and
+first `setup` or `init`). Per-project overrides go in `<project>/.substrate-net/config.json` and
 deep-merge over global.
 
 ```jsonc
@@ -220,9 +254,21 @@ deep-merge over global.
     "dedupe":            { "model": "local:nomic-embed-text" },
     "businessLogic":     { "model": "openrouter:anthropic/claude-sonnet-4", "fallback": "local:qwen2.5:14b" },
     "technicalProfiler": { "model": "openrouter:anthropic/claude-sonnet-4" },
-    "industryClassifier":{ "model": "openrouter:anthropic/claude-sonnet-4" }
-    // ... decision, problemSolution, domainModeler, industryEnricher,
-    //     clusterer, summarizer, linker, verifier, skillSynthesizer
+    "industryClassifier":{ "model": "openrouter:anthropic/claude-sonnet-4" },
+    "domainFuser":       { "model": "openrouter:google/gemini-3.5-flash" },
+    "industryFuser":     { "model": "openrouter:google/gemini-3.5-flash" }
+    // ... decision, clusterer, summarizer, linker, verifier, skillSynthesizer
+  },
+  "ingest": {
+    "maxSessions": 200,
+    "sinceDays": 365,
+    "maxFactsPerWindow": 8,
+    "preTriageDedupe": true,
+    "clusterBatch": true
+  },
+  "analyze": {
+    "tier": "standard",
+    "maxFilesPerRun": 500
   }
 }
 ```
@@ -245,7 +291,7 @@ Bumping a model invalidates that agent's cache on the next run; old runs stay in
 ```
 <project>/.substrate-net/
 ├── code.db          # L0 — codegraph-compatible schema
-├── knowledge.db     # L1, L1.5, L2, L2.5, L3 + agent_runs cache
+├── knowledge.db     # L1–L3 + window_briefs + agent_runs cache
 ├── canvas/          # generated .canvas.tsx files
 └── config.json      # per-project agent overrides
 

@@ -1,5 +1,6 @@
 import type { Command } from 'commander';
 import { resolve } from 'path';
+import { warnDeprecated } from './deprecate.js';
 
 export function registerLink(program: Command): void {
   program
@@ -8,6 +9,7 @@ export function registerLink(program: Command): void {
     .argument('[path]', 'Project root path', '.')
     .option('--rebuild', 'Full recompute instead of incremental', false)
     .action(async (path: string, opts: { rebuild: boolean }) => {
+      warnDeprecated('link', 'global link');
       const root = resolve(path);
       const { rebuildLinks } = await import('../link/cross-project.js');
       const stats = await rebuildLinks(root, { full: opts.rebuild });

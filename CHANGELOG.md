@@ -6,6 +6,75 @@ All notable changes to Substrate Net. Format loosely follows
 
 ## [Unreleased]
 
+### Pipeline refactor (RFC `docs/workflow-refactor.md`)
+
+- **Pre-triage window dedupe** — embed-dedupe before triage LLM; mechanical drops audited.
+- **Window briefs** — deterministic verbatim quotes + compressed narrative for triage/extract.
+- **Project core pack** — shared evidence context for extract (README, decisions, entities).
+- **Anchor gate** — drop isolated facts; cap **8 facts/window** by default.
+- **Early fact dedupe** — collapse near-duplicates before cluster.
+- **File analyze tiers** — `standard` profile analyzes entrypoints + high fan-in only; `deep`/`--full` analyzes all.
+- **Config** — `ingest` and `analyze` sections in `~/.substrate-net/config.json`.
+- Cluster thresholds tuned (`AUTO_ATTACH` 0.88) for fewer LLM cluster calls.
+- **Setup planner (M6)** — `setup --plan-only` shows per-phase calls, tokens
+  (in/out), OpenRouter cost, and wall time; session-filter-aware window counts;
+  file-tier analyze estimates; embed dedupe excluded from LLM call totals.
+- **Fused enrich (M5)** — standard profile runs two flash-first agents
+  (`domainFuser`, `industryFuser`) instead of eight frontier enrich calls;
+  `--full` / deep profile retains the legacy agent stack.
+- **Batch clusterer (M7)** — ambiguous facts are decided in batched
+  `clustererBatch` calls (`config.ingest.clusterBatch`, default on); planner
+  divides cluster estimates by `batchSize`.
+- **Profile matrix** — `deep` runner profile (incremental deep quality);
+  `setup --profile lean|standard|deep`; `update --deep`; `SUBNET_PROFILE` env
+  for ingest scripts; doctor shows `pipeline_audit` counters.
+
+## [0.2.0] - Unreleased
+
+### Workflow revamp
+
+- **Unified commands** — `subnet update` is the new day-to-day command
+  (incremental `sync` + `ingest` + global `link` + dashboards). `subnet doctor`
+  reports health and repairs common gaps. `subnet watch` keeps the graph fresh
+  from transcript/code changes. `subnet global link|dashboard|profile|skills`
+  groups cross-project operations.
+- **Speed profiles** — `--fast` (transcript-only, skips analyze + enrich),
+  default (incremental), and `--full` (reprocess all windows).
+- **Tiered flash-first config** — bulk agents (triage, extractors, clusterer,
+  summarizer, fileAnalyzer) default to OpenRouter Gemini Flash; heavy reasoning
+  (domain/architecture/industry modelers, linker, profileWriter) routes to the
+  Cursor frontier backend with a flash fallback.
+- **Faster clustering** — mechanical embedding auto-attach skips the LLM for
+  high-confidence matches; cluster decisions run in parallel waves; stable
+  concepts skip re-summarization.
+- **Unified window extractor** — one agent call per window replaces up to five
+  per-kind extractor calls; batched triage + source classification.
+- **Incremental enrich** — the domain enrichment stack is skipped when its
+  inputs are unchanged since the last run.
+- **Multi-project setup fix** — setup now links every project into the global
+  brain and builds the global dashboard (previously only the first project).
+- **Automation** — `subnet watch` daemon plus Cursor hook + launchd/cron
+  templates under `templates/`. See `docs/automation.html`.
+- **Interactive menu** — running `subnet` with no arguments in a terminal opens
+  a menu-driven flow (update, add projects, health, dashboards, insights, watch
+  status) built on `@clack/prompts`; non-TTY invocations print help. The CLI help
+  surface is now six essentials (`setup`, `update`, `doctor`, `global`, `watch`,
+  `serve`); per-stage/maintenance commands still work but are hidden. Shared
+  service layer under `src/app/` backs both the CLI and the menu.
+
+### Deprecated — removal scheduled for 0.3.0
+
+These commands still work but print a stderr warning pointing to the replacement:
+
+- `subnet ingest`, `subnet sync` (+ manual chain) → `subnet update`
+- `subnet enrich`, `subnet analyze` → folded into `subnet update`
+- `subnet link` → `subnet global link`
+- `subnet dashboard --global` → `subnet global dashboard`
+- `subnet profile` → `subnet global profile`
+- `subnet skills` → `subnet global skills`
+
+## [Unreleased]
+
 ### Added — Hybrid code graph + interactive dashboard
 
 Inspired by Understand-Anything's tree-sitter + LLM hybrid. The parser already

@@ -8,6 +8,14 @@ CREATE TABLE IF NOT EXISTS schema_versions (
 INSERT OR IGNORE INTO schema_versions (version, applied_at, description)
 VALUES (1, strftime('%s', 'now') * 1000, 'Initial knowledge schema');
 
+-- Pipeline bookkeeping: small key/value state (e.g. enrich input hash,
+-- model fingerprint) used to skip work when inputs are unchanged.
+CREATE TABLE IF NOT EXISTS pipeline_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
 -- L1: raw conversation log
 CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
@@ -88,6 +96,18 @@ CREATE TABLE IF NOT EXISTS triage_labels (
 );
 CREATE INDEX IF NOT EXISTS idx_triage_kept ON triage_labels(kept);
 CREATE INDEX IF NOT EXISTS idx_triage_domain ON triage_labels(domain);
+
+-- Deterministic LLM input packages (verbatim quotes + compressed narrative).
+CREATE TABLE IF NOT EXISTS window_briefs (
+    window_id   TEXT PRIMARY KEY REFERENCES turn_windows(id) ON DELETE CASCADE,
+    narrative   TEXT NOT NULL,
+    quotes_json TEXT NOT NULL,
+    symbols_json TEXT,
+    tickets_json TEXT,
+    paths_json  TEXT,
+    char_budget INTEGER NOT NULL,
+    built_at    INTEGER NOT NULL
+);
 
 -- Content labels for non-code source artifacts (docs/diagrams/notes), per window.
 CREATE TABLE IF NOT EXISTS source_labels (

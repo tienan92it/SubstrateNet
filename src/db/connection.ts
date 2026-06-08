@@ -59,6 +59,18 @@ function migrateKnowledgeDb(db: SqliteDb): void {
       fetched_at INTEGER NOT NULL
     )
   `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS window_briefs (
+      window_id   TEXT PRIMARY KEY REFERENCES turn_windows(id) ON DELETE CASCADE,
+      narrative   TEXT NOT NULL,
+      quotes_json TEXT NOT NULL,
+      symbols_json TEXT,
+      tickets_json TEXT,
+      paths_json  TEXT,
+      char_budget INTEGER NOT NULL,
+      built_at    INTEGER NOT NULL
+    )
+  `);
 }
 
 export function openCodeDb(projectRoot: string): SqliteDb {

@@ -11,7 +11,7 @@ import { runClustererForNewFacts } from '../../src/pipeline/cluster';
 import { storeKNodeEmbedding } from '../../src/agents/dedupe';
 import { AgentRuntime } from '../../src/agents/runtime';
 import { DEFAULT_CONFIG } from '../../src/config';
-import { listConcepts, membersOf } from '../../src/knowledge/concept-store';
+import { encodeCentroid, listConcepts, membersOf, upsertConcept } from '../../src/knowledge/concept-store';
 
 function insertFact(db: any, id: string, kind: string, title: string) {
   db.prepare(`INSERT INTO k_nodes (id,kind,title,confidence,source,created_at,updated_at) VALUES (?,?,?,?,?,?,?)`)
@@ -75,6 +75,112 @@ describe('Cluster pipeline', () => {
         expect(concepts[0].summary).toContain('Redis');
         const members = membersOf(db, concepts[0].id);
         expect(members).toHaveLength(2);
+      } finally {
+        AgentRuntime.prototype.run = origRun;
+      }
+    } finally {
+      db.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('attaches a highly-similar fact mechanically without calling the clusterer', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'subnet-cl-'));
+    const db = openKnowledgeDb(dir);
+    try {
+      insertFact(db, 'f1', 'decision', 'use redis for sessions');
+      storeKNodeEmbedding(db, 'f1', Float32Array.from([1, 0, 0, 0]));
+
+      let clustererCalls = 0;
+      const origRun = AgentRuntime.prototype.run;
+      AgentRuntime.prototype.run = async function (agent: any) {
+        if (agent.name === 'clusterer') clustererCalls++;
+        if (agent.name === 'summarizer') {
+          return { output: { name: 'session caching', summary: 'Redis sessions.', structured: {} }, confidence: 0.9, model: 'fake', cached: false } as any;
+        }
+        return { output: {}, confidence: 0, model: 'fake', cached: false } as any;
+      };
+      try {
+        const cfg = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+        // First pass: f1 creates its concept (mechanically — no candidates).
+        await runClustererForNewFacts(db, cfg);
+
+        // Second pass: f2 is near-identical to f1's concept centroid, so it
+        // attaches mechanically. The clusterer must NOT be consulted.
+        insertFact(db, 'f2', 'decision', 'redis chosen for session store');
+        storeKNodeEmbedding(db, 'f2', Float32Array.from([1, 0, 0, 0]));
+        const stats = await runClustererForNewFacts(db, cfg);
+
+        expect(clustererCalls).toBe(0);
+        expect(stats.mechanical).toBe(1);
+        expect(stats.attached).toBe(1);
+        const concepts = listConcepts(db);
+        expect(concepts).toHaveLength(1);
+        expect(concepts[0].memberCount).toBe(2);
+      } finally {
+        AgentRuntime.prototype.run = origRun;
+      }
+    } finally {
+      db.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('batches ambiguous facts into one clustererBatch call', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'subnet-cl-batch-'));
+    const db = openKnowledgeDb(dir);
+    try {
+      // Three facts in the ambiguous band: candidate score ~0.7 (between 0.60 and 0.88).
+      const ambiguous = Float32Array.from([0.7, 0.714, 0, 0]);
+      insertFact(db, 'f1', 'decision', 'cache sessions in redis');
+      insertFact(db, 'f2', 'decision', 'prefer redis over memcached');
+      insertFact(db, 'f3', 'decision', 'session ttl is 24h');
+      storeKNodeEmbedding(db, 'f1', ambiguous);
+      storeKNodeEmbedding(db, 'f2', ambiguous);
+      storeKNodeEmbedding(db, 'f3', ambiguous);
+
+      upsertConcept(db, {
+        id: 'c-seed',
+        name: 'session storage',
+        memberCount: 0,
+        embedding: encodeCentroid(Float32Array.from([1, 0, 0, 0])),
+      });
+
+      let batchCalls = 0;
+      let singleCalls = 0;
+      const origRun = AgentRuntime.prototype.run;
+      AgentRuntime.prototype.run = async function (agent: any, input: any) {
+        if (agent.name === 'clustererBatch') {
+          batchCalls++;
+          const items = input.payload.items as Array<{ factId: string }>;
+          return {
+            output: {
+              results: items.map((it) => ({
+                factId: it.factId,
+                action: 'create',
+                suggestedName: `concept-${it.factId}`,
+                confidence: 0.8,
+                reason: 'batched',
+              })),
+            },
+            confidence: 0.8, model: 'fake', cached: false,
+          } as any;
+        }
+        if (agent.name === 'clusterer') singleCalls++;
+        if (agent.name === 'summarizer') {
+          return { output: { name: 'x', summary: 'y', structured: {} }, confidence: 0.9, model: 'fake', cached: false } as any;
+        }
+        return { output: {}, confidence: 0, model: 'fake', cached: false } as any;
+      };
+
+      try {
+        const cfg = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+        cfg.ingest = { ...cfg.ingest, clusterBatch: true };
+        const stats = await runClustererForNewFacts(db, cfg);
+        expect(stats.processed).toBe(3);
+        expect(batchCalls).toBe(1);
+        expect(singleCalls).toBe(0);
+        expect(stats.llmDecisions).toBe(1);
       } finally {
         AgentRuntime.prototype.run = origRun;
       }
