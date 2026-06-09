@@ -61,7 +61,7 @@ LLMs should receive **briefs**, not transcripts. Verbatim quotes live inside bri
 | G2 | **Remove unnecessary files, folders, and sessions** via configurable scope |
 | G3 | **Deduplicate** windows and facts early; drop **isolated** details that do not anchor to core business |
 | G4 | **Package** conversation and project context — **verbatim evidence preserved** — into bounded payloads for classify / extract / model |
-| G5 | Cut **median first-run cost** by ≥60% on transcript-heavy projects at **standard** quality profile |
+| G5 | Cut **median first-run cost** by ≥60% on transcript-heavy projects at **standard** quality profile (**validation pending** — see Appendix B.2) |
 | G6 | Cut **median first-run cost** by ≥85% on file-heavy monorepos at **lean** profile without losing L2/L3 from chat |
 | G7 | Per-phase **token and call budgets** visible in `setup --plan-only` |
 
@@ -350,23 +350,62 @@ Replace eight sequential frontier calls with **two** flash-first calls in standa
 
 `industryEnricher` external research stays opt-in (`research.kind`).
 
-### P2 — Planner overhaul (`setup/plan.ts`)
+### P2 — Planner overhaul (`setup/plan.ts`, `setup/plan-cost.ts`)
 
-Per-phase table in `setup --plan-only`:
+Per-phase table in `setup --plan-only`. The planner mirrors **runtime agent names**
+and **cluster eligibility** — not a separate cost model.
+
+#### Phase formulas (standard profile)
+
+| Phase | Calls | Token basis |
+|---|---|---|
+| `pre-llm` | 0 | mechanical wall only |
+| `triage` | `ceil(keptWindows / batchSize)` | **`triageBatch`** (runtime default) |
+| `extract` | `keptAfterTriage` if `windowExtractor` configured, else legacy fan-out | `windowExtractor` |
+| `cluster` | `ceil(ambiguousClusterable / batchSize)` | **`clustererBatch`** when `ingest.clusterBatch` |
+| `summarize` | `ceil(clusterableFacts × 0.30)` | `summarizer` |
+| `source-classify` | `ceil(keptAfterTriage / 20)` | **`sourceClassifierBatch`** |
+| `incident` | bugfix windows (`activity=bugfix`) or `keptAfterTriage × 2%` | `incident` |
+| `analyze` | tier-1 pending files (`analyze.tier=standard`) | `fileAnalyzer` |
+| `analyze-arch` | 1 when analyze runs | `architectureAnalyzer` |
+| `enrich-fused` | 2 | `domainFuser` + `industryFuser` |
+| `global` | 2 | `linker` + `skillSynthesizer` |
+
+Where:
+
+- `keptWindows = rawWindows × (1 − preTriageDedupeRatio)` (default 12% drop).
+- `keptAfterTriage = keptWindows × 0.75` (triage noise drop).
+- **`clusterableFacts`** = count of `k_nodes` whose `kind` is **not** in
+  `CLUSTER_EVIDENCE_KINDS` (same exclusion list as `pipeline/cluster.ts`), or
+  `keptAfterTriage × 0.7` on a greenfield tree.
+- `ambiguousClusterable = clusterableFacts × (1 − mechanicalAttachRatio)` (default 15% ambiguous band).
+
+#### Pricing rules
+
+- **Cloud agents** — priced from `MODEL_PRICING` using the configured OpenRouter model.
+- **Batch agents** (`triageBatch`, `clustererBatch`, `sourceClassifierBatch`) — inherit
+  the parent agent's config when not declared (`triage` → `clusterer` → `sourceClassifier`).
+- **Frontier agents** — OpenRouter line item uses the **first cloud fallback** model
+  (typical bill when Cursor SDK is unavailable). Subscription-only agents show
+  `frontier (subscription)` with $0 on that line.
+- **Cache** — applied only on **incremental** plans (`untriaged windows = 0`), capped at 40%.
+  First-run plans always use **0% cache**.
+
+#### Example (small project — illustrative)
 
 ```
 Phase          Calls   Tokens(in)  Tokens(out)  Est.$    Wall
 ─────────────────────────────────────────────────────────────
 pre-llm           0          0           0     0.00    2m
-triage           21     42,000      18,000     0.23    1m
-extract          80    120,000      96,000     1.05    4m
-cluster          40     20,000      16,000     0.18    2m
-summarize        25     15,000      30,000     0.29    1m
-analyze (t1)     45    180,000      45,000     0.68    3m
-enrich fused      2     30,000      12,000     0.15    1m
+triage           21     54,600      52,500     0.55    1m
+extract          80    112,000     152,000     1.54    4m
+cluster          15     42,000      27,000     0.31    2m
+summarize        25     13,750      27,500     0.27    1m
+analyze (t1)     45    126,000      33,750     0.49    3m
+enrich-fused      2      8,300       4,000     0.05    1m
 ```
 
-Pricing: per-model in/out from OpenRouter list; frontier priced separately.
+Run `subnet setup --plan-only --projects <path>` for project-specific numbers.
 
 ---
 
@@ -570,24 +609,65 @@ Users wanting old behavior:
 
 ---
 
-## Appendix A — mindb post-mortem
+## Appendix A — mindb post-mortem (pre-refactor, 2026-05)
 
 | Stage | Actual | Notes |
 |---|---|---|
-| Windows ingested | 321 | Planner assumed 9 |
+| Windows ingested | 321 | Greenfield planner assumed 9 (bytes heuristic) |
 | `windowExtractor` | 319 calls | ~1 per window |
-| `clusterer` | 590 calls | Fact explosion + wide ambiguous band |
+| `clusterer` | 590 calls | Per-fact LLM; wide ambiguous band |
 | `fileAnalyzer` | 0 | Not reached before credit exhaustion |
-| Token split | ~46% output | $9/M out dominates |
-| Root fix | Pre-dedupe + briefs + anchor gate + early fact dedupe | Est. 65% call reduction |
+| Token split | ~46% output | Gemini 3.5 flash: $9/M out dominates |
+| Root fix | Pre-dedupe + briefs + anchor gate + batch cluster | Est. 65% call reduction |
+
+**Post-refactor ingest (2026-06, same project):** 321 windows, batch triage/extract/cluster;
+recorded OpenRouter ~$3.7 on cluster + extract (see `agent_runs`).
 
 ## Appendix B — k_one post-mortem
+
+### B.1 Pre-refactor planner (0.1.x — analyze-dominated)
 
 | Stage | Planned calls | Share |
 |---|---|---|
 | `fileAnalyzer` | 3,676 | 92% |
 | Transcript path | ~315 | 8% |
-| Root fix | File tiers (standard: ~50–150 tier-1 files) | Est. 95% analyze reduction |
+| Root fix | File tiers (`analyze.tier=standard`, ~50–500 tier-1 files) | Est. 95% analyze reduction |
+
+### B.2 Post-refactor first run (2026-06-08, standard profile)
+
+Project: `/Users/antran/Workspace/kafi/k_one` — 3,675 files, 104 sessions, 1,374 windows.
+
+| Phase | Planner (before fix) | Actual `agent_runs` | Recorded OpenRouter $ |
+|---|---|---|---|
+| `triageBatch` | 152 calls · $0.57 | 80 calls | $2.14 |
+| `windowExtractor` | 908 · $5.16 | 615 | $5.82 |
+| `clustererBatch` | **26 · $0.00** | **121** | **$2.49** |
+| `summarizer` | 409 · $1.82 | 339 | $2.52 |
+| `fileAnalyzer` | 500 tier-1 (not all run) | 63 | $0.41 |
+| `sourceClassifierBatch` | 46 · $0 (frontier) | 62 (0 tokens logged) | fallback billed |
+| `incident` | not planned | 18 | fallback billed |
+| **Total recorded** | **~$8–10 plan** | **1,351 runs** | **~$13.5** |
+
+**Root causes of plan underrun (fixed in planner v2):**
+
+1. Cluster counted **all extracted facts**, not **clusterable** kinds — syntax leaf nodes
+   (`path_mention`, `url`, …) are excluded at cluster time but inflated the old cap formula.
+2. `clustererBatch` / `triageBatch` missing from user config → planner priced **$0** or used
+   single-window token heuristics while runtime always batches.
+3. **Cache 40%** applied on re-plan after partial run; first-run actual was 0% cache.
+4. **Frontier agents** (`sourceClassifier`, `incident`) billed via OpenRouter fallback but
+   shown as $0 in the plan table.
+
+**Corrected planner target (same project, post-fix):** ~$12–14 OpenRouter for full first-run
+ingest + tier-1 analyze; incremental `subnet update` should be << $1 with cache warm.
+
+### B.3 G5 / G6 status on k_one
+
+| Goal | Status | Evidence |
+|---|---|---|
+| G5 (≥60% first-run cost cut, standard) | **Not validated vs 0.1.x baseline** | Transcript path ~$13 vs old analyze-heavy $plan; need apples-to-apples replay |
+| G6 (≥85% cut, lean) | **Met in design** | `subnet update --fast` skips analyze + enrich |
+| G7 (per-phase budgets visible) | **Implemented** | `setup --plan-only`; accuracy improved in planner v2 |
 
 ## Appendix C — Related files (current)
 
@@ -608,12 +688,16 @@ Users wanting old behavior:
 
 ## Review checklist
 
-- [x] Goals G1–G7 addressed with testable metrics (G5–G6 need empirical validation on mindb/k_one)
+- [x] Goals G1–G4, G7 — implemented and testable
+- [ ] **G5** — ≥60% first-run cost reduction at standard quality: **not empirically signed off**
+  (k_one transcript path ~$13.5; baseline replay pending)
+- [x] **G6** — lean profile skips analyze + enrich (`subnet update --fast`)
 - [x] Verbatim evidence path explicit in brief + fact schema (`window_briefs`, `evidence_text`, core pack)
 - [x] Profile matrix (lean / standard / deep) — `subnet update --fast|--deep|--full`, `setup --profile`
 - [x] Config shape approved (`ingest`, `analyze`, `clusterBatch` in defaults)
 - [x] Migration path acceptable — lazy `window_briefs` + column migrations in `openKnowledgeDb`
-- [ ] Open questions (Appendix tuning) — deferred; validate cost on real projects
+- [x] Planner v2 aligns with runtime agents + `CLUSTER_EVIDENCE_KINDS` (see P2, Appendix B.2)
+- [ ] Open questions (Appendix tuning) — brief compressor, anchor strictness on lean
 
 **E2E phase order (verified in code):** discover → normalize → segment → brief → pre-dedupe → triage → extract → anchor gate → early dedupe → batch cluster → tiered analyze → fused/deep enrich → late dedupe.
 

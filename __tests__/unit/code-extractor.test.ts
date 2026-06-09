@@ -526,6 +526,49 @@ namespace MyApp.Services {
     }
   });
 
+  it('indexes Elixir: modules, functions, imports, and remote calls', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'subnet-ex-'));
+    try {
+      mkdirSync(join(root, 'lib'), { recursive: true });
+      writeFileSync(
+        join(root, 'lib/user.ex'),
+        `defmodule MyApp.User do
+  alias MyApp.Repo
+  import Ecto.Query
+  use GenServer
+
+  def hello(name) do
+    greet(name)
+    Repo.all(User)
+  end
+
+  defp greet(x), do: x
+end
+
+Remote.ping()
+`,
+      );
+      const stats = await syncProject(root);
+      expect(stats.filesIndexed).toBe(1);
+      expect(stats.errors).toBe(0);
+
+      const db = openCodeDb(root);
+      const nodes = db.prepare(`SELECT name, kind FROM nodes`).all() as Array<{ name: string; kind: string }>;
+      const byKind = (k: string) => nodes.filter((n) => n.kind === k).map((n) => n.name);
+
+      expect(byKind('module')).toContain('MyApp.User');
+      expect(byKind('method')).toEqual(expect.arrayContaining(['hello', 'greet']));
+      expect(byKind('import')).toEqual(expect.arrayContaining(['MyApp.Repo', 'Ecto.Query', 'GenServer']));
+
+      const refs = db.prepare(`SELECT reference_name FROM unresolved_refs`).all() as Array<{ reference_name: string }>;
+      expect(refs.map((r) => r.reference_name)).toEqual(expect.arrayContaining(['all', 'ping']));
+
+      db.close();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('is incremental: second sync with no changes skips files', async () => {
     const root = mkdtempSync(join(tmpdir(), 'subnet-inc-'));
     try {

@@ -166,6 +166,8 @@ const HANDLERS: Record<string, Handler> = {
   event_field_declaration:  (n, p, q, c, r) => emitFieldDeclarationMulti(n, p, q, c, r),
   enum_member_declaration:  (n, p, q, c, r) => emitNamed(n, 'enum_member', p, q, c, r),
   delegate_declaration:     (n, p, q, c, r) => emitNamed(n, 'type_alias', p, q, c, r),
+  // ---------- Elixir (all top-level forms are `call` nodes) ----------
+  call:                     (n, p, q, c, r) => (c.language === 'elixir' ? emitElixirCall(n, p, q, c, r) : undefined),
 };
 
 function qualifierIsClass(q: string[]): boolean {
@@ -571,6 +573,143 @@ function emitRustImpl(
   });
   result.edges.push({ source: parentId, target: id, kind: 'contains' });
   return { id, name };
+}
+
+// ============================================================================
+// Elixir helpers
+// ============================================================================
+
+const ELIXIR_DEF_KW = new Set(['def', 'defp', 'defmacro', 'defmacrop']);
+const ELIXIR_IMPORT_KW = new Set(['alias', 'import', 'use', 'require']);
+
+function emitElixirCall(
+  node: TsNode, parentId: string, qualifier: string[],
+  ctx: ExtractCtx, result: ExtractionResult,
+): { id: string; name: string } | undefined {
+  const kw = elixirCallKeyword(node);
+  if (!kw) {
+    captureElixirCall(node, parentId, result);
+    return undefined;
+  }
+  const args = elixirCallArguments(node);
+  if (kw === 'defmodule') {
+    const name = args ? elixirModuleName(args) : undefined;
+    if (!name) return undefined;
+    return emitElixirNamed(node, 'module', name, parentId, qualifier, ctx, result);
+  }
+  if (ELIXIR_DEF_KW.has(kw)) {
+    const name = args ? elixirDefName(args) : undefined;
+    if (!name) return undefined;
+    const kind = qualifierIsClass(qualifier) ? 'method' : 'function';
+    return emitElixirNamed(node, kind, name, parentId, qualifier, ctx, result);
+  }
+  if (ELIXIR_IMPORT_KW.has(kw)) {
+    const path = args ? elixirImportPath(args) : undefined;
+    if (path) pushImport(result, parentId, ctx, node, path);
+    return undefined;
+  }
+  captureElixirCall(node, parentId, result);
+  return undefined;
+}
+
+function elixirCallKeyword(node: TsNode): string | undefined {
+  for (let i = 0; i < node.namedChildCount; i++) {
+    const c = node.namedChild(i);
+    if (c?.type === 'identifier') return c.text;
+  }
+  return undefined;
+}
+
+function elixirCallArguments(node: TsNode): TsNode | undefined {
+  for (let i = 0; i < node.namedChildCount; i++) {
+    const c = node.namedChild(i);
+    if (c?.type === 'arguments') return c;
+  }
+  return undefined;
+}
+
+function elixirModuleName(args: TsNode): string | undefined {
+  for (let i = 0; i < args.namedChildCount; i++) {
+    const c = args.namedChild(i);
+    if (c?.type === 'alias') return c.text;
+  }
+  return undefined;
+}
+
+function elixirDefName(args: TsNode): string | undefined {
+  for (let i = 0; i < args.namedChildCount; i++) {
+    const c = args.namedChild(i);
+    if (!c) continue;
+    if (c.type === 'identifier') return c.text;
+    if (c.type === 'call') return elixirCallKeyword(c);
+  }
+  return undefined;
+}
+
+function elixirImportPath(args: TsNode): string | undefined {
+  for (let i = 0; i < args.namedChildCount; i++) {
+    const c = args.namedChild(i);
+    if (c?.type === 'alias') return c.text;
+  }
+  return undefined;
+}
+
+function emitElixirNamed(
+  node: TsNode, kind: NodeKind, name: string, parentId: string, qualifier: string[],
+  ctx: ExtractCtx, result: ExtractionResult,
+): { id: string; name: string } {
+  const qualified = `${ctx.filePath}::${[...qualifier, name].join('.')}`;
+  const id = nodeId(ctx.filePath, kind, qualified);
+  result.nodes.push({
+    id, kind, name, qualifiedName: qualified,
+    filePath: ctx.filePath, language: ctx.language,
+    startLine: node.startPosition.row + 1,
+    endLine: node.endPosition.row + 1,
+    startColumn: node.startPosition.column,
+    endColumn: node.endPosition.column,
+    signature: firstLine(node.text),
+    updatedAt: ctx.now,
+  });
+  result.edges.push({ source: parentId, target: id, kind: 'contains' });
+  return { id, name };
+}
+
+function isElixirDefHeadCall(node: TsNode): boolean {
+  const parent = node.parent;
+  if (parent?.type !== 'arguments') return false;
+  const grand = parent.parent;
+  if (grand?.type !== 'call') return false;
+  const kw = elixirCallKeyword(grand);
+  return !!kw && ELIXIR_DEF_KW.has(kw);
+}
+
+function captureElixirCall(node: TsNode, currentParentId: string, result: ExtractionResult): void {
+  if (isElixirDefHeadCall(node)) return;
+  const kw = elixirCallKeyword(node);
+  if (kw && (kw === 'defmodule' || ELIXIR_DEF_KW.has(kw) || ELIXIR_IMPORT_KW.has(kw))) return;
+  const name = elixirCalleeName(node);
+  if (!name) return;
+  result.unresolvedCalls.push({
+    fromId: currentParentId,
+    name,
+    line: node.startPosition.row + 1,
+    col: node.startPosition.column,
+  });
+}
+
+function elixirCalleeName(node: TsNode): string | undefined {
+  for (let i = 0; i < node.namedChildCount; i++) {
+    const c = node.namedChild(i);
+    if (!c) continue;
+    if (c.type === 'dot') {
+      for (let j = c.namedChildCount - 1; j >= 0; j--) {
+        const part = c.namedChild(j);
+        if (part?.type === 'identifier') return part.text;
+      }
+    }
+    if (c.type === 'identifier') return c.text;
+  }
+  return undefined;
 }
 
 // ============================================================================

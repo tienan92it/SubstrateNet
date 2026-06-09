@@ -73,7 +73,7 @@ export function formatPlanTable(plan: SetupPlan): string {
   if (plan.backendMode !== 'local' && t.estTokens > 0) {
     lines.push('');
     lines.push(
-      `OpenRouter est.: ~${formatNum(t.estTokensIn)} in · ~${formatNum(t.estTokensOut)} out` +
+      `OpenRouter est. (incl. frontier→flash fallback): ~${formatNum(t.estTokensIn)} in · ~${formatNum(t.estTokensOut)} out` +
         (t.estCostUsd > 0 ? ` · ~$${t.estCostUsd.toFixed(2)}` : ''),
     );
   }

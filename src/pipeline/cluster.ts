@@ -36,14 +36,17 @@ import type { SubstrateNetConfig } from '../config.js';
  * Leaf/evidence kinds are NOT clustered into concepts — they are citations,
  * not ideas. Keeps L3 concepts meaningful (decisions, rules, skills, ...).
  */
-const EVIDENCE_KINDS = [
+/** Leaf/evidence kinds excluded from L3 clustering — shared with setup planner. */
+export const CLUSTER_EVIDENCE_KINDS = [
   'path_mention', 'code_block', 'shell_command', 'error_message',
   'stack_trace', 'ticket_id', 'url', 'dependency', 'tool', 'knowledge_gap',
   // Organizational zone nodes are taxonomy, not clusterable ideas.
   'business_domain', 'tech_domain',
   // Structured RCA records are linked by edges, not clustered into concepts.
   'incident', 'root_cause',
-];
+] as const;
+
+const EVIDENCE_KINDS: readonly string[] = CLUSTER_EVIDENCE_KINDS;
 
 /** Candidate pool size + the minimum similarity to even consider a concept. */
 const CANDIDATE_K = 5;

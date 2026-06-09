@@ -57,7 +57,11 @@ export async function runInteractiveMenu(): Promise<void> {
         case 'advanced': await advancedFlow(p); break;
       }
     } catch (e) {
-      p.log.error((e as Error).message);
+      // @clack spinner shows a generic "Something went wrong" on unhandled rejections;
+      // surface the real message here (stack in verbose/debug if needed).
+      const msg = formatErr(e);
+      p.log.error(msg.split('\n')[0] ?? 'Unknown error');
+      if (msg.includes('\n')) p.log.info(msg);
     }
   }
 }
@@ -129,14 +133,25 @@ async function updateFlow(p: Clack, projects: ReturnType<typeof registeredProjec
   if (result.projects.some(isUnhealthy)) p.log.warn('Some projects look unhealthy — run a Health check.');
 }
 
+function formatErr(e: unknown): string {
+  if (e instanceof Error) return e.stack ?? e.message;
+  return String(e);
+}
+
 async function setupFlow(p: Clack): Promise<void> {
   const { discoverWorkspaces } = await import('../setup/discover.js');
   const { runSetupPipeline } = await import('../setup/run.js');
 
   const spin = p.spinner();
-  spin.start('Discovering workspaces…');
-  const discovered = await discoverWorkspaces({});
-  spin.stop(`Found ${discovered.length} workspace(s).`);
+  let discovered;
+  try {
+    spin.start('Discovering workspaces…');
+    discovered = await discoverWorkspaces({});
+    spin.stop(`Found ${discovered.length} workspace(s).`);
+  } catch (e) {
+    spin.stop('Discovery failed.');
+    throw e;
+  }
 
   const choices = discovered
     .filter((w) => w.path && w.sources.some((s) => s.sessions > 0))
@@ -150,7 +165,7 @@ async function setupFlow(p: Clack): Promise<void> {
   if (choices.length > 0) {
     const picked = await p.multiselect({ message: 'Select projects to index', options: choices, required: false });
     if (p.isCancel(picked)) return;
-    selected = picked as string[];
+    selected = (picked as string[]).filter((s) => typeof s === 'string' && s.trim().length > 0);
   } else {
     p.log.warn('No workspaces with transcripts auto-discovered.');
   }
@@ -159,24 +174,39 @@ async function setupFlow(p: Clack): Promise<void> {
   if (!p.isCancel(manual) && manual && String(manual).trim()) selected.push(resolve(String(manual).trim()));
 
   selected = [...new Set(selected.map((s) => resolve(s)))];
+  const missing = selected.filter((s) => !existsSync(s));
+  if (missing.length > 0) {
+    p.log.error(`Path not found:\n${missing.map((s) => `  • ${s}`).join('\n')}`);
+    return;
+  }
   if (selected.length === 0) {
     p.log.warn('Nothing selected.');
     return;
   }
 
   const spin2 = p.spinner();
-  spin2.start('Indexing (full pipeline)…');
-  const result = await runSetupPipeline({
-    projects: selected,
-    onProgress: (ev) => {
-      if (ev.kind === 'stage') spin2.message(`${ev.project ?? 'global'} — ${ev.stage}`);
-      else if (ev.kind === 'global') spin2.message(`global — ${ev.stage}`);
-      else if (ev.kind === 'progress' && ev.total) spin2.message(`${ev.project} ${ev.stage} ${ev.current}/${ev.total}`);
-    },
-  });
-  spin2.stop('Indexing complete.');
-  for (const pr of result.projects) p.log[pr.ok ? 'success' : 'error'](`${pr.path}: ${pr.ok ? 'ok' : pr.error}`);
-  if (result.dashboardPath) p.log.success(`Dashboard: ${result.dashboardPath}`);
+  try {
+    spin2.start('Indexing (full pipeline)…');
+    const result = await runSetupPipeline({
+      projects: selected,
+      onProgress: (ev) => {
+        if (ev.kind === 'stage') spin2.message(`${ev.project ?? 'global'} — ${ev.stage}`);
+        else if (ev.kind === 'global') spin2.message(`global — ${ev.stage}`);
+        else if (ev.kind === 'progress' && ev.total) {
+          spin2.message(`${ev.project} ${ev.stage} ${ev.current}/${ev.total}`);
+        }
+      },
+    });
+    spin2.stop('Indexing complete.');
+    for (const pr of result.projects) {
+      p.log[pr.ok ? 'success' : 'error'](`${pr.path}: ${pr.ok ? 'ok' : (pr.error ?? 'failed')}`);
+    }
+    if (result.dashboardPath) p.log.success(`Dashboard: ${result.dashboardPath}`);
+  } catch (e) {
+    spin2.stop('Indexing failed.');
+    p.log.error(formatErr(e));
+    throw e;
+  }
 }
 
 async function doctorFlow(p: Clack): Promise<void> {

@@ -26,7 +26,7 @@ export type EdgeKind =
 
 export const LANGUAGES = [
   'typescript', 'javascript', 'tsx', 'jsx', 'python',
-  'dart', 'go', 'rust', 'java', 'csharp', 'sql', 'unknown',
+  'dart', 'go', 'rust', 'java', 'csharp', 'elixir', 'sql', 'unknown',
 ] as const;
 export type Language = (typeof LANGUAGES)[number];
 

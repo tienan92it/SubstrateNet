@@ -7,10 +7,12 @@ import { filterPathsForAnalyze } from '../code/file-tiers.js';
 import { openCodeDb, openKnowledgeDb } from '../db/connection.js';
 import { buildSessionAdapters } from '../ingest/orchestrator.js';
 import { shouldIngestSession } from '../pipeline/session-filter.js';
+import { CLUSTER_EVIDENCE_KINDS } from '../pipeline/cluster.js';
 import {
   agentBackendKind,
   costUsdForAgent,
   loadAgentTokenStats,
+  phaseBillingNote,
   tokensForAgent,
 } from './plan-cost.js';
 import type { PlanPhaseEstimate, PlanProfile, ProjectPlanEstimate, SetupPlan } from './types.js';
@@ -22,9 +24,12 @@ const DEFAULT_BATCH_SIZE = 8;
 /** Fraction of windows dropped by pre-triage embed dedupe (empirical). */
 const PRE_DEDUPE_DROP_RATIO = 0.12;
 const KEEP_RATIO = 0.75;
-const AVG_FACTS_PER_WINDOW = 1.5;
+/** Clusterable facts per kept window (excludes syntax leaf nodes). Empirical: k_one ≈ 0.67. */
+const CLUSTERABLE_FACTS_PER_KEPT_WINDOW = 0.7;
 const MECHANICAL_ATTACH_RATIO = 0.85;
 const SUMMARIZE_RATIO = 0.3;
+/** Fraction of kept windows tagged activity=bugfix (incident extractor). */
+const BUGFIX_WINDOW_RATIO = 0.02;
 const PRE_LLM_MS_PER_WINDOW = 120;
 
 export interface PlanOpts {
@@ -162,6 +167,7 @@ interface PhaseBuildCtx {
   keptWindows: number;
   pendingPaths: string[];
   codeDb: SqliteDb | null;
+  knowDb: SqliteDb | null;
   prose: boolean;
 }
 
@@ -183,31 +189,52 @@ function buildPhase(
   const tokensOut = effectiveCalls * tok.out;
   const estWallMs = Math.round((effectiveCalls * tok.ms) / ctx.concurrency);
   const estCostUsd = costUsdForAgent(ctx.cfg, agentName, tokensIn, tokensOut);
-  const kind = agentBackendKind(ctx.cfg, agentName);
-  const phaseNote = note ?? (kind === 'frontier' ? 'frontier (subscription)' : undefined);
-  return { phase, calls, tokensIn, tokensOut, estCostUsd, estWallMs, note: phaseNote };
+  return {
+    phase, calls, tokensIn, tokensOut, estCostUsd, estWallMs,
+    note: phaseBillingNote(ctx.cfg, agentName, note),
+  };
+}
+
+function countClusterableFacts(knowDb: SqliteDb): number {
+  const placeholders = CLUSTER_EVIDENCE_KINDS.map(() => '?').join(',');
+  return (knowDb.prepare(`
+    SELECT COUNT(*) AS n FROM k_nodes WHERE kind NOT IN (${placeholders})
+  `).get(...CLUSTER_EVIDENCE_KINDS) as { n: number }).n;
+}
+
+function countBugfixWindows(knowDb: SqliteDb): number {
+  return (knowDb.prepare(`
+    SELECT COUNT(*) AS n FROM triage_labels WHERE activity = 'bugfix'
+  `).get() as { n: number }).n;
+}
+
+function estimateClusterableFacts(
+  knowDb: SqliteDb | null,
+  keptAfterTriage: number,
+): number {
+  if (knowDb) {
+    const n = countClusterableFacts(knowDb);
+    if (n > 0) return n;
+  }
+  return Math.max(1, Math.round(keptAfterTriage * CLUSTERABLE_FACTS_PER_KEPT_WINDOW));
 }
 
 function buildProjectPhases(ctx: PhaseBuildCtx): PlanPhaseEstimate[] {
   const batchSize = Math.max(1, ctx.cfg.batchSize ?? DEFAULT_BATCH_SIZE);
-  const ingest = resolveIngestConfig(ctx.cfg);
-  const maxFacts = ingest.maxFactsPerWindow ?? 8;
   const unified = Boolean(ctx.cfg.agents.windowExtractor);
-  const triageAgent = ctx.cfg.agents.triageBatch ? 'triageBatch' : 'triage';
+  // Runtime always prefers triageBatch (see pipeline/triage.ts).
+  const triageAgent = 'triageBatch';
 
   const triageCalls = Math.ceil(ctx.keptWindows / batchSize);
   const keptAfterTriage = Math.ceil(ctx.keptWindows * KEEP_RATIO);
   const extractCalls = unified ? keptAfterTriage : Math.ceil(keptAfterTriage * 0.65 * 1.5);
-  const factsEst = Math.min(
-    Math.round(keptAfterTriage * maxFacts * 0.6),
-    Math.round(extractCalls * AVG_FACTS_PER_WINDOW),
-  );
-  const ambiguousFacts = Math.ceil(factsEst * (1 - MECHANICAL_ATTACH_RATIO));
+  const factsForCluster = estimateClusterableFacts(ctx.knowDb, keptAfterTriage);
+  const ambiguousFacts = Math.ceil(factsForCluster * (1 - MECHANICAL_ATTACH_RATIO));
   const clusterBatch = resolveIngestConfig(ctx.cfg).clusterBatch !== false;
   const clusterCalls = clusterBatch
     ? Math.ceil(ambiguousFacts / batchSize)
     : ambiguousFacts;
-  const summarizeCalls = Math.ceil(factsEst * SUMMARIZE_RATIO);
+  const summarizeCalls = Math.ceil(factsForCluster * SUMMARIZE_RATIO);
 
   let analyzeCalls = 0;
   let analyzeNote = 'skipped (lean)';
@@ -224,8 +251,9 @@ function buildProjectPhases(ctx: PhaseBuildCtx): PlanPhaseEstimate[] {
       analyzeCalls = Math.min(paths.length, resolveAnalyzeConfig(ctx.cfg).maxFilesPerRun ?? 500);
       analyzeNote = ctx.profile === 'deep' ? 'deep (no code db)' : 'tier-1 heuristic';
     }
-    if (analyzeCalls > 0) analyzeCalls += 1; // architectureAnalyzer once
   }
+
+  const archCalls = analyzeCalls > 0 ? 1 : 0;
 
   const enrichCalls = ctx.profile === 'lean'
     ? 0
@@ -233,6 +261,11 @@ function buildProjectPhases(ctx: PhaseBuildCtx): PlanPhaseEstimate[] {
       ? ENRICH_DEEP_CALLS
       : ENRICH_FUSED_CALLS;
   const sourceClassCalls = ctx.profile === 'lean' ? 0 : Math.ceil(keptAfterTriage / 20);
+  const incidentCalls = ctx.profile === 'lean' ? 0 : (
+    ctx.knowDb
+      ? countBugfixWindows(ctx.knowDb)
+      : Math.max(0, Math.ceil(keptAfterTriage * BUGFIX_WINDOW_RATIO))
+  );
 
   const phases: PlanPhaseEstimate[] = [
     {
@@ -257,10 +290,19 @@ function buildProjectPhases(ctx: PhaseBuildCtx): PlanPhaseEstimate[] {
   ];
 
   if (sourceClassCalls > 0) {
-    phases.push(buildPhase('source-classify', sourceClassCalls, 'sourceClassifierBatch', ctx, 'frontier'));
+    phases.push(buildPhase('source-classify', sourceClassCalls, 'sourceClassifierBatch', ctx));
   }
 
-  phases.push(buildPhase('analyze', analyzeCalls, 'fileAnalyzer', ctx, analyzeNote));
+  if (incidentCalls > 0) {
+    phases.push(buildPhase('incident', incidentCalls, 'incident', ctx, 'bugfix windows'));
+  }
+
+  if (analyzeCalls > 0) {
+    phases.push(buildPhase('analyze', analyzeCalls, 'fileAnalyzer', ctx, analyzeNote));
+  }
+  if (archCalls > 0) {
+    phases.push(buildPhase('analyze-arch', archCalls, 'architectureAnalyzer', ctx, 'once per run'));
+  }
 
   if (enrichCalls > 0) {
     if (ctx.profile === 'standard') {
@@ -317,7 +359,11 @@ function mergePhases(all: PlanPhaseEstimate[]): PlanPhaseEstimate[] {
     prev.estCostUsd += ph.estCostUsd;
     prev.estWallMs += ph.estWallMs;
   }
-  const order = ['pre-llm', 'triage', 'extract', 'cluster', 'summarize', 'source-classify', 'analyze', 'enrich-fused', 'enrich', 'prose', 'global'];
+  const order = [
+    'pre-llm', 'triage', 'extract', 'cluster', 'summarize',
+    'source-classify', 'incident', 'analyze', 'analyze-arch',
+    'enrich-fused', 'enrich', 'prose', 'global',
+  ];
   return order.filter((k) => m.has(k)).map((k) => m.get(k)!);
 }
 
@@ -341,10 +387,17 @@ async function planProject(root: string, cfg: SubstrateNetConfig, opts: PlanOpts
     const concurrency = cfg.concurrency ?? 4;
 
     let cacheHitPct = 0;
+    let untriaged = estWindowsKept;
     if (knowDb && initialized) {
+      untriaged = (knowDb.prepare(`
+        SELECT COUNT(*) AS n FROM turn_windows w
+        LEFT JOIN triage_labels t ON t.window_id = w.id
+        WHERE t.window_id IS NULL
+      `).get() as { n: number }).n;
       const runs = (knowDb.prepare(`SELECT COUNT(*) AS n FROM agent_runs WHERE ok=1`).get() as { n: number }).n;
       const estCalls = Math.ceil(estWindowsKept / (cfg.batchSize ?? DEFAULT_BATCH_SIZE)) + estWindowsKept;
-      if (runs > 0 && estCalls > 0) {
+      // Cache only applies to incremental re-runs (all windows already triaged).
+      if (runs > 0 && estCalls > 0 && untriaged === 0) {
         cacheHitPct = Math.min(40, Math.round((runs / (runs + estCalls)) * 100));
       }
     }
@@ -358,6 +411,7 @@ async function planProject(root: string, cfg: SubstrateNetConfig, opts: PlanOpts
       keptWindows: estWindowsKept,
       pendingPaths,
       codeDb,
+      knowDb,
       prose: Boolean(opts.prose),
     };
     const phases = buildProjectPhases(phaseCtx);
@@ -399,6 +453,7 @@ function buildGlobalPhases(cfg: SubstrateNetConfig, cacheHitPct: number, concurr
     keptWindows: 0,
     pendingPaths: [],
     codeDb: null,
+    knowDb: null,
     prose: false,
   };
   const linker = buildPhase('global', 1, 'linker', ctx, 'cross-project');

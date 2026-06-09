@@ -1,8 +1,12 @@
 /**
  * Per-model token pricing and per-agent token heuristics for setup plans.
+ *
+ * Pricing rules mirror runtime agent resolution: batch agents inherit their
+ * parent config entry; frontier agents are cost-estimated at the first
+ * OpenRouter fallback tier (what users actually pay when Cursor is unavailable).
  */
 import type { Database as SqliteDb } from 'better-sqlite3';
-import { parseModelRef, type SubstrateNetConfig } from '../config.js';
+import { parseModelRef, type AgentSpec, type SubstrateNetConfig } from '../config.js';
 
 export interface ModelPricing {
   inputPerM: number;
@@ -17,13 +21,24 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   'openai/gpt-4o': { inputPerM: 2.5, outputPerM: 10.0 },
 };
 
+/**
+ * Runtime batch agents that inherit model routing from a parent config key
+ * when not declared explicitly (see `src/pipeline/triage.ts`, `cluster.ts`,
+ * `classify-sources.ts`).
+ */
+export const PLAN_AGENT_ALIASES: Record<string, string> = {
+  triageBatch: 'triage',
+  clustererBatch: 'clusterer',
+  sourceClassifierBatch: 'sourceClassifier',
+};
+
 /** Default in/out split per agent when no run history exists (brief-based pipeline). */
 export const DEFAULT_AGENT_TOKENS: Record<string, { in: number; out: number; ms: number }> = {
-  triageBatch:       { in: 3200, out: 900, ms: 8000 },
+  triageBatch:       { in: 2600, out: 2500, ms: 9000 },
   triage:            { in: 1800, out: 400, ms: 5000 },
   windowExtractor:   { in: 1400, out: 1900, ms: 9000 },
   clusterer:         { in: 700, out: 550, ms: 6000 },
-  clustererBatch:    { in: 2400, out: 1200, ms: 9000 },
+  clustererBatch:    { in: 2800, out: 1800, ms: 9000 },
   summarizer:        { in: 550, out: 1100, ms: 7000 },
   fileAnalyzer:      { in: 2800, out: 750, ms: 10000 },
   architectureAnalyzer: { in: 4000, out: 1200, ms: 15000 },
@@ -40,11 +55,18 @@ export const DEFAULT_AGENT_TOKENS: Record<string, { in: number; out: number; ms:
   industryFuser:     { in: 3800, out: 1800, ms: 12000 },
 };
 
-export function agentBackendKind(cfg: SubstrateNetConfig, agentName: string): 'local' | 'frontier' | 'cloud' {
-  const spec = cfg.agents[agentName];
-  if (!spec?.model) return 'local';
+function normalizeFallbacks(fallback?: string | string[]): string[] {
+  if (!fallback) return [];
+  return Array.isArray(fallback) ? fallback : [fallback];
+}
+
+export function resolveAgentSpec(cfg: SubstrateNetConfig, agentName: string): AgentSpec | undefined {
+  return cfg.agents[agentName] ?? cfg.agents[PLAN_AGENT_ALIASES[agentName] ?? ''];
+}
+
+function backendKindForModel(cfg: SubstrateNetConfig, modelRef: string): 'local' | 'frontier' | 'cloud' {
   try {
-    const { backend } = parseModelRef(spec.model);
+    const { backend } = parseModelRef(modelRef);
     const b = cfg.agentBackends[backend];
     if (!b) return 'local';
     if (b.kind === 'ollama') return 'local';
@@ -52,6 +74,41 @@ export function agentBackendKind(cfg: SubstrateNetConfig, agentName: string): 'l
     return 'cloud';
   } catch {
     return 'local';
+  }
+}
+
+/** Primary backend kind for display (subscription vs API). */
+export function agentBackendKind(cfg: SubstrateNetConfig, agentName: string): 'local' | 'frontier' | 'cloud' {
+  const spec = resolveAgentSpec(cfg, agentName);
+  if (!spec?.model) return 'local';
+  return backendKindForModel(cfg, spec.model);
+}
+
+/**
+ * Model ref used for OpenRouter $ estimates. Frontier agents price at the first
+ * cloud fallback; otherwise the primary cloud model.
+ */
+export function billingModelRef(cfg: SubstrateNetConfig, agentName: string): string | undefined {
+  const spec = resolveAgentSpec(cfg, agentName);
+  if (!spec?.model) return undefined;
+  const primary = backendKindForModel(cfg, spec.model);
+  if (primary === 'cloud') return spec.model;
+  if (primary === 'frontier') {
+    for (const fb of normalizeFallbacks(spec.fallback)) {
+      if (backendKindForModel(cfg, fb) === 'cloud') return fb;
+    }
+    return undefined;
+  }
+  return undefined;
+}
+
+function priceTokens(modelRef: string, tokensIn: number, tokensOut: number): number {
+  try {
+    const { model } = parseModelRef(modelRef);
+    const p = MODEL_PRICING[model] ?? { inputPerM: 1.0, outputPerM: 4.0 };
+    return (tokensIn / 1_000_000) * p.inputPerM + (tokensOut / 1_000_000) * p.outputPerM;
+  } catch {
+    return 0;
   }
 }
 
@@ -85,15 +142,20 @@ export function costUsdForAgent(
   tokensIn: number,
   tokensOut: number,
 ): number {
+  const billRef = billingModelRef(cfg, agentName);
+  if (!billRef) return 0;
+  return priceTokens(billRef, tokensIn, tokensOut);
+}
+
+/** Note suffix for phases billed via frontier primary with flash fallback estimate. */
+export function phaseBillingNote(cfg: SubstrateNetConfig, agentName: string, extra?: string): string | undefined {
   const kind = agentBackendKind(cfg, agentName);
-  if (kind === 'local' || kind === 'frontier') return 0;
-  const spec = cfg.agents[agentName];
-  if (!spec?.model) return 0;
-  try {
-    const { model } = parseModelRef(spec.model);
-    const p = MODEL_PRICING[model] ?? { inputPerM: 1.0, outputPerM: 4.0 };
-    return (tokensIn / 1_000_000) * p.inputPerM + (tokensOut / 1_000_000) * p.outputPerM;
-  } catch {
-    return 0;
-  }
+  const hasFallbackBill = kind === 'frontier' && Boolean(billingModelRef(cfg, agentName));
+  const bill = hasFallbackBill
+    ? 'flash fallback est.'
+    : kind === 'frontier'
+      ? 'frontier (subscription)'
+      : undefined;
+  if (bill && extra) return `${extra} · ${bill}`;
+  return extra ?? bill;
 }
