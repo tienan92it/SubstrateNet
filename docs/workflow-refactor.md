@@ -686,6 +686,27 @@ ingest + tier-1 analyze; incremental `subnet update` should be << $1 with cache 
 
 ---
 
+## Appendix D — L6 Wisdom layer (global dashboard revamp)
+
+Extends the model with an explicit **Wisdom** layer on top of L5, so the global
+dashboard reads as a DIKW professional profile instead of flat skill lists.
+
+| Concern | Choice |
+|---|---|
+| Producer | `WisdomSynthesizer` agent (`frontier` → flash → local), grounded `model` |
+| Fallback | `deterministicWisdom()` — keyword competency routing + weight-bucketed Dreyfus levels (no LLM) |
+| Classification | SFIA-style competency **areas** (≤6–8) × Dreyfus **levels** (novice → expert) |
+| Output | leveled competencies, cross-project insights/principles, named gaps + recommendations |
+| Storage | `global.db`: `wisdom_meta`, `competency_groups`, `competency_skills`, `wisdom_insights`, `wisdom_gaps` (schema v2) |
+| Gap source | per-project `knowledge_gap` nodes (`runGapDetector`) + agent-named coverage gaps |
+| Trigger | `subnet global wisdom`; auto-run by `runGlobalPipeline` whenever the global dashboard is (re)built |
+
+Inputs are bounded and the agent run is cached in `global.db agent_runs`, so a
+no-change rebuild is a cache hit (no spend). Everything emitted is `model`
+grounding — kept separate from `structural`/`stated`/`corroborated` project truth.
+
+---
+
 ## Review checklist
 
 - [x] Goals G1–G4, G7 — implemented and testable

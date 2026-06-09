@@ -1,0 +1,38 @@
+{
+  "payload": {
+    "projectCount": 4,
+    "industries": [
+      { "name": "Fintech", "projectCount": 3 },
+      { "name": "Developer Tools", "projectCount": 1 }
+    ],
+    "skills": [
+      { "name": "TypeScript", "weight": 9.2, "grounding": "structural", "projectCount": 4, "kind": "language" },
+      { "name": "PostgreSQL", "weight": 7.1, "grounding": "corroborated", "projectCount": 3, "kind": "tool" },
+      { "name": "Kafka", "weight": 3.0, "grounding": "stated", "projectCount": 1, "kind": "tool" },
+      { "name": "Docker", "weight": 5.5, "grounding": "structural", "projectCount": 3, "kind": "tool" },
+      { "name": "React", "weight": 6.0, "grounding": "structural", "projectCount": 2, "kind": "skill" },
+      { "name": "Event-driven architecture", "weight": 4.0, "grounding": "stated", "projectCount": 2, "kind": "skill" },
+      { "name": "OAuth / JWT auth", "weight": 3.5, "grounding": "corroborated", "projectCount": 2, "kind": "skill" }
+    ],
+    "businessDomains": [
+      { "name": "Payments", "summary": "Money movement, ledgers, settlement" },
+      { "name": "Onboarding", "summary": "KYC and account creation" }
+    ],
+    "techDomains": [
+      { "name": "Authentication", "summary": "Session and token issuance" },
+      { "name": "Data pipeline", "summary": "Ingestion and stream processing" }
+    ],
+    "concepts": [
+      { "name": "Idempotent payment intents", "summary": "Dedup of retried charges" },
+      { "name": "Outbox pattern", "summary": "Reliable event publication" }
+    ],
+    "highlights": [
+      { "statement": "Designed an idempotent payments ledger across two services", "grounding": "corroborated" },
+      { "statement": "Built a Kafka-based event pipeline for settlement", "grounding": "stated" }
+    ],
+    "gaps": [
+      { "title": "Unmodeled entity referenced by foreign key: Merchant", "summary": "Referenced by settlements but not defined here." },
+      { "title": "Entity without documented rules: Ledger", "summary": "Central entity with no governing business rule." }
+    ]
+  }
+}

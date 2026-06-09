@@ -1,6 +1,12 @@
 import { useMemo, useState } from 'react';
-import type { GlobalDashboardSnapshot, GlobalProfile, HierarchyNode, HierarchyLevel, KnowledgeNode } from './types';
-import { LEVEL_COLORS, LEVEL_LABELS, KNOWLEDGE_COLORS, KNOWLEDGE_LABELS } from './types';
+import type {
+  GlobalDashboardSnapshot, HierarchyNode, HierarchyLevel, KnowledgeNode,
+  WisdomSnapshot, WisdomCompetency, WisdomInsight, WisdomGap,
+} from './types';
+import {
+  LEVEL_COLORS, LEVEL_LABELS, KNOWLEDGE_COLORS, KNOWLEDGE_LABELS,
+  LEVEL_ORDER, LEVEL_LABELS_PROF, LEVEL_COLOR,
+} from './types';
 import { ForceGraph, type FGNode } from './ForceGraph';
 
 type View = 'profile' | 'map';
@@ -52,7 +58,7 @@ export function GlobalApp({ snapshot }: { snapshot: GlobalDashboardSnapshot }) {
 
       <div className="body">
         <div className="main">
-          {view === 'profile' && <ProfileView profile={snapshot.profile} onOpenMap={goMap} />}
+          {view === 'profile' && <ProfileView snapshot={snapshot} onOpenMap={goMap} />}
           {view === 'map' && !drillProject && (
             <HierarchyView
               snapshot={snapshot}
@@ -102,31 +108,36 @@ export function GlobalApp({ snapshot }: { snapshot: GlobalDashboardSnapshot }) {
   );
 }
 
-function ProfileView({ profile, onOpenMap }: { profile: GlobalProfile; onOpenMap: () => void }) {
-  const maxWeight = useMemo(() => Math.max(1, ...profile.skills.map((s) => s.weight)), [profile]);
-  const empty = profile.industries.length === 0 && profile.skills.length === 0 && profile.highlights.length === 0;
+// ============================================================================
+// Profile view — the balanced DIKW professional profile (Wisdom-first)
+// ============================================================================
+
+function ProfileView({ snapshot, onOpenMap }: { snapshot: GlobalDashboardSnapshot; onOpenMap: () => void }) {
+  const { profile } = snapshot;
+  const wisdom: WisdomSnapshot | undefined = snapshot.wisdom;
+  const c = snapshot.meta.counts;
+
+  const hasWisdom = !!wisdom && (wisdom.competencies.length > 0 || !!wisdom.headline);
+  const emptyAll = !hasWisdom && profile.industries.length === 0 && profile.skills.length === 0 && profile.highlights.length === 0;
 
   return (
     <div className="profile">
-      <div className="profile-hero">
-        <div className="hero-label">// cross-project profile</div>
-        <h1 className="hero-title">The second brain</h1>
-        <p className="hero-sub">What you know, demonstrated across {profile.projectCount} project(s) — aggregated from code and conversations, every claim grounded.</p>
-        <div className="stat-row">
-          <Stat n={profile.projectCount} label="projects" />
-          <Stat n={profile.industries.length} label="industries" />
-          <Stat n={profile.skills.length} label="skills" />
-          <Stat n={profile.highlights.length} label="highlights" />
-        </div>
-      </div>
+      <WisdomHero wisdom={wisdom} counts={c} />
 
-      {empty && (
-        <p className="sub empty-hint">No profile data yet. Run <code>subnet link</code> in your projects to aggregate skills, industries, and highlights.</p>
+      {emptyAll && (
+        <p className="sub empty-hint">No profile data yet. Run <code>subnet update --global</code> across your projects to aggregate skills and synthesize wisdom.</p>
+      )}
+
+      {!hasWisdom && !emptyAll && (
+        <p className="sub empty-hint">
+          Knowledge aggregated, but the wisdom layer is not synthesized yet. Run <code>subnet global wisdom</code> to
+          classify competencies, distill insights, and surface gaps.
+        </p>
       )}
 
       {profile.industries.length > 0 && (
         <section className="profile-section">
-          <h2 className="sect-title">Industries</h2>
+          <h2 className="sect-title">Industries <span className="sect-hint">the domains you build in</span></h2>
           <div className="chips">
             {profile.industries.map((i) => (
               <span key={i.name} className="chip">
@@ -138,29 +149,25 @@ function ProfileView({ profile, onOpenMap }: { profile: GlobalProfile; onOpenMap
         </section>
       )}
 
-      {profile.skills.length > 0 && (
-        <section className="profile-section">
-          <h2 className="sect-title">Top technical skills <span className="sect-hint">by evidence weight</span></h2>
-          <div className="skills">
-            {profile.skills.map((s) => (
-              <div key={s.name} className="skill-row">
-                <span className="skill-name">{s.name}</span>
-                <span className="skill-bar"><span className="skill-fill" style={{ width: `${Math.max(4, (s.weight / maxWeight) * 100)}%` }} /></span>
-                <span className="skill-meta">
-                  <span className="skill-weight">{s.weight.toFixed(1)}</span>
-                  {s.projectCount > 1 && <span className="skill-cross">{s.projectCount} repos</span>}
-                  <span className="grounding">{s.grounding}</span>
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
+      {hasWisdom && wisdom!.competencies.length > 0 && (
+        <CompetencyMap competencies={wisdom!.competencies} />
+      )}
+
+      {/* Fallback to flat skills when no competency grouping exists yet. */}
+      {!hasWisdom && profile.skills.length > 0 && <FlatSkills skills={profile.skills} />}
+
+      {hasWisdom && wisdom!.insights.length > 0 && (
+        <InsightsSection insights={wisdom!.insights} />
+      )}
+
+      {hasWisdom && wisdom!.gaps.length > 0 && (
+        <GapsSection gaps={wisdom!.gaps} />
       )}
 
       {profile.highlights.length > 0 && (
         <section className="profile-section">
           <h2 className="sect-title">Portfolio highlights</h2>
-          {profile.highlights.map((h, i) => (
+          {profile.highlights.slice(0, 12).map((h, i) => (
             <div key={i} className="card">
               <h4>{h.statement}<span className="grounding">{h.grounding}</span>{h.projectCount > 1 && <span className="grounding cross">{h.projectCount} repos</span>}</h4>
               {h.evidence && <div className="ev">evidence: {h.evidence}</div>}
@@ -176,14 +183,171 @@ function ProfileView({ profile, onOpenMap }: { profile: GlobalProfile; onOpenMap
   );
 }
 
-function Stat({ n, label }: { n: number; label: string }) {
+/** DIKW hero: synthesized judgment + the pyramid that produced it. */
+function WisdomHero({ wisdom, counts }: { wisdom?: WisdomSnapshot; counts: GlobalDashboardSnapshot['meta']['counts'] }) {
+  const headline = wisdom?.headline || 'The second brain';
+  const narrative = wisdom?.narrative
+    || 'What you know, demonstrated across your projects — aggregated from code and conversations, every claim grounded.';
+  const wisdomCount = (wisdom?.insights.length ?? 0) + (wisdom?.competencies.length ?? 0);
+  const knowledgeCount = counts.businessDomains + counts.techDomains;
+  const informationCount = counts.industries + counts.edges;
+
+  const tiers = [
+    { key: 'W', label: 'Wisdom', n: wisdom?.insights.length ?? 0, sub: 'insights + principles' },
+    { key: 'K', label: 'Knowledge', n: wisdom?.competencies.length ?? knowledgeCount, sub: 'competency areas' },
+    { key: 'I', label: 'Information', n: counts.industries, sub: 'industries' },
+    { key: 'D', label: 'Data', n: counts.projects, sub: 'projects' },
+  ];
+
   return (
-    <div className="stat">
-      <span className="stat-n">{n}</span>
-      <span className="stat-label">{label}</span>
+    <div className="profile-hero wisdom-hero">
+      <div className="hero-main">
+        <div className="hero-label">// synthesized wisdom {wisdom?.grounding ? `· ${wisdom.grounding}` : ''}</div>
+        <h1 className="hero-title">{headline}</h1>
+        <p className="hero-sub">{narrative}</p>
+        {wisdomCount > 0 && (
+          <div className="hero-foot">
+            grounded inference over {counts.projects} project(s) · regenerated on each build
+          </div>
+        )}
+      </div>
+      <div className="dikw" aria-label="DIKW pyramid">
+        {tiers.map((t, i) => (
+          <div key={t.key} className="dikw-tier" style={{ width: `${55 + i * 15}%` }}>
+            <span className="dikw-k">{t.key}</span>
+            <span className="dikw-n">{t.n}</span>
+            <span className="dikw-l">{t.label}<span className="dikw-sub"> · {t.sub}</span></span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
+
+/** A discrete 5-segment Dreyfus level meter. */
+function LevelMeter({ level }: { level: string }) {
+  const idx = LEVEL_ORDER.indexOf(level as never);
+  const color = LEVEL_COLOR[level] ?? '#8a8f98';
+  return (
+    <span className="lvl-meter" title={LEVEL_LABELS_PROF[level] ?? level}>
+      {LEVEL_ORDER.map((_, i) => (
+        <i key={i} className={`lvl-dot ${i <= idx ? 'on' : ''}`} style={i <= idx ? { background: color } : undefined} />
+      ))}
+    </span>
+  );
+}
+
+function CompetencyMap({ competencies }: { competencies: WisdomCompetency[] }) {
+  return (
+    <section className="profile-section">
+      <h2 className="sect-title">Competency map <span className="sect-hint">grouped by area · leveled by evidence</span></h2>
+      <div className="comp-grid">
+        {competencies.map((comp) => <CompetencyCard key={comp.id} comp={comp} />)}
+      </div>
+    </section>
+  );
+}
+
+function CompetencyCard({ comp }: { comp: WisdomCompetency }) {
+  const [expanded, setExpanded] = useState(false);
+  const level = (comp.level || 'competent').toLowerCase();
+  const color = LEVEL_COLOR[level] ?? '#8a8f98';
+  const shown = expanded ? comp.skills : comp.skills.slice(0, 10);
+  const rest = comp.skills.length - shown.length;
+
+  return (
+    <div className="comp-card">
+      <div className="comp-head">
+        <span className="comp-name">{comp.name}</span>
+        <span className="lvl-badge" style={{ color, borderColor: color }}>{LEVEL_LABELS_PROF[level] ?? level}</span>
+      </div>
+      <div className="comp-meta">
+        {comp.category ? `${comp.category} · ` : ''}{comp.skills.length} skill(s)
+        {comp.projectCount > 1 ? ` · ×${comp.projectCount} repos` : ''}
+        {comp.grounding ? ` · ${comp.grounding}` : ''}
+      </div>
+      <LevelMeter level={level} />
+      {comp.summary && <p className="comp-sum">{comp.summary}</p>}
+      <div className="comp-skills">
+        {shown.map((s) => (
+          <span key={s.name} className="skill-pill" title={`${LEVEL_LABELS_PROF[(s.level ?? '').toLowerCase()] ?? ''} w=${s.weight.toFixed(1)}`}>
+            <i className="skill-dot" style={{ background: LEVEL_COLOR[(s.level ?? '').toLowerCase()] ?? '#8a8f98' }} />
+            {s.name}
+          </span>
+        ))}
+        {rest > 0 && <button className="more-pill" onClick={() => setExpanded(true)}>+{rest} more</button>}
+        {expanded && comp.skills.length > 10 && <button className="more-pill" onClick={() => setExpanded(false)}>show less</button>}
+      </div>
+    </div>
+  );
+}
+
+function InsightsSection({ insights }: { insights: WisdomInsight[] }) {
+  return (
+    <section className="profile-section">
+      <h2 className="sect-title">Insights &amp; principles <span className="sect-hint">what the work reveals</span></h2>
+      {insights.map((i) => (
+        <div key={i.id} className="card insight-card">
+          <h4>
+            <span className={`kind-badge ${i.kind === 'principle' ? 'principle' : 'insight'}`}>{i.kind}</span>
+            {i.title}
+          </h4>
+          {i.body && <p className="sub">{i.body}</p>}
+          {i.evidence && <div className="ev">evidence: {i.evidence}</div>}
+        </div>
+      ))}
+    </section>
+  );
+}
+
+const SEVERITY_COLOR: Record<string, string> = { high: '#e0563c', medium: '#caa23c', low: '#4caf78' };
+
+function GapsSection({ gaps }: { gaps: WisdomGap[] }) {
+  return (
+    <section className="profile-section">
+      <h2 className="sect-title">Gaps to close <span className="sect-hint">where to grow next</span></h2>
+      {gaps.map((g) => (
+        <div key={g.id} className="card gap-card">
+          <h4>
+            {g.severity && <span className="sev-badge" style={{ color: SEVERITY_COLOR[g.severity.toLowerCase()] ?? '#8a8f98', borderColor: SEVERITY_COLOR[g.severity.toLowerCase()] ?? '#2c3340' }}>{g.severity}</span>}
+            {g.title}
+            {g.area && <span className="grounding">{g.area}</span>}
+          </h4>
+          {g.summary && <p className="sub">{g.summary}</p>}
+          {g.recommendation && <div className="gap-rec">→ {g.recommendation}</div>}
+        </div>
+      ))}
+      <p className="sub gap-hint">These are inferred targets (grounding: model), not facts about your projects. See <code>subnet learn</code>.</p>
+    </section>
+  );
+}
+
+/** Pre-synthesis fallback: the flat weighted skill list. */
+function FlatSkills({ skills }: { skills: GlobalDashboardSnapshot['profile']['skills'] }) {
+  const maxWeight = useMemo(() => Math.max(1, ...skills.map((s) => s.weight)), [skills]);
+  return (
+    <section className="profile-section">
+      <h2 className="sect-title">Top technical skills <span className="sect-hint">by evidence weight</span></h2>
+      <div className="skills">
+        {skills.map((s) => (
+          <div key={s.name} className="skill-row">
+            <span className="skill-name">{s.name}</span>
+            <span className="skill-bar"><span className="skill-fill" style={{ width: `${Math.max(4, (s.weight / maxWeight) * 100)}%` }} /></span>
+            <span className="skill-meta">
+              <span className="skill-weight">{s.weight.toFixed(1)}</span>
+              {s.projectCount > 1 && <span className="skill-cross">{s.projectCount} repos</span>}
+              <span className="grounding">{s.grounding}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// ============================================================================
+// Map view (knowledge hierarchy + per-project drill-down) — unchanged
+// ============================================================================
 
 function HierarchyView({ snapshot, onSelect, onDrill }: {
   snapshot: GlobalDashboardSnapshot;

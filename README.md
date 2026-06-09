@@ -37,12 +37,18 @@ OpenAI-compatible endpoint (OpenRouter, OpenAI, Together, Groq) works too.
 
 ## The dashboard
 
-A self-contained, offline view built for humans. The global dashboard
-(`subnet global dashboard`) opens on a **Profile** — your cross-project skills,
-industries, and portfolio highlights — and a **Map** of
+A self-contained, offline view built for humans, structured as a DIKW pyramid.
+The global dashboard (`subnet global dashboard`) opens on a **Profile** — a
+synthesized **Wisdom** headline, a **competency map** grouped by area and graded
+by proficiency level (novice → expert), cross-project **insights**, and the
+**gaps** worth closing next — and a **Map** of
 `industry → business domain → tech domain → project` you can drill into. Each
 project also renders its own **knowledge graph** (domains → concepts/entities →
 rules/skills); the file dependency graph stays in `graph.json` for agents.
+
+The Wisdom layer is synthesized by a reasoning agent (with a deterministic
+offline fallback) and is grounded `model` — clearly separated from the
+`structural`/`stated`/`corroborated` truth of your projects.
 
 <table>
   <tr>
@@ -100,7 +106,8 @@ Health and cross-project views:
 
 ```bash
 subnet doctor                 # health + pipeline audit counters; --fix repairs
-subnet global dashboard --open  # cross-project hierarchy
+subnet global dashboard --open  # DIKW profile (wisdom) + knowledge map
+subnet global wisdom            # leveled competencies, insights, gaps
 subnet global profile           # industries + top skills
 ```
 
@@ -142,6 +149,7 @@ deterministic. Meaning is agent-driven.**
 | **L3** Concepts | clustered facts with names + structured summaries, scope-tagged | **agents** (Clusterer · Summarizer) |
 | **L4** Cross-project | shared concepts, **workspace umbrellas**, emergent project links | mechanical (exact + SimHash + shared-signal clustering) + **agent** (Linker) |
 | **L5** Global skill graph + hierarchy | technical + industry skills, and the workspace → industry → business → tech → project zone tree | mechanical aggregation over L2.5/L2.6 evidence |
+| **L6** Wisdom | leveled competency areas (Dreyfus novice→expert), cross-project insights / principles, and named gaps + recommendations | **agent** (WisdomSynthesizer) + deterministic fallback; grounded `model` |
 
 The ingest pipeline **cleans and packages evidence before any LLM call**: session
 filter → turn normalize → window briefs → pre-triage dedupe → triage/extract on
@@ -186,7 +194,7 @@ use the essentials below. Per-stage commands still work but are hidden from
 subnet setup [--projects ...] [--profile lean|standard|deep] [--plan-only] [--yes]
 subnet update [path] [--fast|--deep|--full]   # day-to-day incremental refresh
 subnet doctor [--fix]                   # health report + optional repair
-subnet global link|dashboard|profile|skills
+subnet global link|dashboard|wisdom|profile|skills
 subnet watch [--foreground]             # background daemon (see automation guide)
 subnet serve [path] --mcp               # MCP server over stdio
 ```

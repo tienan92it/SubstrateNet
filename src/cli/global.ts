@@ -2,14 +2,16 @@ import type { Command } from 'commander';
 import { resolve } from 'path';
 import { existsSync } from 'fs';
 import { spawn } from 'child_process';
-import { projectConfigDir } from '../config.js';
+import { projectConfigDir, loadConfig } from '../config.js';
 import { openGlobalDb } from '../db/connection.js';
 import { listProjectPaths } from '../global/clean.js';
 import { listSkills, listIndustries } from '../global/skills.js';
 import { rebuildLinks } from '../link/cross-project.js';
+import { synthesizeWisdom, listWisdom } from '../global/wisdom.js';
 import { locateBundle, buildGlobalDashboard } from '../dashboard/render.js';
 import { buildGlobalSnapshot } from '../dashboard/global-snapshot.js';
 import { writeProse } from './profile.js';
+import '../agents/index.js';
 
 /**
  * `subnet global ...` — cross-project operations on ~/.substrate-net/global.db.
@@ -35,13 +37,27 @@ export function registerGlobal(program: Command): void {
     });
 
   g.command('dashboard')
-    .description('Build the cross-project hierarchy dashboard')
+    .description('Build the cross-project DIKW dashboard (Wisdom profile + knowledge map)')
     .option('--open', 'Open in browser when done', false)
-    .action(async (opts: { open: boolean }) => {
+    .option('--no-wisdom', 'Skip the L6 wisdom synthesis before building')
+    .action(async (opts: { open: boolean; wisdom: boolean }) => {
       const bundle = locateBundle();
       if (!bundle) {
         console.error('Dashboard bundle not found. Run: npm run build:dashboard');
         process.exit(1);
+      }
+      // Synthesize the wisdom layer first so the snapshot renders it.
+      if (opts.wisdom) {
+        const gdb = openGlobalDb();
+        try {
+          const w = await synthesizeWisdom(gdb, loadConfig());
+          console.log(`Wisdom: ${w.competencies} competencies · ${w.insights} insights · ${w.gaps} gaps (${w.source})`);
+          for (const warn of w.warnings) console.log(`  ! ${warn}`);
+        } catch (e) {
+          console.log(`Wisdom synthesis skipped: ${(e as Error).message}`);
+        } finally {
+          gdb.close();
+        }
       }
       const indexPath = buildGlobalDashboard(bundle);
       const c = buildGlobalSnapshot().meta.counts;
@@ -49,6 +65,51 @@ export function registerGlobal(program: Command): void {
       console.log(`  ${indexPath}`);
       console.log(`  industries=${c.industries} businessDomains=${c.businessDomains} techDomains=${c.techDomains} projects=${c.projects}`);
       if (opts.open) openInBrowser(indexPath);
+    });
+
+  g.command('wisdom')
+    .description('Synthesize the L6 wisdom layer: leveled competencies, insights, and gaps')
+    .option('--json', 'Print the full wisdom snapshot as JSON', false)
+    .action(async (opts: { json: boolean }) => {
+      const gdb = openGlobalDb();
+      try {
+        const stats = await synthesizeWisdom(gdb, loadConfig());
+        const w = listWisdom(gdb);
+        if (opts.json) {
+          console.log(JSON.stringify(w, null, 2));
+          return;
+        }
+        if (!w.headline && w.competencies.length === 0) {
+          console.log('No wisdom yet. Run `subnet update --global` across your projects first.');
+          return;
+        }
+        if (w.headline) console.log(`# ${w.headline}\n`);
+        if (w.narrative) console.log(`${w.narrative}\n`);
+
+        console.log('## Competencies');
+        for (const c of w.competencies) {
+          console.log(`  - [${c.level}] ${c.name}  (w=${c.weight.toFixed(1)}, ×${c.projectCount})`);
+          if (c.skills.length) console.log(`      ${c.skills.slice(0, 12).map((s) => s.name).join(', ')}`);
+        }
+
+        if (w.insights.length) {
+          console.log('\n## Insights');
+          for (const i of w.insights) console.log(`  - (${i.kind}) ${i.title}`);
+        }
+
+        if (w.gaps.length) {
+          console.log('\n## Gaps to close');
+          for (const gp of w.gaps) {
+            console.log(`  - [${gp.severity ?? 'n/a'}] ${gp.title}`);
+            if (gp.recommendation) console.log(`      → ${gp.recommendation}`);
+          }
+        }
+
+        console.log(`\nGrounding: model (inference) · source: ${stats.source}`);
+        for (const warn of stats.warnings) console.log(`! ${warn}`);
+      } finally {
+        gdb.close();
+      }
     });
 
   g.command('profile')
