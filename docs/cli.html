@@ -61,7 +61,7 @@
   <p>
     Interactive first-run wizard: discover local AI workspaces, select projects,
     show a per-phase pre-flight estimate (calls, tokens in/out, OpenRouter cost,
-    wall time), then run init → sync → ingest → link → dashboard.
+    wall time), then run init → sync → ingest → link → wisdom → dashboard.
   </p>
   <table>
     <tr><th>Flag</th><th>Effect</th></tr>
@@ -116,10 +116,19 @@
 
   <h2 id="global">global</h2>
   <pre><code>subnet global link [path] [--all] [--rebuild]
-subnet global dashboard [--open]
+subnet global wisdom [--json]
+subnet global dashboard [--open] [--no-wisdom]
 subnet global profile [--prose] [--out &lt;path&gt;]
 subnet global skills [--scope technical|industry] [--cross] [--limit &lt;n&gt;]</code></pre>
   <p>Cross-project operations on <code>~/.substrate-net/global.db</code>. Replaces the top-level <code>link</code>, <code>dashboard --global</code>, <code>profile</code>, and <code>skills</code> commands.</p>
+  <p class="small">
+    <code>global wisdom</code> synthesizes the L6 layer — proficiency-leveled
+    competency areas, cross-project insights, and named gaps — into
+    <code>global.db</code> and prints it (<code>--json</code> for the full
+    snapshot). It runs a reasoning agent (frontier → flash → local) with a
+    deterministic offline fallback, cached per build. <code>global dashboard</code>
+    runs it automatically before building; pass <code>--no-wisdom</code> to skip.
+  </p>
 
   <h2 id="watch">watch</h2>
   <pre><code>subnet watch [--foreground] [--projects /a,/b] [--interval &lt;ms&gt;] [--global] [--stop]</code></pre>

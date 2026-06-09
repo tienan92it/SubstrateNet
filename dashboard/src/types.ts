@@ -98,6 +98,42 @@ export interface GlobalProfile {
   highlights: Array<{ statement: string; evidence?: string; grounding: string; projectCount: number }>;
 }
 
+// =============================================================================
+// L6 Wisdom (top of the DIKW pyramid — synthesized, grounded `model`)
+// =============================================================================
+
+export type ProficiencyLevel =
+  | 'novice' | 'advanced_beginner' | 'competent' | 'proficient' | 'expert';
+
+export interface WisdomCompetency {
+  id: string;
+  name: string;
+  category?: string;
+  level: string;
+  summary?: string;
+  weight: number;
+  projectCount: number;
+  grounding?: string;
+  skills: Array<{ name: string; level?: string; weight: number }>;
+}
+export interface WisdomInsight {
+  id: string; kind: string; title: string; body?: string; evidence?: string; grounding?: string; confidence?: number;
+}
+export interface WisdomGap {
+  id: string; title: string; summary?: string; recommendation?: string; area?: string; severity?: string; grounding?: string; source?: string;
+}
+export interface WisdomSnapshot {
+  headline?: string;
+  narrative?: string;
+  model?: string;
+  grounding?: string;
+  confidence?: number;
+  generatedAt?: number;
+  competencies: WisdomCompetency[];
+  insights: WisdomInsight[];
+  gaps: WisdomGap[];
+}
+
 export interface GlobalDashboardSnapshot {
   meta: {
     mode: 'global';
@@ -111,9 +147,26 @@ export interface GlobalDashboardSnapshot {
     };
   };
   profile: GlobalProfile;
+  wisdom?: WisdomSnapshot;
   hierarchy: { nodes: HierarchyNode[]; edges: HierarchyEdge[] };
   drillDown: Record<string, DashboardSnapshot>;
 }
+
+/** Dreyfus proficiency levels: order, label, and 0..1 fill for level meters. */
+export const LEVEL_ORDER: ProficiencyLevel[] = ['novice', 'advanced_beginner', 'competent', 'proficient', 'expert'];
+export const LEVEL_LABELS_PROF: Record<string, string> = {
+  novice: 'Novice',
+  advanced_beginner: 'Adv. Beginner',
+  competent: 'Competent',
+  proficient: 'Proficient',
+  expert: 'Expert',
+};
+export const LEVEL_FILL: Record<string, number> = {
+  novice: 0.2, advanced_beginner: 0.4, competent: 0.6, proficient: 0.8, expert: 1,
+};
+export const LEVEL_COLOR: Record<string, string> = {
+  novice: '#8a8f98', advanced_beginner: '#caa23c', competent: '#3c8ce0', proficient: '#4caf78', expert: '#e8743c',
+};
 
 export const LEVEL_COLORS: Record<HierarchyLevel, string> = {
   workspace: '#d64577',

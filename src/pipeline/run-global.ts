@@ -7,10 +7,11 @@
  */
 import { join } from 'path';
 import { existsSync } from 'fs';
-import { globalConfigDir, projectConfigDir } from '../config.js';
+import { globalConfigDir, projectConfigDir, loadConfig } from '../config.js';
 import { openGlobalDb } from '../db/connection.js';
 import { listProjectPaths } from '../global/clean.js';
 import { rebuildLinks } from '../link/cross-project.js';
+import { synthesizeWisdom } from '../global/wisdom.js';
 import {
   locateBundle,
   buildProjectDashboard,
@@ -25,6 +26,12 @@ export interface RunGlobalOpts {
   linkAllProjects?: boolean;
   /** Generate portfolio prose at ~/.substrate-net/profile.md. */
   prose?: boolean;
+  /**
+   * Synthesize the L6 wisdom layer (competencies, insights, gaps) into
+   * global.db. Defaults to whatever `globalDashboard` is, since the dashboard
+   * renders it; pass `false` to skip the LLM synthesis explicitly.
+   */
+  wisdom?: boolean;
   /** Rebuild the cross-project hierarchy dashboard. */
   globalDashboard?: boolean;
   /** Rebuild each linked project's dashboard. */
@@ -79,6 +86,23 @@ export async function runGlobalPipeline(opts: RunGlobalOpts): Promise<RunGlobalR
     } catch (e) {
       result.warnings.push(`prose generation failed: ${(e as Error).message}`);
       result.profilePath = undefined;
+    }
+  }
+
+  // L6 wisdom synthesis feeds the global dashboard, so run it by default
+  // whenever that dashboard is being (re)built. Cached + deterministically
+  // backstopped, so it is cheap on no-change re-runs.
+  const wantWisdom = (opts.wisdom ?? opts.globalDashboard ?? false) && result.linked.length > 0;
+  if (wantWisdom) {
+    emit('wisdom');
+    const gdb = openGlobalDb();
+    try {
+      const w = await synthesizeWisdom(gdb, loadConfig());
+      for (const warn of w.warnings) result.warnings.push(warn);
+    } catch (e) {
+      result.warnings.push(`wisdom synthesis failed: ${(e as Error).message}`);
+    } finally {
+      gdb.close();
     }
   }
 

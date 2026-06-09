@@ -13,6 +13,7 @@ import { projectConfigDir } from '../config.js';
 import { buildSnapshot, type DashboardSnapshot } from './snapshot.js';
 import { industryNodeId, projectNodeId } from '../global/taxonomy.js';
 import { listSkills, listIndustries, listHighlights } from '../global/skills.js';
+import { listWisdom, type WisdomSnapshot } from '../global/wisdom.js';
 
 const MAX_EDGES = 4000;
 
@@ -53,6 +54,8 @@ export interface GlobalDashboardSnapshot {
     };
   };
   profile: GlobalProfile;
+  /** L6 synthesized wisdom: leveled competencies, insights, gaps (grounded `model`). */
+  wisdom: WisdomSnapshot;
   hierarchy: { nodes: HierarchyNode[]; edges: HierarchyEdge[] };
   /** Per-project knowledge graphs, keyed by raw project id. */
   drillDown: Record<string, DashboardSnapshot>;
@@ -159,6 +162,8 @@ export function buildGlobalSnapshot(): GlobalDashboardSnapshot {
       })),
     };
 
+    const wisdom = listWisdom(gdb);
+
     const drillDown: Record<string, DashboardSnapshot> = {};
     for (const p of projects) {
       // Only projects that still have local data can be drilled into.
@@ -184,6 +189,7 @@ export function buildGlobalSnapshot(): GlobalDashboardSnapshot {
         },
       },
       profile,
+      wisdom,
       hierarchy: { nodes, edges },
       drillDown,
     };

@@ -31,6 +31,7 @@ import './domain-analyzer.js';
 import './domain-fuser.js';
 import './industry-fuser.js';
 import './profile-writer.js';
+import './wisdom-synthesizer.js';
 // Dedupe is not a chat agent and self-registers when constructed.
 
 export { ALL_AGENTS, getAgent, registerAgent } from './registry.js';

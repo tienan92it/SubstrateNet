@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS schema_versions (
 );
 INSERT OR IGNORE INTO schema_versions (version, applied_at, description)
 VALUES (1, strftime('%s', 'now') * 1000, 'Initial global schema');
+INSERT OR IGNORE INTO schema_versions (version, applied_at, description)
+VALUES (2, strftime('%s', 'now') * 1000, 'L6 wisdom synthesis tables');
 
 CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
@@ -172,3 +174,84 @@ CREATE TABLE IF NOT EXISTS agent_runs (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_global_agent_cache
     ON agent_runs(agent_name, model, input_hash);
+
+-- ===========================================================================
+-- L6: Wisdom synthesis (the top of the DIKW pyramid).
+--
+-- A reasoning agent (frontier -> flash -> local) classifies the L5 skill graph
+-- into proficiency-leveled competency areas, distills cross-project insights /
+-- principles, and names knowledge gaps. The whole layer is regenerated
+-- (clear + insert) on each `subnet global wisdom` / dashboard build; a
+-- deterministic fallback fills it when no LLM backend is available. Everything
+-- here is grounded 'model' (inference), kept separate from project truth.
+-- ===========================================================================
+
+-- The hero judgment: a single synthesized statement row (id is always 1).
+CREATE TABLE IF NOT EXISTS wisdom_meta (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    headline TEXT,
+    narrative TEXT,
+    model TEXT,
+    grounding TEXT,
+    confidence REAL,
+    generated_at INTEGER NOT NULL
+);
+
+-- Competency areas: SFIA-style grouping of skills (capped ~6-8). `level` is a
+-- Dreyfus proficiency tier inferred from evidence weight, project spread, and
+-- grounding.
+CREATE TABLE IF NOT EXISTS competency_groups (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    category TEXT,
+    level TEXT,                    -- novice | advanced_beginner | competent | proficient | expert
+    summary TEXT,
+    weight REAL NOT NULL DEFAULT 0,
+    project_count INTEGER NOT NULL DEFAULT 0,
+    grounding TEXT,
+    rank INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_compgroups_rank ON competency_groups(rank);
+
+-- Skill membership of a competency area. skill_id references skills.id when the
+-- name resolves; skill_name is always present.
+CREATE TABLE IF NOT EXISTS competency_skills (
+    group_id TEXT NOT NULL REFERENCES competency_groups(id) ON DELETE CASCADE,
+    skill_id TEXT,
+    skill_name TEXT NOT NULL,
+    level TEXT,
+    weight REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (group_id, skill_name)
+);
+CREATE INDEX IF NOT EXISTS idx_compskills_group ON competency_skills(group_id);
+
+-- Distilled cross-project insights / principles (evaluated judgments).
+CREATE TABLE IF NOT EXISTS wisdom_insights (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL DEFAULT 'insight',   -- 'insight' | 'principle'
+    title TEXT NOT NULL,
+    body TEXT,
+    evidence TEXT,
+    grounding TEXT,
+    confidence REAL,
+    rank INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_wisinsights_rank ON wisdom_insights(rank);
+
+-- Named knowledge gaps + how to close them. Synthesized by the agent or
+-- aggregated from per-project knowledge_gap nodes; grounding stays 'model'.
+CREATE TABLE IF NOT EXISTS wisdom_gaps (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    summary TEXT,
+    recommendation TEXT,
+    area TEXT,
+    severity TEXT,                 -- 'low' | 'medium' | 'high'
+    grounding TEXT,
+    source TEXT,                   -- 'agent:wisdomSynthesizer' | 'gap:detector'
+    rank INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_wisgaps_rank ON wisdom_gaps(rank);
