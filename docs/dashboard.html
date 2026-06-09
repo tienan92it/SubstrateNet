@@ -29,18 +29,20 @@
 
   <h1>Interactive dashboard</h1>
   <p class="lede">
-    The local view, built for humans: a self-contained, offline knowledge graph
-    from your SQLite databases — business &amp; tech domains, concepts, and
-    entities, navigable from overview to detail. The file dependency graph stays
-    in <code>graph.json</code> for agents.
+    The local view, built for humans and structured as the DIKW pyramid: a
+    self-contained, offline dashboard from your SQLite databases. The global view
+    opens on <strong>Profile</strong> — the synthesized Wisdom layer — and a
+    <strong>Map</strong> you can drill into. Per-project graphs render domains →
+    concepts/entities → rules. The file dependency graph stays in
+    <code>graph.json</code> for agents.
   </p>
 
   <div class="toc">
     <h4>on this page</h4>
     <ul>
       <li><a href="#build">build the viewer</a></li>
-      <li><a href="#generate">generate</a></li>
       <li><a href="#global">global: profile &amp; map</a></li>
+      <li><a href="#generate">per-project</a></li>
       <li><a href="#views">project views</a></li>
       <li><a href="#snapshot">the snapshot</a></li>
       <li><a href="#share">sharing</a></li>
@@ -57,7 +59,11 @@
 # or build everything (dashboard + CLI):
 npm run build:all</code></pre>
 
-  <h2 id="generate">Generate for a project</h2>
+  <h2 id="generate">Per-project knowledge graph</h2>
+  <p>
+    <code>subnet update</code> rebuilds each project's own dashboard. To build one
+    on demand, the per-project command is still available:
+  </p>
   <pre class="shell"><code>cd /path/to/your/project
 subnet dashboard            # writes .substrate-net/dashboard/index.html + graph.json
 subnet dashboard --open     # and open it in your browser</code></pre>
@@ -70,22 +76,34 @@ subnet dashboard --open     # and open it in your browser</code></pre>
   <h2 id="global">Global dashboard: Profile &amp; Map</h2>
   <p>
     <code>subnet global dashboard</code> builds the cross-project view from
-    <code>~/.substrate-net/global.db</code>. <code>subnet update --global</code>
-    (or <code>subnet global link</code>) populates global zones, skills, and highlights.
+    <code>~/.substrate-net/global.db</code> and synthesizes the Wisdom layer
+    first. <code>subnet update --global</code> (or <code>subnet global link</code>)
+    populates the zones, skills, and highlights it draws from.
   </p>
-  <pre class="shell"><code>subnet update --global        # link all projects + rebuild global dashboard
+  <pre class="shell"><code>subnet update --global          # link all projects + rebuild global dashboard
+subnet global wisdom            # (re)synthesize competencies, insights, gaps
 subnet global dashboard --open  # writes ~/.substrate-net/dashboard/index.html</code></pre>
 
-  <h3>Profile — the second brain</h3>
+  <h3>Profile — the Wisdom layer</h3>
   <p>
-    The default landing: a portfolio of what you know across every project —
-    classified industries, top technical skills weighted by evidence (with
-    cross-project coverage), and grounded portfolio highlights. Aggregated
-    mechanically from L2.5/L5 evidence; nothing invented.
+    The default landing reads top-down through the DIKW pyramid:
+  </p>
+  <ul>
+    <li><strong>Wisdom hero</strong> — a synthesized headline and narrative: who you are professionally and where your leverage is, over a compact D&rarr;I&rarr;K&rarr;W indicator.</li>
+    <li><strong>Competency map</strong> — your skills grouped into 6–8 areas, each graded by proficiency level (novice &rarr; expert) and showing its member skills. Replaces a flat skill list with a leveled, deduped view.</li>
+    <li><strong>Insights &amp; principles</strong> — evaluated cross-project judgments: patterns in how you work and what you consistently do well.</li>
+    <li><strong>Gaps to close</strong> — named knowledge gaps with concrete recommendations — what to learn or document next.</li>
+  </ul>
+  <p class="small">
+    The Wisdom layer is synthesized by a reasoning agent (with a deterministic
+    offline fallback) and is grounded <code>model</code> — kept visibly separate
+    from the <code>structural</code>/<code>stated</code>/<code>corroborated</code>
+    truth of your projects. Industries and portfolio highlights are aggregated
+    mechanically from L2.5/L5 evidence; nothing is invented.
   </p>
   <figure class="shot">
-    <img src="assets/dashboard-profile.png" alt="Global Profile view: stat tiles for projects/industries/skills/highlights, industry chips, evidence-weighted skill bars, and portfolio highlight cards." loading="lazy">
-    <figcaption>Profile — cross-project skills, industries, and highlights.</figcaption>
+    <img src="assets/dashboard-profile.png" alt="Global Profile view: synthesized wisdom headline, competency map graded by proficiency level, insight cards, and gap cards." loading="lazy">
+    <figcaption>Profile — the Wisdom layer: competencies, insights, gaps.</figcaption>
   </figure>
 
   <h3>Map — the cross-project wiki</h3>

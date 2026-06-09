@@ -54,7 +54,7 @@
   <pre><code>{
   "concurrency": 8,                       // max concurrent agent (LLM) calls; 1 = serial
   "agentBackends": {
-    "&lt;name&gt;": { "kind": "ollama|openai-compatible|anthropic",
+    "&lt;name&gt;": { "kind": "ollama|openai-compatible|cursor-agent|anthropic",
                 "endpoint": "&lt;url&gt;",
                 "apiKeyEnv": "&lt;ENV_VAR&gt;",   // name of the env var holding the key
                 "apiKey": "&lt;key&gt;" }         // OR an inline key (plaintext)
@@ -97,13 +97,18 @@
   </table>
 
   <div class="callout">
-    <strong>Tiered routing (default).</strong> A <code>frontier</code> backend of kind
-    <code>cursor-agent</code> ships pre-configured. Bulk agents (triage, dedupe,
-    extractors) stay on local Ollama; heavy agents (source/domain/architecture
-    classification, linking, RCA) route to <code>frontier:auto</code> with a
-    <code>fallback</code> to local. Set <code>CURSOR_API_KEY</code> and run
-    <code>npm install @cursor/sdk</code> to enable; without it, everything falls
-    back to local automatically.
+    <strong>Tiered routing (default), by capability.</strong> Three backends ship
+    pre-configured — <code>local</code> (Ollama), <code>openrouter</code> (flash),
+    and <code>frontier</code> (Cursor SDK). Agents route by the work they do:
+    <em>bulk</em> classify/group/summarize → a cheap flash model;
+    <em>heavy reasoning</em> (domain/architecture modeling, linking, RCA,
+    <code>wisdomSynthesizer</code>) → <code>frontier:composer-2.5</code>
+    (subscription-billed, no per-token cost); <em>embeddings</em> → local. Every
+    agent declares a <code>fallback</code> chain, so when a backend has no key it
+    falls through to the next tier and ultimately to local Ollama — a zero-key
+    run always works. Set <code>OPENROUTER_API_KEY</code> and/or
+    <code>CURSOR_API_KEY</code> (plus <code>npm install @cursor/sdk</code>) to
+    light up the higher tiers.
   </div>
 
   <div class="callout">
@@ -127,7 +132,14 @@
 }</code></pre>
 
   <h2 id="agents">Agent specs</h2>
-  <p>Each agent gets one spec. The <code>model</code> string is <code>"&lt;backend&gt;:&lt;model&gt;"</code>; the first colon splits, so model names with colons (e.g. <code>llama3.1:8b</code>) are fine.</p>
+  <p>
+    Each agent gets one spec. The <code>model</code> string is
+    <code>"&lt;backend&gt;:&lt;model&gt;"</code>; the first colon splits, so model
+    names with colons (e.g. <code>llama3.1:8b</code>) are fine. The shipped
+    default is flash-first and tiered (see <a href="#frontier">frontier routing</a>);
+    the block below is a <strong>fully-local</strong> variant — useful with no API
+    keys. Set a per-agent <code>fallback</code> to keep runs resilient.
+  </p>
   <pre><code>{
   "agents": {
     "triage":             { "model": "default:qwen3:4b-instruct", "windowTokens": 2000 },
@@ -192,10 +204,11 @@
 
   <h2 id="frontier">Frontier-quality routing</h2>
   <p>
-    Add a second backend and route the agents that benefit most from a strong
-    model to it — extractors and the L2.5 enrichment agents — while embeddings
-    and cheap classifiers stay local. A full example ships as
-    <code>frontier.config.example.json</code> in the repo.
+    Route the agents that benefit most from a strong model — extractors, the
+    L2.5/L2.6 modeling agents, the linker, and the L6
+    <code>wisdomSynthesizer</code> — to a frontier or cloud backend, while
+    embeddings and cheap classifiers stay local or on flash. A full example ships
+    as <code>frontier.config.example.json</code> in the repo.
   </p>
   <pre><code>{
   "concurrency": 8,
@@ -222,10 +235,19 @@
     "industryClassifier": { "model": "openrouter:anthropic/claude-sonnet-4" },
     "industryEnricher":   { "model": "openrouter:anthropic/claude-sonnet-4" },
     "linker":             { "model": "openrouter:anthropic/claude-sonnet-4" },
-    "verifier":           { "model": "openrouter:anthropic/claude-sonnet-4" },
-    "skillSynthesizer":   { "model": "openrouter:anthropic/claude-sonnet-4" }
+    "verifier":           { "model": "openrouter:google/gemini-2.5-flash" },
+    "skillSynthesizer":   { "model": "openrouter:google/gemini-2.5-flash" },
+    "wisdomSynthesizer":  { "model": "openrouter:anthropic/claude-sonnet-4",
+                            "fallback": ["frontier:composer-2.5", "local:qwen2.5:14b"] }
   }
 }</code></pre>
+  <p class="small">
+    The shipped default routes the reasoning agents (modelers, linker,
+    <code>wisdomSynthesizer</code>) to <code>frontier:composer-2.5</code> instead —
+    subscription-billed, so heavy synthesis carries ~no per-token cost — with a
+    flash → local fallback. The L6 wisdom layer always has a deterministic offline
+    fallback, so it renders even with no LLM backend.
+  </p>
   <p class="small">
     The <code>fallback</code> field is reserved for runtime fallback on backend
     errors. If agents return nothing, check <code>agent_runs</code> for errors

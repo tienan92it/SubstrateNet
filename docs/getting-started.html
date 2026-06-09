@@ -51,7 +51,7 @@
   <h2 id="prereqs">Prerequisites</h2>
   <ul>
     <li><strong>Node.js 20+</strong> (24 also supported)</li>
-    <li><strong>Ollama</strong> running locally — <code>https://ollama.com</code></li>
+    <li><strong>An LLM backend</strong> — local <strong>Ollama</strong> (<code>https://ollama.com</code>, zero-key default fallback) and/or an <code>OPENROUTER_API_KEY</code> / <code>CURSOR_API_KEY</code> for the faster tiers</li>
     <li>One AI agent that writes transcripts somewhere you can read (Cursor, Claude Code, Codex CLI, or VS Code with Copilot)</li>
   </ul>
 
@@ -67,23 +67,26 @@ npm link              # exposes `subnet` on $PATH</code></pre>
   <pre class="shell"><code>subnet --version     # 0.2.0
 subnet --help        # six essentials; run `subnet` for the menu</code></pre>
 
-  <h2 id="llm">2. Local LLM</h2>
+  <h2 id="llm">2. Pick a backend</h2>
   <p>
-    Without a local LLM, only the deterministic syntax pass runs. The agent
-    layers (triage, extractors, clusterer, summarizer, linker, verifier) stay
-    empty. This is intentional — no regex pretends to understand meaning.
+    The default routing is <strong>flash-first</strong>: set
+    <code>OPENROUTER_API_KEY</code> and bulk agents use a cheap flash model, while
+    heavy reasoning routes to a Cursor SDK backend (<code>CURSOR_API_KEY</code>).
+    Both are optional — without keys, every agent falls back to local Ollama, so
+    a zero-key run works end to end. Either way an LLM is required: without one,
+    only the deterministic syntax pass runs and the agent layers stay empty (no
+    regex pretends to understand meaning).
   </p>
-  <p>Pull the default three models:</p>
-  <pre class="shell"><code>ollama pull qwen3:4b-instruct      # classifier — triage, intent, clusterer
-ollama pull qwen2.5:14b            # extractor — decision, business logic, summarizer
-ollama pull qwen3-embedding:0.6b   # embeddings — dedupe, clustering</code></pre>
+  <p>For the fully-local path, pull the fallback models:</p>
+  <pre class="shell"><code>ollama pull qwen2.5:14b        # reasoning + extraction (~9 GB Q4)
+ollama pull nomic-embed-text   # embeddings — dedupe, clustering (~0.3 GB)</code></pre>
   <p class="small">
-    Combined hot footprint: ~12.5 GB. Fits on a 24 GB unified-memory Mac. For
-    smaller machines, see <a href="configuration.html#hardware-budgets">configuration → hardware budgets</a>.
+    Fits comfortably on a 24 GB unified-memory Mac. For smaller machines or the
+    larger local lineup, see <a href="configuration.html#hardware-budgets">configuration → hardware budgets</a>.
   </p>
   <p>Keep them warm between agent calls:</p>
   <pre class="shell"><code>launchctl setenv OLLAMA_KEEP_ALIVE 30m
-launchctl setenv OLLAMA_MAX_LOADED_MODELS 3
+launchctl setenv OLLAMA_MAX_LOADED_MODELS 2
 # restart Ollama after these</code></pre>
 
   <h2 id="setup">3. Setup wizard (first run)</h2>
@@ -153,10 +156,11 @@ subnet doctor --fix           # repair summaries + re-link + rebuild dashboards<
   <p>Inspect what got dropped vs kept and why:</p>
   <pre class="shell"><code>subnet triage audit --dropped</code></pre>
 
-  <p>Open dashboards (build the viewer bundle once with <code>npm run build:dashboard</code>):</p>
-  <pre class="shell"><code>subnet global dashboard --open   # cross-project Profile + Map
+  <p>See what you know across projects, then open the dashboards (build the viewer bundle once with <code>npm run build:dashboard</code>):</p>
+  <pre class="shell"><code>subnet global wisdom             # leveled competencies, insights, gaps (text)
+subnet global dashboard --open   # the DIKW Profile (Wisdom) + Map
 subnet dashboard --open          # per-project knowledge graph (hidden command)</code></pre>
-  <p class="small">See the <a href="dashboard.html">dashboard guide</a> for the views and the shareable <code>graph.json</code>.</p>
+  <p class="small">See the <a href="dashboard.html">dashboard guide</a> for the Wisdom layer, the views, and the shareable <code>graph.json</code>.</p>
 
   <h2 id="manual">Advanced: manual pipeline</h2>
   <p class="small">

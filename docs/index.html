@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Substrate Net — cross-project skills, one local view</title>
-  <meta name="description" content="Cross-project skills. One local view. Grounded skill graph, domain context, and dashboard — built locally from your code and agent work.">
+  <title>Substrate Net — cross-project knowledge, distilled to wisdom</title>
+  <meta name="description" content="Substrate Net reads your code and AI-agent conversations and builds a grounded DIKW knowledge base that ends in Wisdom — the competencies you've mastered, insights, and gaps. Fully local.">
   <link rel="stylesheet" href="assets/style.css">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23b25a3c' d='M12 2 L14 12 L12 22 L10 12 Z M2 12 L12 14 L22 12 L12 10 Z'/%3E%3C/svg%3E">
 </head>
@@ -29,12 +29,14 @@
   </header>
 
   <section class="hero">
-    <p class="eyebrow">profile · map · knowledge graph</p>
-    <h1>Cross-project skills. One local view.</h1>
+    <p class="eyebrow">data → information → knowledge → wisdom</p>
+    <h1>Cross-project knowledge, distilled to wisdom.</h1>
     <p class="tagline">
-      Code, conversations, and docs roll up into a grounded knowledge graph — a
-      cross-project profile, an industry → domain → project map, and an offline
-      dashboard. All local, all queryable.
+      Substrate Net reads your code and AI-agent conversations and builds a
+      grounded, queryable picture of what you know across every project —
+      organized as a DIKW pyramid that ends in <strong>Wisdom</strong>: the
+      competencies you've mastered, the insights your work reveals, and the gaps
+      worth closing next. All local, all grounded.
     </p>
     <div class="hero-actions">
       <a class="primary" href="getting-started.html">$ subnet →</a>
@@ -44,29 +46,36 @@
     </div>
   </section>
 
+  <div class="layers" aria-label="The DIKW climb">
+<span class="lname">WISDOM</span>       <span class="ldesc">leveled competencies · cross-project insights · gaps to close</span>
+<span class="lname">KNOWLEDGE</span>    <span class="ldesc">concepts · business + tech domains · the skill graph</span>
+<span class="lname">INFORMATION</span>  <span class="ldesc">decisions · rules · requirements · incidents — triaged</span>
+<span class="lname">DATA</span>         <span class="ldesc">your code · AI-agent transcripts · in-repo docs &amp; diagrams</span>
+  </div>
+
   <section class="features compact" aria-label="Core value">
     <div class="feature">
-      <h3>Grounded memory.</h3>
-      <p>Every claim carries its source: structural, stated, corroborated, external, or model. The graph separates evidence from inference.</p>
+      <h3>Climbs to wisdom.</h3>
+      <p>Each tier is built from the one below. The top is a synthesized professional profile: competency areas graded novice → expert, insights, and the gaps to close.</p>
     </div>
     <div class="feature">
-      <h3>Hybrid code intelligence.</h3>
-      <p>Tree-sitter resolves imports, definitions, and calls. Agents read that structure to summarize files, assign layers, and extract domain context.</p>
+      <h3>Grounded, never assumed.</h3>
+      <p>Every claim carries its source — structural, stated, corroborated, external, or model — so project truth and inference never blur. Synthesis stays clearly tagged as inference.</p>
     </div>
     <div class="feature">
-      <h3>One local view.</h3>
-      <p>A Profile of your cross-project skills and a Map of industry → domain → project, plus per-project knowledge graphs — one offline dashboard to explore, query, and share.</p>
+      <h3>Local + hybrid.</h3>
+      <p>Tree-sitter resolves exact structure; LLMs read it to produce meaning — fewer tokens, fewer hallucinations. Everything runs on local SQLite, no keys required.</p>
     </div>
   </section>
 
   <section class="showcase" aria-label="Dashboard preview">
     <div class="shot duo">
       <figure>
-        <img src="assets/dashboard-profile.png" alt="Global Profile view: stat tiles, industry chips, evidence-weighted skill bars, and portfolio highlights." loading="lazy">
-        <figcaption>Profile — cross-project skills, industries, highlights.</figcaption>
+        <img src="assets/dashboard-profile.png" alt="Profile view: synthesized wisdom headline, competency map graded by proficiency level, insights, and gaps." loading="lazy">
+        <figcaption>Profile — the Wisdom layer: competencies, insights, gaps.</figcaption>
       </figure>
       <figure>
-        <img src="assets/dashboard-map.png" alt="Global Map view: force-directed hierarchy graph colored by knowledge level." loading="lazy">
+        <img src="assets/dashboard-map.png" alt="Map view: force-directed hierarchy graph colored by knowledge level." loading="lazy">
         <figcaption>Map — industry → domain → project knowledge graph.</figcaption>
       </figure>
     </div>
@@ -82,7 +91,7 @@
     <a class="guide-card" href="architecture.html">
       <span class="kicker">system</span>
       <h3>Architecture</h3>
-      <p>L0-L5, scope x grounding, agent runtime, storage boundaries, sources, and trade-offs.</p>
+      <p>L0–L6, scope × grounding, the agent runtime, storage boundaries, sources, and trade-offs.</p>
     </a>
     <a class="guide-card" href="cli.html">
       <span class="kicker">commands</span>
@@ -97,7 +106,7 @@
     <a class="guide-card" href="dashboard.html">
       <span class="kicker">visualize</span>
       <h3>Dashboard</h3>
-      <p>The Profile + Map global view and per-project knowledge graphs — offline, self-contained, shareable.</p>
+      <p>The DIKW Profile (Wisdom) + Map global view and per-project knowledge graphs — offline, self-contained, shareable.</p>
     </a>
     <a class="guide-card" href="configuration.html">
       <span class="kicker">runtime</span>
@@ -116,18 +125,22 @@
 git clone https://github.com/tienan92it/SubstrateNet && cd SubstrateNet
 npm install &amp;&amp; npm run build:all &amp;&amp; npm link
 
-# 2. Local LLM (one-time)
-ollama pull qwen3:4b-instruct
+# 2. Backend (optional). Flash-first when OPENROUTER_API_KEY is set; otherwise
+#    fully local via Ollama — every agent falls back automatically.
 ollama pull qwen2.5:14b
-ollama pull qwen3-embedding:0.6b
+ollama pull nomic-embed-text
 
-# 3. First run: discover → estimate → full pipeline
+# 3. First run: discover → estimate → full pipeline → dashboard
 subnet setup --plan-only   # optional per-phase cost table
 subnet setup
 
 # 4. Day to day (or just run `subnet` for the menu)
 subnet update              # standard: tier-1 analyze + fused enrich
-subnet update --fast       # lean: transcripts only</code></pre>
+subnet update --fast       # lean: transcripts only
+
+# 5. See what you know
+subnet global wisdom            # leveled competencies, insights, gaps
+subnet global dashboard --open  # the DIKW profile + knowledge map</code></pre>
 
   <p>
     Full walkthrough: <a href="getting-started.html">getting started →</a>

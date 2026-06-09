@@ -36,8 +36,10 @@
 
   <h1>Architecture</h1>
   <p class="lede">
-    Eight layers, three databases, one runtime contract. Syntax is
-    deterministic. Meaning is agent-driven. Every claim carries its grounding.
+    A layered climb up the DIKW pyramid — raw code and conversations at the base,
+    synthesized wisdom at the top — across three databases and one runtime
+    contract. Syntax is deterministic. Meaning is agent-driven. Every claim
+    carries its grounding.
   </p>
 
   <div class="toc">
@@ -57,22 +59,25 @@
 
   <h2 id="layers">Layered model</h2>
   <p>
-    The layers map loosely onto the DIKW pyramid: raw data at the bottom,
-    derived meaning at the top. Each layer has its own SQLite table family.
-    Edges cross layers explicitly via foreign keys.
+    The layers climb the DIKW pyramid: <strong>Data</strong> (L0–L1) →
+    <strong>Information</strong> (L1.5–L2) → <strong>Knowledge</strong>
+    (L2.5–L5) → <strong>Wisdom</strong> (L6). Each layer has its own SQLite table
+    family; edges cross layers explicitly via foreign keys.
   </p>
 
   <table>
     <tr><th>Layer</th><th>Content</th><th>Produced by</th></tr>
-    <tr><td><strong>L0</strong> Code Structure</td><td>symbols, calls, imports, fields, SQL tables</td><td>deterministic (tree-sitter / regex DDL)</td></tr>
-    <tr><td><strong>L0.5</strong> Code Analysis</td><td>per-file summaries, architectural layer, tags</td><td>tree-sitter structure + <strong>agents</strong> (FileAnalyzer · ArchitectureAnalyzer)</td></tr>
-    <tr><td><strong>L1</strong> Conversations</td><td>sessions, turns, tool calls</td><td>deterministic (file parsers)</td></tr>
-    <tr><td><strong>L1.5</strong> Triage</td><td>Relevance / Domain / Quality / Linkage labels</td><td><strong>agent</strong> (Triage)</td></tr>
-    <tr><td><strong>L2</strong> Facts</td><td>decisions, business rules, intents, problems, solutions</td><td><strong>agents</strong> (Decision · BusinessLogic · Intent · ProblemSolution) + syntax pass</td></tr>
-    <tr><td><strong>L2.5</strong> Domain enrichment</td><td>dependencies, skills, entities, relationships, industry, gaps</td><td>manifests + SQL (structural) · Reconciler · <strong>agents</strong> (TechnicalProfiler · DomainModeler · IndustryClassifier · IndustryEnricher)</td></tr>
+    <tr><td><strong>L0</strong> Code structure</td><td>symbols, calls, imports, fields, SQL tables</td><td>deterministic (tree-sitter / regex DDL)</td></tr>
+    <tr><td><strong>L0.5</strong> Code analysis</td><td>per-file summaries, architectural layer, tags</td><td>structure + <strong>agents</strong> (FileAnalyzer · ArchitectureAnalyzer)</td></tr>
+    <tr><td><strong>L1</strong> Conversations + docs + diagrams</td><td>sessions, turns, tool calls; in-repo docs (README / BRD / ADRs) and diagrams (mermaid / drawio / excalidraw / plantuml)</td><td>deterministic (file parsers + adapters)</td></tr>
+    <tr><td><strong>L1.5</strong> Triage</td><td>relevance / domain / quality / linkage / activity per window; doc-kind for sources</td><td><strong>agents</strong> (Triage · SourceClassifier)</td></tr>
+    <tr><td><strong>L2</strong> Facts</td><td>decisions, business rules, intents, problems/solutions; BRD actors/processes/metrics; incidents → root cause → resolution</td><td><strong>agents</strong> (Decision · BusinessLogic · Requirements · Intent · ProblemSolution · Incident) + syntax pass</td></tr>
+    <tr><td><strong>L2.5</strong> Domain enrichment</td><td>dependencies, skills, entities, relationships, industry, components, gaps; cross-source dedup + corroboration</td><td>manifests + SQL · Reconciler · <strong>standard:</strong> fused enrich (domainFuser + industryFuser) · <strong>deep:</strong> 8-agent stack</td></tr>
+    <tr><td><strong>L2.6</strong> Knowledge zones</td><td>business + tech domains, grouping facts by bounded context / capability</td><td><strong>agents</strong> (BusinessDomainModeler · TechDomainModeler)</td></tr>
     <tr><td><strong>L3</strong> Concepts</td><td>clustered facts with names + structured summaries, scope-tagged</td><td><strong>agents</strong> (Clusterer · Summarizer)</td></tr>
-    <tr><td><strong>L4</strong> Cross-Project</td><td>shared concepts between repos</td><td>mechanical (exact + SimHash) + <strong>agent</strong> (Linker)</td></tr>
-    <tr><td><strong>L5</strong> Skill graph</td><td>technical + industry skills aggregated across all projects</td><td>mechanical aggregation over L2.5 evidence</td></tr>
+    <tr><td><strong>L4</strong> Cross-project</td><td>shared concepts, workspace umbrellas, emergent project links</td><td>mechanical (exact + SimHash) + <strong>agent</strong> (Linker)</td></tr>
+    <tr><td><strong>L5</strong> Skill graph + hierarchy</td><td>technical + industry skills; the workspace → industry → business → tech → project tree</td><td>mechanical aggregation over L2.5/L2.6 evidence</td></tr>
+    <tr><td><strong>L6</strong> Wisdom</td><td>leveled competency areas (Dreyfus novice → expert), cross-project insights / principles, named gaps + recommendations</td><td><strong>agent</strong> (WisdomSynthesizer) + deterministic fallback; grounded <code>model</code></td></tr>
   </table>
 
   <h2 id="scope-grounding">Scope × grounding</h2>
@@ -106,6 +111,13 @@
     pre-triage embed dedupe → triage on briefs → extract with anchor gate →
     early fact dedupe → <strong>batch clusterer</strong> → tiered file analyze →
     fused or deep enrich. See <a href="workflow-refactor.md">workflow-refactor.md</a>.
+  </p>
+  <p>
+    Cross-project work runs on top of that, over <code>global.db</code>: the
+    Linker and mechanical matching build L4/L5, then the
+    <strong>WisdomSynthesizer</strong> (L6) classifies the aggregated skill graph
+    into proficiency-leveled competency areas, distills insights, and names gaps
+    — with a deterministic offline fallback so the layer always renders.
   </p>
 
   <div class="mermaid">
@@ -168,11 +180,12 @@ flowchart TB
 
   <h2 id="agents">The agent layer</h2>
   <p>
-    There are seventeen chat agents and one embedding-only agent. Each has a
+    A couple dozen chat agents plus one embedding-only agent. Each has a
     versioned prompt, a JSON schema, and a model reference resolved from
     config. All share a single runtime that handles caching, validation, and
     persistence. Agent-bound calls run with bounded concurrency
-    (<code>config.concurrency</code>).
+    (<code>config.concurrency</code>). The table below is representative, not
+    exhaustive.
   </p>
 
   <table>
@@ -183,6 +196,8 @@ flowchart TB
     <tr><td><code>businessLogic</code></td><td>window</td><td>business rules / entities / constraints</td><td>domain ∈ {business_logic, architecture}</td></tr>
     <tr><td><code>intent</code></td><td>window</td><td>user intents</td><td>most engineering domains</td></tr>
     <tr><td><code>problemSolution</code></td><td>window</td><td>(problem, solution) pairs</td><td>domain ∈ {debugging, implementation}</td></tr>
+    <tr><td><code>requirements</code></td><td>window / docs</td><td>requirements, features, actors, processes, metrics</td><td>product / BRD signal</td></tr>
+    <tr><td><code>incident</code></td><td>window</td><td>incident → root cause → resolution</td><td>domain ∈ {debugging, ops}</td></tr>
     <tr><td><code>clusterer</code> / <code>clustererBatch</code></td><td>new fact(s) + top-K candidates</td><td>attach / create / merge</td><td>ambiguous facts (batched by default)</td></tr>
     <tr><td><code>domainFuser</code></td><td>core pack + concepts + entities</td><td>relationships, domains, highlights</td><td>standard enrich</td></tr>
     <tr><td><code>industryFuser</code></td><td>core pack + deps + README</td><td>industry, skills, architecture, glossary</td><td>standard enrich</td></tr>
@@ -194,7 +209,8 @@ flowchart TB
     <tr><td><code>industryClassifier</code></td><td>stack + symbols + README + entities + rules</td><td>industry label + confidence + evidence</td><td>enrichment (L2.5)</td></tr>
     <tr><td><code>industryEnricher</code></td><td>industry + present concepts</td><td>industry-standard concepts (model/external)</td><td>enrichment (L2.5)</td></tr>
     <tr><td><code>domainAnalyzer</code></td><td>industry + skills + layers + facts</td><td>composite portfolio highlights (evidence-cited)</td><td>enrichment (L2.5)</td></tr>
-    <tr><td><code>profileWriter</code></td><td>global industries + skills + highlights</td><td>portfolio/background markdown</td><td><code>profile --prose</code> (global)</td></tr>
+    <tr><td><code>profileWriter</code></td><td>global industries + skills + highlights</td><td>portfolio/background markdown</td><td><code>global profile --prose</code></td></tr>
+    <tr><td><code>wisdomSynthesizer</code></td><td>global skills + domains + concepts + gaps</td><td>leveled competencies, insights, gaps (L6)</td><td><code>global wisdom</code> / dashboard build</td></tr>
     <tr><td><code>linker</code></td><td>two cross-project concepts</td><td>same_as / variant_of / supersedes / contradicts / none</td><td>cross-project candidate pairs</td></tr>
     <tr><td><code>verifier</code></td><td>pair of same-cluster facts</td><td>consistent / contradicts / supersedes</td><td>periodic sweep</td></tr>
   </table>
@@ -263,8 +279,12 @@ interface AgentRuntime {
 │   ├── skills             (L5 — name, scope, evidence_weight, project_count)
 │   ├── skill_evidence     (per-project evidence behind each skill)
 │   ├── industries         (classified business domains across projects)
+│   ├── business_domains / tech_domains / taxonomy_edges   (L2.6 zones + hierarchy)
+│   ├── workspaces / project_workspace / project_links     (L4 umbrellas + links)
 │   ├── highlights         (composite portfolio statements per project)
-│   └── agent_runs         (cache + audit for global agents, e.g. ProfileWriter)
+│   ├── wisdom_meta / competency_groups / competency_skills (L6 — synthesized)
+│   ├── wisdom_insights / wisdom_gaps                       (L6 — synthesized)
+│   └── agent_runs         (cache + audit for global agents — ProfileWriter, WisdomSynthesizer)
 └── config.json</code></pre>
 
   <p>
