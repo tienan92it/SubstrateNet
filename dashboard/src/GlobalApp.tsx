@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type {
   GlobalDashboardSnapshot, WisdomSnapshot, WisdomInsight, WisdomGap,
   ParaArea, ParaProject, ParaSubject, ParaTopic, DashboardSnapshot, KnowledgeNode, KnowledgeEdge,
@@ -8,6 +8,13 @@ import {
 } from './types';
 
 type View = 'projects' | 'areas' | 'resources' | 'archive';
+
+const VIEW_META: Record<View, { label: string; hint: string }> = {
+  projects: { label: 'Projects', hint: 'active work, ranked by recency' },
+  areas: { label: 'Areas', hint: 'competencies maintained across repos' },
+  resources: { label: 'Resources', hint: 'knowledge library · subjects → topics → items' },
+  archive: { label: 'Archive', hint: 'inactive projects kept for reference' },
+};
 
 export function GlobalApp({ snapshot }: { snapshot: GlobalDashboardSnapshot }) {
   const [view, setView] = useState<View>('resources');
@@ -24,54 +31,107 @@ export function GlobalApp({ snapshot }: { snapshot: GlobalDashboardSnapshot }) {
     return all.find((p) => p.id === drillProjectId)?.name ?? drillProjectId;
   }, [drillProjectId, para]);
 
-  const counts = {
-    projects: para?.projects.length ?? 0,
-    areas: para?.areas.length ?? 0,
-    subjects: para?.subjects.length ?? 0,
-    archive: para?.archives.length ?? 0,
-  };
+  const counts = useMemo(() => {
+    const subjects = para?.subjects ?? [];
+    const topics = subjects.reduce((n, s) => n + s.topics.length, 0);
+    const items = subjects.reduce((n, s) => n + s.topics.reduce((m, t) => m + t.items.length, 0), 0);
+    const skills = (para?.areas ?? []).reduce((n, a) => n + a.skills.length, 0);
+    return {
+      projects: para?.projects.length ?? 0,
+      areas: para?.areas.length ?? 0,
+      subjects: subjects.length,
+      topics,
+      items,
+      skills,
+      archive: para?.archives.length ?? 0,
+      insights: wisdom?.insights.length ?? 0,
+      gaps: wisdom?.gaps.length ?? 0,
+    };
+  }, [para, wisdom]);
 
   const empty = !para || (counts.projects + counts.areas + counts.subjects + counts.archive === 0);
+  const viewCount = counts[view === 'resources' ? 'subjects' : view];
+
+  const goView = (v: View) => { setView(v); setDrillProjectId(null); };
 
   return (
-    <div className="app">
-      <div className="topbar">
-        <span className="brand">subnet<span className="brand-dot">/</span><span className="brand-mode">global</span></span>
-        <div className="tabs">
-          <button className={`tab ${view === 'projects' ? 'active' : ''}`} onClick={() => { setView('projects'); setDrillProjectId(null); }}>projects<span className="tab-n">{counts.projects}</span></button>
-          <button className={`tab ${view === 'areas' ? 'active' : ''}`} onClick={() => { setView('areas'); setDrillProjectId(null); }}>areas<span className="tab-n">{counts.areas}</span></button>
-          <button className={`tab ${view === 'resources' ? 'active' : ''}`} onClick={() => { setView('resources'); setDrillProjectId(null); }}>resources<span className="tab-n">{counts.subjects}</span></button>
-          <button className={`tab ${view === 'archive' ? 'active' : ''}`} onClick={() => { setView('archive'); setDrillProjectId(null); }}>archive<span className="tab-n">{counts.archive}</span></button>
+    <div className="app global-app">
+      <header className="topbar global-topbar">
+        <div className="content-frame topbar-shell">
+        <div className="topbar-row">
+          <span className="brand">subnet<span className="brand-dot">/</span><span className="brand-mode">global</span></span>
+          <nav className="tabs" aria-label="PARA navigation">
+            {(['projects', 'areas', 'resources', 'archive'] as View[]).map((v) => (
+              <button
+                key={v}
+                className={`tab ${view === v && !drillProjectId ? 'active' : ''}`}
+                onClick={() => goView(v)}
+              >
+                {v}
+                <span className="tab-n">{counts[v === 'resources' ? 'subjects' : v]}</span>
+              </button>
+            ))}
+          </nav>
+          <div className="topbar-stats">
+            <span className="top-stat"><b>{c.projects}</b> repos</span>
+            <span className="top-stat"><b>{counts.skills}</b> skills</span>
+            <span className="top-stat"><b>{counts.items}</b> items</span>
+          </div>
         </div>
-        {drillProjectId && (
-          <div className="crumbs">
-            <button className="crumb" onClick={() => setDrillProjectId(null)}>{view}</button>
-            <span className="sep">/</span><span className="crumb active">{drillLabel}</span>
+        {(drillProjectId || !empty) && (
+          <div className="topbar-sub">
+            {drillProjectId ? (
+              <div className="crumbs">
+                <button className="crumb" onClick={() => setDrillProjectId(null)}>{view}</button>
+                <span className="sep">/</span>
+                <span className="crumb active">{drillLabel}</span>
+              </div>
+            ) : (
+              <p className="view-lede">
+                <strong>{VIEW_META[view].label}</strong>
+                <span className="view-lede-sep">·</span>
+                {VIEW_META[view].hint}
+                <span className="view-lede-count">{viewCount} record{viewCount === 1 ? '' : 's'}</span>
+              </p>
+            )}
           </div>
         )}
-        <span className="counts">
-          <b>{c.projects}</b> projects · <b>{c.businessDomains}</b> biz · <b>{c.techDomains}</b> tech
-        </span>
-      </div>
+        </div>
+      </header>
 
       <div className="body">
         <div className="main">
-          <div className="para">
-            {!drillProject && <WisdomHero wisdom={wisdom} counts={c} para={para} />}
+          <div className="content-frame dashboard-shell">
+            {!drillProject && !empty && <StatsBar counts={counts} meta={c} />}
+            {!drillProject && <WisdomHero wisdom={wisdom} counts={counts} />}
 
             {empty && (
-              <p className="sub empty-hint">No organized knowledge yet. Run <code>subnet update --global</code> across your projects, then <code>subnet global wisdom</code>.</p>
+              <p className="sub empty-hint">
+                No organized knowledge yet. Run <code>subnet update --global</code> across your projects, then <code>subnet global wisdom</code>.
+              </p>
             )}
 
             {drillProject ? (
               <ProjectDetail snapshot={drillProject} />
             ) : (
-              <>
-                {view === 'projects' && <ProjectsView projects={para?.projects ?? []} onOpen={setDrillProjectId} hasGraph={(id) => !!snapshot.drillDown[id]} />}
+              <div className="view-panel">
+                {view === 'projects' && (
+                  <ProjectsView
+                    projects={para?.projects ?? []}
+                    onOpen={setDrillProjectId}
+                    hasGraph={(id) => !!snapshot.drillDown[id]}
+                  />
+                )}
                 {view === 'areas' && <AreasView areas={para?.areas ?? []} />}
                 {view === 'resources' && <ResourcesView subjects={para?.subjects ?? []} />}
-                {view === 'archive' && <ArchiveView projects={para?.archives ?? []} onOpen={setDrillProjectId} hasGraph={(id) => !!snapshot.drillDown[id]} />}
-              </>
+                {view === 'archive' && (
+                  <ArchiveView
+                    projects={para?.archives ?? []}
+                    onOpen={setDrillProjectId}
+                    hasGraph={(id) => !!snapshot.drillDown[id]}
+                  />
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -81,76 +141,111 @@ export function GlobalApp({ snapshot }: { snapshot: GlobalDashboardSnapshot }) {
 }
 
 // ============================================================================
-// Wisdom hero (compact synthesis strip)
+// Portfolio stats (data-first strip)
 // ============================================================================
 
-function WisdomHero({ wisdom, counts, para }: {
-  wisdom?: WisdomSnapshot; counts: GlobalDashboardSnapshot['meta']['counts']; para?: GlobalDashboardSnapshot['para'];
+function StatsBar({ counts, meta }: {
+  counts: Record<string, number>;
+  meta: GlobalDashboardSnapshot['meta']['counts'];
+}) {
+  const stats = [
+    { n: counts.projects, label: 'active projects', accent: true },
+    { n: counts.areas, label: 'competency areas' },
+    { n: counts.subjects, label: 'subjects' },
+    { n: counts.topics, label: 'topics' },
+    { n: counts.items, label: 'knowledge items' },
+    { n: meta.businessDomains + meta.techDomains, label: 'domains' },
+    { n: counts.insights, label: 'insights' },
+    { n: counts.gaps, label: 'gaps', warn: counts.gaps > 0 },
+  ];
+  return (
+    <div className="stats-bar" aria-label="Portfolio metrics">
+      {stats.map((s) => (
+        <div key={s.label} className={`stat-chip ${s.accent ? 'accent' : ''} ${s.warn ? 'warn' : ''}`}>
+          <span className="stat-chip-n">{s.n}</span>
+          <span className="stat-chip-l">{s.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ============================================================================
+// Wisdom (compact synthesis + DIKW metrics)
+// ============================================================================
+
+function WisdomHero({ wisdom, counts }: {
+  wisdom?: WisdomSnapshot;
+  counts: Record<string, number>;
 }) {
   const [open, setOpen] = useState(false);
-  const headline = wisdom?.headline || 'The second brain';
+  const headline = wisdom?.headline || 'Knowledge portfolio';
   const narrative = wisdom?.narrative
-    || 'What you know across your projects — organized by actionability (PARA) and distilled to wisdom (DIKW).';
+    || 'Cross-project knowledge organized by PARA and distilled toward wisdom.';
   const insights = wisdom?.insights ?? [];
   const gaps = wisdom?.gaps ?? [];
 
   const tiers = [
-    { key: 'W', label: 'Wisdom', n: insights.length },
-    { key: 'K', label: 'Knowledge', n: (para?.areas.length ?? 0) + (para?.subjects.length ?? 0) },
-    { key: 'I', label: 'Information', n: counts.businessDomains + counts.techDomains },
-    { key: 'D', label: 'Data', n: counts.projects },
+    { key: 'W', label: 'Wisdom', n: counts.insights },
+    { key: 'K', label: 'Knowledge', n: counts.areas + counts.subjects },
+    { key: 'I', label: 'Information', n: counts.topics },
+    { key: 'D', label: 'Data', n: counts.items },
   ];
 
   return (
-    <div className="profile-hero wisdom-hero">
-      <div className="hero-main">
-        <div className="hero-label">// synthesized wisdom {wisdom?.grounding ? `· ${wisdom.grounding}` : ''}</div>
-        <h1 className="hero-title">{headline}</h1>
-        <p className="hero-sub">{narrative}</p>
+    <section className="wisdom-band">
+      <div className="wisdom-band-main">
+        <div className="wisdom-band-head">
+          <span className="hero-label">
+            synthesized wisdom{wisdom?.grounding ? ` · ${wisdom.grounding}` : ''}
+          </span>
+          <div className="dikw-inline" aria-label="DIKW pyramid counts">
+            {tiers.map((t) => (
+              <span key={t.key} className="dikw-chip" title={t.label}>
+                <span className="dikw-chip-k">{t.key}</span>
+                <span className="dikw-chip-n">{t.n}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+        <h1 className="wisdom-headline">{headline}</h1>
+        <p className="wisdom-lede">{narrative}</p>
         {(insights.length > 0 || gaps.length > 0) && (
-          <button className="synth-toggle" onClick={() => setOpen(!open)}>
-            {open ? 'hide' : 'show'} {insights.length} insight(s) · {gaps.length} gap(s)
+          <button className="synth-toggle" onClick={() => setOpen(!open)} aria-expanded={open}>
+            {open ? 'Hide' : 'Show'} synthesis — {insights.length} insight{insights.length === 1 ? '' : 's'}, {gaps.length} gap{gaps.length === 1 ? '' : 's'}
           </button>
         )}
-        {open && (
-          <div className="synth-strip">
-            {insights.length > 0 && (
-              <div className="synth-col">
-                <h4>Insights &amp; principles</h4>
-                {insights.map((i: WisdomInsight) => (
-                  <div key={i.id} className="synth-item">
-                    <span className={`kind-badge ${i.kind === 'principle' ? 'principle' : 'insight'}`}>{i.kind}</span>
-                    <span className="synth-title">{i.title}</span>
-                    {i.body && <p className="sub">{i.body}</p>}
-                  </div>
-                ))}
-              </div>
-            )}
-            {gaps.length > 0 && (
-              <div className="synth-col">
-                <h4>Gaps to close</h4>
-                {gaps.map((g: WisdomGap) => (
-                  <div key={g.id} className="synth-item">
-                    {g.severity && <span className="sev-badge" style={sevStyle(g.severity)}>{g.severity}</span>}
-                    <span className="synth-title">{g.title}</span>
-                    {g.recommendation && <div className="gap-rec">→ {g.recommendation}</div>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </div>
-      <div className="dikw" aria-label="DIKW pyramid">
-        {tiers.map((t, i) => (
-          <div key={t.key} className="dikw-tier" style={{ width: `${55 + i * 15}%` }}>
-            <span className="dikw-k">{t.key}</span>
-            <span className="dikw-n">{t.n}</span>
-            <span className="dikw-l">{t.label}</span>
-          </div>
-        ))}
-      </div>
-    </div>
+
+      {open && (insights.length > 0 || gaps.length > 0) && (
+        <div className="synth-grid">
+          {insights.length > 0 && (
+            <div className="synth-col">
+              <h4>Insights &amp; principles <span className="col-count">{insights.length}</span></h4>
+              {insights.map((i: WisdomInsight) => (
+                <div key={i.id} className="synth-item">
+                  <span className={`kind-badge ${i.kind === 'principle' ? 'principle' : 'insight'}`}>{i.kind}</span>
+                  <span className="synth-title">{i.title}</span>
+                  {i.body && <p className="sub">{i.body}</p>}
+                </div>
+              ))}
+            </div>
+          )}
+          {gaps.length > 0 && (
+            <div className="synth-col">
+              <h4>Gaps to close <span className="col-count">{gaps.length}</span></h4>
+              {gaps.map((g: WisdomGap) => (
+                <div key={g.id} className="synth-item">
+                  {g.severity && <span className="sev-badge" style={sevStyle(g.severity)}>{g.severity}</span>}
+                  <span className="synth-title">{g.title}</span>
+                  {g.recommendation && <div className="gap-rec">→ {g.recommendation}</div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -161,11 +256,11 @@ function sevStyle(sev: string) {
 }
 
 // ============================================================================
-// Projects (active) + Archive
+// Projects + Archive
 // ============================================================================
 
 function relTime(ts?: number): string {
-  if (!ts) return '';
+  if (!ts) return '—';
   const days = Math.round((Date.now() - ts) / 86_400_000);
   if (days <= 0) return 'today';
   if (days === 1) return 'yesterday';
@@ -177,28 +272,26 @@ function relTime(ts?: number): string {
 function ProjectsView({ projects, onOpen, hasGraph }: {
   projects: ParaProject[]; onOpen: (id: string) => void; hasGraph: (id: string) => boolean;
 }) {
-  if (projects.length === 0) return <section className="profile-section"><p className="sub">No active projects. Recent work shows up here.</p></section>;
+  if (projects.length === 0) {
+    return <EmptyState message="No active projects. Recent work surfaces here after a global update." />;
+  }
   return (
-    <section className="profile-section">
-      <h2 className="sect-title">Projects <span className="sect-hint">active work, by recency</span></h2>
-      <div className="comp-grid">
-        {projects.map((p) => <ProjectCard key={p.id} p={p} onOpen={onOpen} canOpen={hasGraph(p.id)} />)}
-      </div>
-    </section>
+    <div className="data-grid">
+      {projects.map((p) => <ProjectCard key={p.id} p={p} onOpen={onOpen} canOpen={hasGraph(p.id)} />)}
+    </div>
   );
 }
 
 function ArchiveView({ projects, onOpen, hasGraph }: {
   projects: ParaProject[]; onOpen: (id: string) => void; hasGraph: (id: string) => boolean;
 }) {
-  if (projects.length === 0) return <section className="profile-section"><p className="sub">Nothing archived. Inactive projects move here.</p></section>;
+  if (projects.length === 0) {
+    return <EmptyState message="Nothing archived. Inactive projects move here automatically." />;
+  }
   return (
-    <section className="profile-section">
-      <h2 className="sect-title">Archive <span className="sect-hint">inactive, kept for reference</span></h2>
-      <div className="comp-grid">
-        {projects.map((p) => <ProjectCard key={p.id} p={p} onOpen={onOpen} canOpen={hasGraph(p.id)} muted />)}
-      </div>
-    </section>
+    <div className="data-grid">
+      {projects.map((p) => <ProjectCard key={p.id} p={p} onOpen={onOpen} canOpen={hasGraph(p.id)} muted />)}
+    </div>
   );
 }
 
@@ -206,35 +299,47 @@ function ProjectCard({ p, onOpen, canOpen, muted }: {
   p: ParaProject; onOpen: (id: string) => void; canOpen: boolean; muted?: boolean;
 }) {
   return (
-    <div className={`comp-card ${muted ? 'muted' : ''}`}>
-      <div className="comp-head">
-        <span className="comp-name">{p.name}</span>
-        {p.lastActiveAt && <span className="rel-time">{relTime(p.lastActiveAt)}</span>}
+    <article className={`data-card ${muted ? 'muted' : ''}`}>
+      <div className="data-card-head">
+        <h3 className="data-card-title">{p.name}</h3>
+        <span className="data-metric">{relTime(p.lastActiveAt)}</span>
       </div>
-      {p.focus && <p className="comp-sum">{p.focus}</p>}
+      <div className="data-card-meta">
+        <span className="meta-pill">{p.topics.length} topic{p.topics.length === 1 ? '' : 's'}</span>
+        <span className={`status-pill ${p.status}`}>{p.status}</span>
+      </div>
+      {p.focus && <p className="data-card-body">{p.focus}</p>}
       {p.topics.length > 0 && (
-        <div className="comp-skills">
-          {p.topics.slice(0, 8).map((t) => <span key={t} className="skill-pill">{t}</span>)}
+        <div className="tag-row">
+          {p.topics.slice(0, 6).map((t) => <span key={t} className="skill-pill">{t}</span>)}
+          {p.topics.length > 6 && <span className="more-pill static">+{p.topics.length - 6}</span>}
         </div>
       )}
-      {canOpen && <button className="drill-btn sm" onClick={() => onOpen(p.id)}>Open knowledge graph →</button>}
-    </div>
+      {canOpen && (
+        <button className="card-action" onClick={() => onOpen(p.id)}>
+          Open knowledge tree →
+        </button>
+      )}
+    </article>
   );
 }
 
 // ============================================================================
-// Areas (ongoing competencies, Dreyfus-leveled)
+// Areas
 // ============================================================================
 
 function AreasView({ areas }: { areas: ParaArea[] }) {
-  if (areas.length === 0) return <section className="profile-section"><p className="sub">No competency areas yet.</p></section>;
+  const sorted = useMemo(
+    () => [...areas].sort((a, b) => b.weight - a.weight || b.skills.length - a.skills.length),
+    [areas],
+  );
+  if (areas.length === 0) {
+    return <EmptyState message="No competency areas yet. Run organize + wisdom to group skills by domain." />;
+  }
   return (
-    <section className="profile-section">
-      <h2 className="sect-title">Areas <span className="sect-hint">competencies you maintain · leveled by evidence</span></h2>
-      <div className="comp-grid">
-        {areas.map((a) => <AreaCard key={a.id} a={a} />)}
-      </div>
-    </section>
+    <div className="data-grid areas-grid">
+      {sorted.map((a) => <AreaCard key={a.id} a={a} />)}
+    </div>
   );
 }
 
@@ -242,35 +347,37 @@ function AreaCard({ a }: { a: ParaArea }) {
   const [expanded, setExpanded] = useState(false);
   const level = (a.level || 'competent').toLowerCase();
   const color = LEVEL_COLOR[level] ?? '#8a8f98';
-  const shown = expanded ? a.skills : a.skills.slice(0, 10);
+  const shown = expanded ? a.skills : a.skills.slice(0, 8);
   const rest = a.skills.length - shown.length;
   return (
-    <div className="comp-card">
-      <div className="comp-head">
-        <span className="comp-name">{a.name}</span>
+    <article className="data-card">
+      <div className="data-card-head">
+        <h3 className="data-card-title">{a.name}</h3>
         <span className="lvl-badge" style={{ color, borderColor: color }}>{LEVEL_LABELS_PROF[level] ?? level}</span>
       </div>
-      <div className="comp-meta">
-        {a.skills.length} skill(s){a.projectCount > 1 ? ` · ×${a.projectCount} repos` : ''}{a.grounding ? ` · ${a.grounding}` : ''}
+      <div className="data-card-meta">
+        <span className="data-metric strong">{a.weight.toFixed(1)} weight</span>
+        <span className="meta-pill">{a.skills.length} skills</span>
+        {a.projectCount > 1 && <span className="meta-pill">×{a.projectCount} repos</span>}
       </div>
       <LevelMeter level={level} />
-      {a.summary && <p className="comp-sum">{a.summary}</p>}
-      <div className="comp-skills">
+      {a.summary && <p className="data-card-body">{a.summary}</p>}
+      <div className="tag-row">
         {shown.map((s) => (
-          <span key={s.name} className="skill-pill" title={`${LEVEL_LABELS_PROF[(s.level ?? '').toLowerCase()] ?? ''} w=${s.weight.toFixed(1)}`}>
+          <span key={s.name} className="skill-pill" title={`${LEVEL_LABELS_PROF[(s.level ?? '').toLowerCase()] ?? ''} · w=${s.weight.toFixed(1)}`}>
             <i className="skill-dot" style={{ background: LEVEL_COLOR[(s.level ?? '').toLowerCase()] ?? '#8a8f98' }} />
             {s.name}
           </span>
         ))}
-        {rest > 0 && <button className="more-pill" onClick={() => setExpanded(true)}>+{rest} more</button>}
-        {expanded && a.skills.length > 10 && <button className="more-pill" onClick={() => setExpanded(false)}>show less</button>}
+        {rest > 0 && <button className="more-pill" onClick={() => setExpanded(true)}>+{rest}</button>}
+        {expanded && a.skills.length > 8 && <button className="more-pill" onClick={() => setExpanded(false)}>less</button>}
       </div>
       {(a.projects.length > 0 || a.domains.length > 0) && (
-        <div className="area-refs">
-          {[...a.domains, ...a.projects].slice(0, 6).map((r) => <span key={r} className="ref-chip">{r}</span>)}
+        <div className="tag-row muted-row">
+          {[...a.domains, ...a.projects].slice(0, 5).map((r) => <span key={r} className="ref-chip">{r}</span>)}
         </div>
       )}
-    </div>
+    </article>
   );
 }
 
@@ -287,53 +394,82 @@ function LevelMeter({ level }: { level: string }) {
 }
 
 // ============================================================================
-// Resources — the hierarchical subject → topic → item explorer (no graph)
+// Resources — master/detail split (data-centered explorer)
 // ============================================================================
 
 function ResourcesView({ subjects }: { subjects: ParaSubject[] }) {
-  const [activeSubject, setActiveSubject] = useState<string | null>(null);
-  const maxWeight = useMemo(() => Math.max(1, ...subjects.map((s) => s.weight)), [subjects]);
+  const sorted = useMemo(
+    () => [...subjects].sort((a, b) => b.weight - a.weight),
+    [subjects],
+  );
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const maxWeight = useMemo(() => Math.max(1, ...sorted.map((s) => s.weight)), [sorted]);
+
+  useEffect(() => {
+    if (sorted.length && !sorted.some((s) => s.id === activeId)) {
+      setActiveId(sorted[0].id);
+    }
+  }, [sorted, activeId]);
 
   if (subjects.length === 0) {
-    return <section className="profile-section"><p className="sub">No subjects yet. The library of what you know is built from your skills, concepts, and domains.</p></section>;
+    return <EmptyState message="No subjects yet. Skills, concepts, and domains cluster here after organization." />;
   }
 
-  const current = subjects.find((s) => s.id === activeSubject) ?? null;
+  const current = sorted.find((s) => s.id === activeId) ?? sorted[0];
+  const itemCount = current.topics.reduce((n, t) => n + t.items.length, 0);
 
   return (
-    <section className="profile-section">
-      <h2 className="sect-title">Resources <span className="sect-hint">your knowledge library · subjects → topics</span></h2>
-      <div className="subject-grid">
-        {subjects.map((s) => {
-          const span = Math.max(1, Math.round((s.weight / maxWeight) * 3));
-          const active = s.id === activeSubject;
-          return (
-            <button
-              key={s.id}
-              className={`subject-tile ${active ? 'active' : ''}`}
-              style={{ gridColumn: `span ${span}` }}
-              onClick={() => setActiveSubject(active ? null : s.id)}
-            >
-              <span className="subject-name">{s.name}</span>
-              <span className="subject-meta">{s.topics.length} topic(s)</span>
-              {s.summary && <span className="subject-sum">{s.summary}</span>}
-            </button>
-          );
-        })}
-      </div>
-
-      {current && (
-        <div className="topic-panel">
-          <div className="topic-panel-head">
-            <h3>{current.name}</h3>
-            <button className="crumb" onClick={() => setActiveSubject(null)}>close</button>
-          </div>
-          <div className="topic-list">
-            {current.topics.map((t) => <TopicRow key={t.id} topic={t} />)}
-          </div>
+    <div className="split-view">
+      <aside className="split-nav" aria-label="Subjects">
+        <div className="split-nav-head">
+          <span>Subjects</span>
+          <span className="split-nav-count">{sorted.length}</span>
         </div>
-      )}
-    </section>
+        <ul className="subject-list">
+          {sorted.map((s) => {
+            const active = s.id === current.id;
+            const pct = Math.round((s.weight / maxWeight) * 100);
+            const topics = s.topics.length;
+            const items = s.topics.reduce((n, t) => n + t.items.length, 0);
+            return (
+              <li key={s.id}>
+                <button
+                  className={`subject-row ${active ? 'active' : ''}`}
+                  onClick={() => setActiveId(s.id)}
+                  aria-current={active ? 'true' : undefined}
+                >
+                  <span className="subject-row-top">
+                    <span className="subject-row-name">{s.name}</span>
+                    <span className="subject-row-n">{items}</span>
+                  </span>
+                  <span className="weight-bar" aria-hidden>
+                    <i style={{ width: `${pct}%` }} />
+                  </span>
+                  <span className="subject-row-meta">{topics} topic{topics === 1 ? '' : 's'} · w={s.weight.toFixed(1)}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </aside>
+
+      <div className="split-detail">
+        <header className="split-detail-head">
+          <div>
+            <h2 className="split-detail-title">{current.name}</h2>
+            {current.summary && <p className="split-detail-sum">{current.summary}</p>}
+          </div>
+          <div className="split-detail-stats">
+            <span className="detail-stat"><b>{current.topics.length}</b> topics</span>
+            <span className="detail-stat"><b>{itemCount}</b> items</span>
+            <span className="detail-stat"><b>{current.weight.toFixed(1)}</b> weight</span>
+          </div>
+        </header>
+        <div className="topic-list dense">
+          {current.topics.map((t) => <TopicRow key={t.id} topic={t} />)}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -345,22 +481,26 @@ function TopicRow({ topic }: { topic: ParaTopic }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="topic-row">
-      <button className="topic-head" onClick={() => setOpen(!open)}>
+      <button className="topic-head" onClick={() => setOpen(!open)} aria-expanded={open}>
         <span className="topic-caret">{open ? '▾' : '▸'}</span>
         <span className="topic-name">{topic.name}</span>
+        <span className="topic-weight">w={topic.weight.toFixed(1)}</span>
         <span className="topic-n">{topic.items.length}</span>
       </button>
       {topic.summary && !open && <p className="topic-sum">{topic.summary}</p>}
       {open && (
-        <div className="topic-items">
+        <div className="topic-body">
           {topic.summary && <p className="topic-sum">{topic.summary}</p>}
-          {topic.items.map((it) => (
-            <span key={`${it.kind}:${it.name}`} className="item-pill">
-              <i className="item-dot" style={{ background: ITEM_COLOR[it.kind] ?? '#8a8f98' }} />
-              {it.name}
-              <span className="item-kind">{it.kind}</span>
-            </span>
-          ))}
+          <div className="topic-items">
+            {topic.items.map((it) => (
+              <span key={`${it.kind}:${it.name}`} className="item-pill">
+                <i className="item-dot" style={{ background: ITEM_COLOR[it.kind] ?? '#8a8f98' }} />
+                {it.name}
+                <span className="item-kind">{it.kind}</span>
+                <span className="item-w">{it.weight.toFixed(1)}</span>
+              </span>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -368,20 +508,27 @@ function TopicRow({ topic }: { topic: ParaTopic }) {
 }
 
 // ============================================================================
-// Per-project detail — nested knowledge explorer (replaces force graph)
+// Per-project knowledge tree
 // ============================================================================
 
 interface TreeNode { node: KnowledgeNode; children: TreeNode[] }
 
 function ProjectDetail({ snapshot }: { snapshot: DashboardSnapshot }) {
   const tree = useMemo(() => buildKnowledgeTree(snapshot.knowledge.nodes, snapshot.knowledge.edges), [snapshot]);
+  const c = snapshot.meta.counts;
   if (tree.length === 0) {
-    return <section className="profile-section"><p className="sub">No knowledge graph for this project yet.</p></section>;
+    return <EmptyState message="No knowledge graph for this project yet." />;
   }
   return (
-    <section className="profile-section">
-      <h2 className="sect-title">Knowledge <span className="sect-hint">domains → concepts/entities → facts</span></h2>
-      <div className="topic-list">
+    <section className="project-detail">
+      <header className="split-detail-head">
+        <div className="split-detail-stats">
+          <span className="detail-stat"><b>{c.knowledgeNodes}</b> nodes</span>
+          <span className="detail-stat"><b>{c.knowledgeEdges}</b> edges</span>
+          <span className="detail-stat"><b>{c.concepts}</b> concepts</span>
+        </div>
+      </header>
+      <div className="topic-list dense">
         {tree.map((t) => <KnowledgeRow key={t.node.id} tn={t} depth={0} />)}
       </div>
     </section>
@@ -393,15 +540,15 @@ function KnowledgeRow({ tn, depth }: { tn: TreeNode; depth: number }) {
   const hasChildren = tn.children.length > 0;
   const color = KNOWLEDGE_COLORS[tn.node.level] ?? '#8a8f98';
   return (
-    <div className="topic-row" style={{ marginLeft: depth ? 14 : 0 }}>
-      <button className="topic-head" onClick={() => hasChildren && setOpen(!open)}>
+    <div className="topic-row" style={{ marginLeft: depth ? 12 : 0 }}>
+      <button className="topic-head" onClick={() => hasChildren && setOpen(!open)} aria-expanded={open}>
         <span className="topic-caret">{hasChildren ? (open ? '▾' : '▸') : '·'}</span>
         <i className="skill-dot" style={{ background: color }} />
         <span className="topic-name">{tn.node.label}</span>
         <span className="k-kind">{KNOWLEDGE_LABELS[tn.node.level] ?? tn.node.kind}</span>
         {hasChildren && <span className="topic-n">{tn.children.length}</span>}
       </button>
-      {open && tn.node.summary && <p className="topic-sum" style={{ marginLeft: 14 }}>{tn.node.summary}</p>}
+      {open && tn.node.summary && <p className="topic-sum">{tn.node.summary}</p>}
       {open && hasChildren && (
         <div className="topic-items-nested">
           {tn.children.map((c) => <KnowledgeRow key={c.node.id} tn={c} depth={depth + 1} />)}
@@ -411,7 +558,10 @@ function KnowledgeRow({ tn, depth }: { tn: TreeNode; depth: number }) {
   );
 }
 
-/** Build a containment tree: domains at the root, everything else nested under part_of/in_concept. */
+function EmptyState({ message }: { message: string }) {
+  return <p className="empty-state">{message}</p>;
+}
+
 function buildKnowledgeTree(nodes: KnowledgeNode[], edges: KnowledgeEdge[]): TreeNode[] {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const parentOf = new Map<string, string>();
@@ -435,7 +585,8 @@ function buildKnowledgeTree(nodes: KnowledgeNode[], edges: KnowledgeEdge[]): Tre
     for (const t of list) sortRec(t.children);
   };
   sortRec(roots);
-  // Keep the root list to true zones when present, so it reads as a clean taxonomy.
   const zones = roots.filter((t) => t.node.level === 'business_domain' || t.node.level === 'tech_domain');
-  return zones.length ? [...zones, ...roots.filter((t) => t.node.level !== 'business_domain' && t.node.level !== 'tech_domain' && t.children.length > 0)] : roots;
+  return zones.length
+    ? [...zones, ...roots.filter((t) => t.node.level !== 'business_domain' && t.node.level !== 'tech_domain' && t.children.length > 0)]
+    : roots;
 }
