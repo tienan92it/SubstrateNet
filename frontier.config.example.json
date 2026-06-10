@@ -38,7 +38,12 @@
     "industryEnricher":    { "model": "frontier:composer-2.5", "fallback": ["openrouter:google/gemini-3.5-flash", "default:llama3.1:8b"] },
     "domainAnalyzer":      { "model": "frontier:composer-2.5", "fallback": ["openrouter:google/gemini-3.5-flash", "default:llama3.1:8b"] },
     "linker":              { "model": "frontier:composer-2.5", "fallback": ["openrouter:google/gemini-3.5-flash", "default:llama3.1:8b"] },
-    "profileWriter":       { "model": "frontier:composer-2.5", "fallback": ["openrouter:google/gemini-3.5-flash", "default:llama3.1:8b"] }
+    "profileWriter":       { "model": "frontier:composer-2.5", "fallback": ["openrouter:google/gemini-3.5-flash", "default:llama3.1:8b"] },
+
+    "domainFuser":         { "model": "openrouter:google/gemini-3.5-flash", "fallback": "default:llama3.1:8b" },
+    "industryFuser":       { "model": "openrouter:google/gemini-3.5-flash", "fallback": "default:llama3.1:8b" },
+    "knowledgeOrganizer":  { "model": "frontier:composer-2.5", "fallback": ["openrouter:google/gemini-3.5-flash", "default:llama3.1:8b"] },
+    "wisdomSynthesizer":   { "model": "frontier:composer-2.5", "fallback": ["openrouter:google/gemini-3.5-flash", "default:llama3.1:8b"] }
   },
   "research": { "kind": "none" }
 }

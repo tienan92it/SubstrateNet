@@ -7,6 +7,7 @@ import { openGlobalDb } from '../db/connection.js';
 import { listProjectPaths } from '../global/clean.js';
 import { listSkills, listIndustries } from '../global/skills.js';
 import { rebuildLinks } from '../link/cross-project.js';
+import { organizeKnowledge, listPara } from '../global/organize.js';
 import { synthesizeWisdom, listWisdom } from '../global/wisdom.js';
 import { locateBundle, buildGlobalDashboard } from '../dashboard/render.js';
 import { buildGlobalSnapshot } from '../dashboard/global-snapshot.js';
@@ -46,12 +47,16 @@ export function registerGlobal(program: Command): void {
         console.error('Dashboard bundle not found. Run: npm run build:dashboard');
         process.exit(1);
       }
-      // Synthesize the wisdom layer first so the snapshot renders it.
+      // Organize (PARA) then synthesize wisdom first so the snapshot renders them.
       if (opts.wisdom) {
+        const cfg = loadConfig();
         const gdb = openGlobalDb();
         try {
-          const w = await synthesizeWisdom(gdb, loadConfig());
-          console.log(`Wisdom: ${w.competencies} competencies · ${w.insights} insights · ${w.gaps} gaps (${w.source})`);
+          const o = await organizeKnowledge(gdb, cfg);
+          console.log(`PARA: ${o.active}/${o.projects} active · ${o.areas} areas · ${o.subjects} subjects · ${o.topics} topics (${o.source})`);
+          for (const warn of o.warnings) console.log(`  ! ${warn}`);
+          const w = await synthesizeWisdom(gdb, cfg);
+          console.log(`Wisdom: ${w.insights} insights · ${w.gaps} gaps (${w.source})`);
           for (const warn of w.warnings) console.log(`  ! ${warn}`);
         } catch (e) {
           console.log(`Wisdom synthesis skipped: ${(e as Error).message}`);
@@ -68,28 +73,40 @@ export function registerGlobal(program: Command): void {
     });
 
   g.command('wisdom')
-    .description('Synthesize the L6 wisdom layer: leveled competencies, insights, and gaps')
-    .option('--json', 'Print the full wisdom snapshot as JSON', false)
+    .description('Organize knowledge (PARA) + synthesize wisdom: projects, areas, subjects/topics, insights, gaps')
+    .option('--json', 'Print the full PARA + wisdom snapshot as JSON', false)
     .action(async (opts: { json: boolean }) => {
+      const cfg = loadConfig();
       const gdb = openGlobalDb();
       try {
-        const stats = await synthesizeWisdom(gdb, loadConfig());
+        const orgStats = await organizeKnowledge(gdb, cfg);
+        const wisStats = await synthesizeWisdom(gdb, cfg);
+        const para = listPara(gdb);
         const w = listWisdom(gdb);
         if (opts.json) {
-          console.log(JSON.stringify(w, null, 2));
+          console.log(JSON.stringify({ wisdom: w, para }, null, 2));
           return;
         }
-        if (!w.headline && w.competencies.length === 0) {
-          console.log('No wisdom yet. Run `subnet update --global` across your projects first.');
+        if (!w.headline && para.areas.length === 0 && para.subjects.length === 0) {
+          console.log('No knowledge yet. Run `subnet update --global` across your projects first.');
           return;
         }
         if (w.headline) console.log(`# ${w.headline}\n`);
         if (w.narrative) console.log(`${w.narrative}\n`);
 
-        console.log('## Competencies');
-        for (const c of w.competencies) {
-          console.log(`  - [${c.level}] ${c.name}  (w=${c.weight.toFixed(1)}, ×${c.projectCount})`);
-          if (c.skills.length) console.log(`      ${c.skills.slice(0, 12).map((s) => s.name).join(', ')}`);
+        console.log(`## Projects (${para.projects.length} active · ${para.archives.length} archived)`);
+        for (const p of para.projects.slice(0, 20)) console.log(`  - ${p.name}${p.focus ? ` — ${p.focus}` : ''}`);
+
+        console.log('\n## Areas (ongoing competencies)');
+        for (const a of para.areas) {
+          console.log(`  - [${a.level}] ${a.name}  (w=${a.weight.toFixed(1)}, ×${a.projectCount})`);
+          if (a.skills.length) console.log(`      ${a.skills.slice(0, 12).map((s) => s.name).join(', ')}`);
+        }
+
+        console.log('\n## Resources (subjects → topics)');
+        for (const s of para.subjects) {
+          console.log(`  - ${s.name}`);
+          for (const t of s.topics.slice(0, 8)) console.log(`      • ${t.name} (${t.items.length})`);
         }
 
         if (w.insights.length) {
@@ -105,8 +122,8 @@ export function registerGlobal(program: Command): void {
           }
         }
 
-        console.log(`\nGrounding: model (inference) · source: ${stats.source}`);
-        for (const warn of stats.warnings) console.log(`! ${warn}`);
+        console.log(`\nGrounding: model (inference) · organize: ${orgStats.source} · wisdom: ${wisStats.source}`);
+        for (const warn of [...orgStats.warnings, ...wisStats.warnings]) console.log(`! ${warn}`);
       } finally {
         gdb.close();
       }

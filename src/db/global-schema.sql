@@ -9,6 +9,8 @@ INSERT OR IGNORE INTO schema_versions (version, applied_at, description)
 VALUES (1, strftime('%s', 'now') * 1000, 'Initial global schema');
 INSERT OR IGNORE INTO schema_versions (version, applied_at, description)
 VALUES (2, strftime('%s', 'now') * 1000, 'L6 wisdom synthesis tables');
+INSERT OR IGNORE INTO schema_versions (version, applied_at, description)
+VALUES (3, strftime('%s', 'now') * 1000, 'PARA organization tables (subjects/topics + project actionability)');
 
 CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
@@ -255,3 +257,72 @@ CREATE TABLE IF NOT EXISTS wisdom_gaps (
     updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_wisgaps_rank ON wisdom_gaps(rank);
+
+-- ===========================================================================
+-- PARA organization (Projects / Areas / Resources / Archives).
+--
+-- An actionability layer over the DIKW knowledge base: the knowledgeOrganizer
+-- agent (with a data-driven, non-keyword fallback) classifies projects by
+-- activity and clusters skills/concepts/domains into unified subjects → topics.
+-- Areas reuse the L6 competency_groups (now organizer-owned). Regenerated
+-- (clear + insert) on each build; rank columns preserve agent ordering.
+-- ===========================================================================
+
+-- Projects bucketed by actionability. status: 'active' (a Project) | 'archived'
+-- (an Archive). focus is a one-line synthesized description.
+CREATE TABLE IF NOT EXISTS para_projects (
+    project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'active',  -- 'active' | 'archived'
+    focus TEXT,
+    topics_json TEXT,                       -- JSON array of topic names this project touches
+    last_active_at INTEGER,                 -- MAX(session.ended_at) across the project
+    grounding TEXT,
+    rank INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_para_projects_status ON para_projects(status, rank);
+
+-- Resources: top-level subjects (the diversity of fields you work in).
+CREATE TABLE IF NOT EXISTS subjects (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    summary TEXT,
+    weight REAL NOT NULL DEFAULT 0,
+    grounding TEXT,
+    rank INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_subjects_rank ON subjects(rank);
+
+-- Resources: topics nested under a subject (unified across projects).
+CREATE TABLE IF NOT EXISTS topics (
+    id TEXT PRIMARY KEY,
+    subject_id TEXT NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    summary TEXT,
+    weight REAL NOT NULL DEFAULT 0,
+    rank INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_topics_subject ON topics(subject_id, rank);
+
+-- Leaf items mapped into a topic: skills, concepts, domains, entities.
+CREATE TABLE IF NOT EXISTS topic_items (
+    topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,            -- 'skill' | 'concept' | 'domain' | 'entity'
+    name TEXT NOT NULL,
+    ref_id TEXT,                   -- skills.id / concept id when resolvable
+    weight REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (topic_id, kind, name)
+);
+CREATE INDEX IF NOT EXISTS idx_topic_items_topic ON topic_items(topic_id);
+
+-- Areas: links from a competency_group to the projects / domains that evidence it.
+CREATE TABLE IF NOT EXISTS area_refs (
+    group_id TEXT NOT NULL REFERENCES competency_groups(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,            -- 'project' | 'domain'
+    name TEXT NOT NULL,
+    ref_id TEXT,                   -- projects.id when kind='project'
+    PRIMARY KEY (group_id, kind, name)
+);
+CREATE INDEX IF NOT EXISTS idx_area_refs_group ON area_refs(group_id);

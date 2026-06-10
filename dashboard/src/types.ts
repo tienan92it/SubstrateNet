@@ -105,17 +105,6 @@ export interface GlobalProfile {
 export type ProficiencyLevel =
   | 'novice' | 'advanced_beginner' | 'competent' | 'proficient' | 'expert';
 
-export interface WisdomCompetency {
-  id: string;
-  name: string;
-  category?: string;
-  level: string;
-  summary?: string;
-  weight: number;
-  projectCount: number;
-  grounding?: string;
-  skills: Array<{ name: string; level?: string; weight: number }>;
-}
 export interface WisdomInsight {
   id: string; kind: string; title: string; body?: string; evidence?: string; grounding?: string; confidence?: number;
 }
@@ -129,9 +118,34 @@ export interface WisdomSnapshot {
   grounding?: string;
   confidence?: number;
   generatedAt?: number;
-  competencies: WisdomCompetency[];
   insights: WisdomInsight[];
   gaps: WisdomGap[];
+}
+
+// =============================================================================
+// PARA organization (actionability x topic clustering)
+// =============================================================================
+
+export interface ParaProject {
+  id: string; name: string; status: string; focus?: string; topics: string[]; lastActiveAt?: number;
+}
+export interface ParaArea {
+  id: string; name: string; level: string; summary?: string; weight: number; projectCount: number; grounding?: string;
+  skills: Array<{ name: string; level?: string; weight: number }>;
+  projects: string[]; domains: string[];
+}
+export interface ParaTopic {
+  id: string; name: string; summary?: string; weight: number;
+  items: Array<{ kind: string; name: string; weight: number }>;
+}
+export interface ParaSubject {
+  id: string; name: string; summary?: string; weight: number; topics: ParaTopic[];
+}
+export interface ParaSnapshot {
+  projects: ParaProject[];
+  archives: ParaProject[];
+  areas: ParaArea[];
+  subjects: ParaSubject[];
 }
 
 export interface GlobalDashboardSnapshot {
@@ -148,6 +162,7 @@ export interface GlobalDashboardSnapshot {
   };
   profile: GlobalProfile;
   wisdom?: WisdomSnapshot;
+  para?: ParaSnapshot;
   hierarchy: { nodes: HierarchyNode[]; edges: HierarchyEdge[] };
   drillDown: Record<string, DashboardSnapshot>;
 }

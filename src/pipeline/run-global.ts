@@ -11,6 +11,7 @@ import { globalConfigDir, projectConfigDir, loadConfig } from '../config.js';
 import { openGlobalDb } from '../db/connection.js';
 import { listProjectPaths } from '../global/clean.js';
 import { rebuildLinks } from '../link/cross-project.js';
+import { organizeKnowledge } from '../global/organize.js';
 import { synthesizeWisdom } from '../global/wisdom.js';
 import {
   locateBundle,
@@ -89,18 +90,29 @@ export async function runGlobalPipeline(opts: RunGlobalOpts): Promise<RunGlobalR
     }
   }
 
-  // L6 wisdom synthesis feeds the global dashboard, so run it by default
-  // whenever that dashboard is being (re)built. Cached + deterministically
-  // backstopped, so it is cheap on no-change re-runs.
+  // The PARA organization + L6 wisdom synthesis feed the global dashboard, so
+  // run them by default whenever that dashboard is being (re)built. The
+  // organizer must run first — wisdom reads the competency areas it produces.
+  // Both are cached + deterministically backstopped, cheap on no-change re-runs.
   const wantWisdom = (opts.wisdom ?? opts.globalDashboard ?? false) && result.linked.length > 0;
   if (wantWisdom) {
-    emit('wisdom');
+    const cfg = loadConfig();
     const gdb = openGlobalDb();
     try {
-      const w = await synthesizeWisdom(gdb, loadConfig());
-      for (const warn of w.warnings) result.warnings.push(warn);
-    } catch (e) {
-      result.warnings.push(`wisdom synthesis failed: ${(e as Error).message}`);
+      emit('organize');
+      try {
+        const o = await organizeKnowledge(gdb, cfg);
+        for (const warn of o.warnings) result.warnings.push(warn);
+      } catch (e) {
+        result.warnings.push(`knowledge organization failed: ${(e as Error).message}`);
+      }
+      emit('wisdom');
+      try {
+        const w = await synthesizeWisdom(gdb, cfg);
+        for (const warn of w.warnings) result.warnings.push(warn);
+      } catch (e) {
+        result.warnings.push(`wisdom synthesis failed: ${(e as Error).message}`);
+      }
     } finally {
       gdb.close();
     }
