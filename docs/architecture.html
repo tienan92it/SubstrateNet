@@ -114,10 +114,13 @@
   </p>
   <p>
     Cross-project work runs on top of that, over <code>global.db</code>: the
-    Linker and mechanical matching build L4/L5, then the
-    <strong>WisdomSynthesizer</strong> (L6) classifies the aggregated skill graph
-    into proficiency-leveled competency areas, distills insights, and names gaps
-    — with a deterministic offline fallback so the layer always renders.
+    Linker and mechanical matching build L4/L5, then two L6 agents run in order —
+    the <strong>KnowledgeOrganizer</strong> classifies projects by actionability
+    (PARA), groups skills into proficiency-leveled competency areas, and clusters
+    everything into a subject &rarr; topic taxonomy; the
+    <strong>WisdomSynthesizer</strong> then distills a headline, cross-project
+    insights, and named gaps on top. Both have a data-driven offline fallback so
+    the layer always renders.
   </p>
 
   <div class="mermaid">
@@ -210,7 +213,8 @@ flowchart TB
     <tr><td><code>industryEnricher</code></td><td>industry + present concepts</td><td>industry-standard concepts (model/external)</td><td>enrichment (L2.5)</td></tr>
     <tr><td><code>domainAnalyzer</code></td><td>industry + skills + layers + facts</td><td>composite portfolio highlights (evidence-cited)</td><td>enrichment (L2.5)</td></tr>
     <tr><td><code>profileWriter</code></td><td>global industries + skills + highlights</td><td>portfolio/background markdown</td><td><code>global profile --prose</code></td></tr>
-    <tr><td><code>wisdomSynthesizer</code></td><td>global skills + domains + concepts + gaps</td><td>leveled competencies, insights, gaps (L6)</td><td><code>global wisdom</code> / dashboard build</td></tr>
+    <tr><td><code>knowledgeOrganizer</code></td><td>projects + activity + skills + domains + concepts</td><td>PARA projects, leveled competency areas, subject → topic taxonomy (L6)</td><td><code>global wisdom</code> / dashboard build</td></tr>
+    <tr><td><code>wisdomSynthesizer</code></td><td>organized areas + skills + domains + gaps</td><td>headline, insights/principles, gaps (L6)</td><td><code>global wisdom</code> / dashboard build</td></tr>
     <tr><td><code>linker</code></td><td>two cross-project concepts</td><td>same_as / variant_of / supersedes / contradicts / none</td><td>cross-project candidate pairs</td></tr>
     <tr><td><code>verifier</code></td><td>pair of same-cluster facts</td><td>consistent / contradicts / supersedes</td><td>periodic sweep</td></tr>
   </table>

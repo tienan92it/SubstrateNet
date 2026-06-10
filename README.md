@@ -41,18 +41,20 @@ agents can call.
 
 ## The dashboard
 
-A self-contained, offline view, structured as the same pyramid.
-`subnet global dashboard` opens on two tabs:
+A self-contained, offline view that organizes the knowledge base by **PARA**
+(actionability) crossed with **DIKW** (distillation). `subnet global dashboard`
+opens on a compact synthesized **wisdom hero** (headline + insights + gaps) over
+four PARA sections, plus a **Map**:
 
-- **Profile** — the Wisdom layer: a synthesized headline, a **competency map**
-  grouped by area and graded by proficiency level, cross-project **insights**,
-  and the **gaps** worth closing next.
-- **Map** — drill `industry → business domain → tech domain → project`, then
-  into each project's own knowledge graph (domains → concepts/entities →
-  rules/skills).
+- **Projects** — active work, classified from real session recency.
+- **Areas** — ongoing competencies, graded by proficiency level (novice → expert).
+- **Resources** — your knowledge library: subjects → topics → concepts/skills/domains, a calm hierarchical explorer (no graph hairball).
+- **Archive** — inactive projects, kept for reference.
+- **Map** — drill `industry → business domain → tech domain → project`, then into each project's own nested knowledge explorer (domains → concepts/entities → facts).
 
-The Wisdom layer is synthesized by a reasoning agent with a deterministic
-offline fallback, and is grounded `model` — kept visibly separate from the
+The PARA structure and Wisdom layer are produced by two reasoning agents
+(`knowledgeOrganizer` then `wisdomSynthesizer`), each with a data-driven offline
+fallback, and are grounded `model` — kept visibly separate from the
 `structural`/`stated`/`corroborated` truth of your projects.
 
 <table>
@@ -61,8 +63,8 @@ offline fallback, and is grounded `model` — kept visibly separate from the
     <td width="50%"><img src="docs/assets/dashboard-map.png" alt="Map view — industry to domain to project knowledge graph"></td>
   </tr>
   <tr>
-    <td align="center"><em>Profile — the Wisdom layer</em></td>
-    <td align="center"><em>Map — cross-project knowledge graph</em></td>
+    <td align="center"><em>Profile — PARA sections under a wisdom hero</em></td>
+    <td align="center"><em>Map — cross-project knowledge hierarchy</em></td>
   </tr>
 </table>
 

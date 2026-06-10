@@ -1,0 +1,23 @@
+{
+  "payload": {
+    "projects": [
+      { "id": "a1b2c3", "name": "ledger-core", "idleDays": 3, "recentSessions": 6, "totalSessions": 40, "industries": ["Fintech"], "domains": ["Payments", "Settlement"] },
+      { "id": "d4e5f6", "name": "old-prototype", "idleDays": 240, "recentSessions": 0, "totalSessions": 5, "industries": ["Developer Tools"], "domains": [] }
+    ],
+    "skills": [
+      { "name": "TypeScript", "weight": 9.2, "grounding": "structural", "projectCount": 4, "kind": "language" },
+      { "name": "PostgreSQL", "weight": 7.1, "grounding": "corroborated", "projectCount": 3, "kind": "tool" },
+      { "name": "Docker", "weight": 5.5, "grounding": "structural", "projectCount": 3, "kind": "tool" },
+      { "name": "React", "weight": 6.0, "grounding": "structural", "projectCount": 2, "kind": "framework" },
+      { "name": "Event-driven architecture", "weight": 4.0, "grounding": "stated", "projectCount": 2, "kind": "skill" }
+    ],
+    "domains": [
+      { "name": "Payments", "summary": "Money movement, ledgers, settlement", "kind": "business" },
+      { "name": "Authentication", "summary": "Session and token issuance", "kind": "tech" }
+    ],
+    "concepts": [
+      { "name": "Idempotent payment intents", "summary": "Dedup of retried charges" },
+      { "name": "Outbox pattern", "summary": "Reliable event publication" }
+    ]
+  }
+}

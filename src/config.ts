@@ -174,6 +174,7 @@ export const DEFAULT_CONFIG: SubstrateNetConfig = {
     industryFuser:     { model: 'openrouter:google/gemini-3.5-flash', fallback: 'default:llama3.1:8b' },
     profileWriter:     { model: 'frontier:composer-2.5', fallback: ['openrouter:google/gemini-3.5-flash', 'default:llama3.1:8b'] },
     wisdomSynthesizer: { model: 'frontier:composer-2.5', fallback: ['openrouter:google/gemini-3.5-flash', 'default:llama3.1:8b'] },
+    knowledgeOrganizer: { model: 'frontier:composer-2.5', fallback: ['openrouter:google/gemini-3.5-flash', 'default:llama3.1:8b'] },
   },
   concurrency: 4,
   batchSize: 8,

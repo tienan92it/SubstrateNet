@@ -122,11 +122,12 @@ subnet global profile [--prose] [--out &lt;path&gt;]
 subnet global skills [--scope technical|industry] [--cross] [--limit &lt;n&gt;]</code></pre>
   <p>Cross-project operations on <code>~/.substrate-net/global.db</code>. Replaces the top-level <code>link</code>, <code>dashboard --global</code>, <code>profile</code>, and <code>skills</code> commands.</p>
   <p class="small">
-    <code>global wisdom</code> synthesizes the L6 layer — proficiency-leveled
-    competency areas, cross-project insights, and named gaps — into
-    <code>global.db</code> and prints it (<code>--json</code> for the full
-    snapshot). It runs a reasoning agent (frontier → flash → local) with a
-    deterministic offline fallback, cached per build. <code>global dashboard</code>
+    <code>global wisdom</code> builds the L6 layer — organizes projects by PARA
+    actionability, groups proficiency-leveled competency areas, clusters a
+    subject → topic library, then synthesizes a headline, insights, and gaps —
+    into <code>global.db</code> and prints it (<code>--json</code> for the full
+    snapshot). It runs two reasoning agents (frontier → flash → local) with a
+    data-driven offline fallback, cached per build. <code>global dashboard</code>
     runs it automatically before building; pass <code>--no-wisdom</code> to skip.
   </p>
 

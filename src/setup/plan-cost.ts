@@ -52,6 +52,7 @@ export const DEFAULT_AGENT_TOKENS: Record<string, { in: number; out: number; ms:
   skillSynthesizer:  { in: 2500, out: 900, ms: 12000 },
   profileWriter:     { in: 4000, out: 2000, ms: 25000 },
   wisdomSynthesizer: { in: 5000, out: 3000, ms: 28000 },
+  knowledgeOrganizer: { in: 6000, out: 4000, ms: 30000 },
   domainFuser:       { in: 4500, out: 2200, ms: 12000 },
   industryFuser:     { in: 3800, out: 1800, ms: 12000 },
 };

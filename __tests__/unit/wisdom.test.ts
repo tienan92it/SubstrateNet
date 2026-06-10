@@ -1,18 +1,16 @@
 /**
- * L6 wisdom synthesis tests (deterministic, no LLM):
- *   - keyword competency routing + Dreyfus level bucketing (pure)
- *   - deterministicWisdom grouping / insights / gaps passthrough
+ * L6 wisdom synthesis tests (deterministic, no LLM), post-PARA refactor:
+ *   - deterministicWisdom builds headline/narrative/insights/gaps from organized areas
  *   - synthesizeWisdom + listWisdom round-trip with no usable backend
- *   - WisdomSynthesizer agent postprocess coercion
+ *   - WisdomSynthesizer agent postprocess coercion (v2: no competencies)
+ *
+ * Competency grouping + level bucketing now live in organize.test.ts.
  */
 import { describe, it, expect } from 'vitest';
 import Database from 'better-sqlite3';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import {
-  categorizeSkill, levelFor, normalizeLevel, deterministicWisdom,
-  synthesizeWisdom, listWisdom,
-} from '../../src/global/wisdom.js';
+import { deterministicWisdom, synthesizeWisdom, listWisdom } from '../../src/global/wisdom.js';
 import {
   WISDOM_SYNTHESIZER_AGENT, type WisdomSynthesizerPayload,
 } from '../../src/agents/wisdom-synthesizer.js';
@@ -24,15 +22,15 @@ function seedGlobalDb() {
   const now = Date.now();
   db.prepare(`INSERT INTO projects (id,name,path,registered_at,last_seen_at) VALUES (?,?,?,?,?)`)
     .run('p1', 'alpha', '/tmp/subnet-wisdom-test-alpha-zzz', now, now);
-  db.prepare(`INSERT INTO projects (id,name,path,registered_at,last_seen_at) VALUES (?,?,?,?,?)`)
-    .run('p2', 'beta', '/tmp/subnet-wisdom-test-beta-zzz', now, now);
 
   const skill = db.prepare(`INSERT INTO skills (id,name,scope,kind,evidence_weight,grounding,project_count,updated_at) VALUES (?,?,?,?,?,?,?,?)`);
-  skill.run('s1', 'react', 'technical', null, 8, 'structural', 2, now);
-  skill.run('s2', 'postgres', 'technical', null, 6, 'corroborated', 2, now);
-  skill.run('s3', 'kafka', 'technical', null, 3, 'stated', 1, now);
-  skill.run('s4', 'docker', 'technical', null, 5, 'structural', 3, now);
-  skill.run('s5', 'llm', 'technical', null, 2, 'stated', 1, now);
+  skill.run('s1', 'react', 'technical', 'framework', 8, 'structural', 2, now);
+  skill.run('s2', 'postgres', 'technical', 'tool', 6, 'corroborated', 2, now);
+  skill.run('s4', 'docker', 'technical', 'tool', 5, 'structural', 3, now);
+
+  // Pre-seed an organized area (normally written by the organizer) so wisdom has input.
+  db.prepare(`INSERT INTO competency_groups (id,name,category,level,summary,weight,project_count,grounding,rank,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)`)
+    .run('cg1', 'Tooling & Infrastructure', null, 'proficient', 'tools', 11, 3, 'structural', 0, now);
 
   db.prepare(`INSERT INTO industries (id,name,project_id,confidence,grounding,updated_at) VALUES (?,?,?,?,?,?)`)
     .run('i1', 'Fintech', 'p1', 0.9, 'stated', now);
@@ -45,73 +43,38 @@ const NO_BACKEND_CFG = {
   agents: { wisdomSynthesizer: { model: 'openrouter:test-model' } },
 } as any;
 
-describe('categorizeSkill', () => {
-  it('routes skills to coherent areas by keyword', () => {
-    expect(categorizeSkill('React').area).toBe('Frontend & UX');
-    expect(categorizeSkill('postgres').area).toBe('Data & Analytics');
-    expect(categorizeSkill('redis').area).toBe('Data & Analytics');
-    expect(categorizeSkill('kubernetes').area).toBe('Infrastructure & DevOps');
-    expect(categorizeSkill('OAuth').area).toBe('Security');
-    expect(categorizeSkill('llm').area).toBe('AI / ML & Agents');
-    expect(categorizeSkill('totally-unknown-thing').area).toBe('General Engineering');
-  });
-});
-
-describe('levelFor (Dreyfus bucketing)', () => {
-  it('buckets by weight and project spread', () => {
-    expect(levelFor(15, 1)).toBe('expert');
-    expect(levelFor(0, 5)).toBe('expert');
-    expect(levelFor(7, 1)).toBe('proficient');
-    expect(levelFor(0, 3)).toBe('proficient');
-    expect(levelFor(4, 1)).toBe('competent');
-    expect(levelFor(1.5, 1)).toBe('advanced_beginner');
-    expect(levelFor(0.2, 1)).toBe('novice');
-  });
-});
-
-describe('normalizeLevel', () => {
-  it('coerces arbitrary level strings to the five Dreyfus tiers', () => {
-    expect(normalizeLevel('Expert')).toBe('expert');
-    expect(normalizeLevel('proficient')).toBe('proficient');
-    expect(normalizeLevel('advanced beginner')).toBe('advanced_beginner');
-    expect(normalizeLevel('Intermediate')).toBe('competent');
-    expect(normalizeLevel('beginner')).toBe('novice');
-    expect(normalizeLevel('senior engineer')).toBe('proficient');
-    expect(normalizeLevel(undefined)).toBe('competent');
-  });
-});
-
 describe('deterministicWisdom', () => {
   const payload: WisdomSynthesizerPayload = {
     projectCount: 2,
     industries: [{ name: 'Fintech', projectCount: 2 }],
     skills: [
       { name: 'react', weight: 8, grounding: 'structural', projectCount: 2 },
-      { name: 'postgres', weight: 6, grounding: 'corroborated', projectCount: 2 },
       { name: 'docker', weight: 5, grounding: 'structural', projectCount: 3 },
-      { name: 'llm', weight: 2, grounding: 'stated', projectCount: 1 },
+    ],
+    areas: [
+      { name: 'Frameworks', level: 'proficient', summary: 'x' },
+      { name: 'Tooling & Infrastructure', level: 'expert', summary: 'y' },
     ],
     businessDomains: [], techDomains: [], concepts: [],
     highlights: [{ statement: 'Built a payments ledger', grounding: 'corroborated' }],
     gaps: [{ title: 'Ungoverned entity: Ledger', summary: 'no governing rule' }],
   };
 
-  it('groups every supplied skill without inventing any', () => {
+  it('builds a headline anchored on the strongest areas', () => {
     const out = deterministicWisdom(payload);
-    expect(out.competencies.length).toBeGreaterThan(0);
-    const placed = out.competencies.flatMap((c) => c.skills).sort();
-    expect(placed).toEqual(['docker', 'llm', 'postgres', 'react']);
+    expect(out.headline).toBeTruthy();
+    // Strongest area (expert) should lead.
+    expect(out.headline).toContain('Tooling & Infrastructure');
+    expect(out.narrative).toContain('2 competency area');
   });
 
-  it('assigns evidence-based levels and passes gaps through with a recommendation', () => {
+  it('passes gaps through with a recommendation and derives insights', () => {
     const out = deterministicWisdom(payload);
-    const infra = out.competencies.find((c) => c.area === 'Infrastructure & DevOps');
-    expect(infra?.skills).toContain('docker');
-    expect(infra?.level).toBe('proficient'); // docker: projectCount 3
     expect(out.gaps[0].title).toBe('Ungoverned entity: Ledger');
     expect(out.gaps[0].recommendation).toBeTruthy();
     expect(out.insights.some((i) => i.title === 'Consistent cross-project strengths')).toBe(true);
-    expect(out.headline).toBeTruthy();
+    // v2: no competencies on the wisdom output.
+    expect((out as Record<string, unknown>).competencies).toBeUndefined();
   });
 });
 
@@ -121,17 +84,12 @@ describe('synthesizeWisdom + listWisdom', () => {
     try {
       const stats = await synthesizeWisdom(db, NO_BACKEND_CFG);
       expect(stats.source).toBe('deterministic');
-      expect(stats.competencies).toBeGreaterThan(0);
 
       const w = listWisdom(db);
       expect(w.headline).toBeTruthy();
       expect(w.grounding).toBe('model');
-      expect(w.competencies.length).toBe(stats.competencies);
-      for (const c of w.competencies) {
-        expect(['novice', 'advanced_beginner', 'competent', 'proficient', 'expert']).toContain(c.level);
-      }
-      const infra = w.competencies.find((c) => c.name === 'Infrastructure & DevOps');
-      expect(infra?.skills.some((s) => s.name === 'docker')).toBe(true);
+      expect(w.insights.length).toBe(stats.insights);
+      expect(w.gaps.length).toBe(stats.gaps);
     } finally {
       db.close();
     }
@@ -141,9 +99,9 @@ describe('synthesizeWisdom + listWisdom', () => {
     const db = seedGlobalDb();
     try {
       await synthesizeWisdom(db, NO_BACKEND_CFG);
-      const first = listWisdom(db).competencies.length;
+      const first = listWisdom(db).insights.length;
       await synthesizeWisdom(db, NO_BACKEND_CFG);
-      const second = listWisdom(db).competencies.length;
+      const second = listWisdom(db).insights.length;
       expect(second).toBe(first);
       const rows = (db.prepare(`SELECT COUNT(*) AS n FROM wisdom_meta`).get() as { n: number }).n;
       expect(rows).toBe(1);
@@ -153,10 +111,10 @@ describe('synthesizeWisdom + listWisdom', () => {
   });
 });
 
-describe('WisdomSynthesizer agent', () => {
-  it('postprocess coerces missing arrays and derives confidence', () => {
+describe('WisdomSynthesizer agent (v2)', () => {
+  it('postprocess coerces missing arrays and derives confidence from headline', () => {
     const post = WISDOM_SYNTHESIZER_AGENT.postprocess!(
-      { headline: 'A pragmatic backend engineer', narrative: 'N', competencies: [{ area: 'Backend & APIs', level: 'expert', skills: ['node'] }] } as never,
+      { headline: 'A pragmatic backend engineer', narrative: 'N' } as never,
       { payload: {} as never },
     );
     expect(post.confidence).toBe(0.8);
@@ -164,7 +122,7 @@ describe('WisdomSynthesizer agent', () => {
     expect(post.output.gaps).toEqual([]);
 
     const empty = WISDOM_SYNTHESIZER_AGENT.postprocess!(
-      { headline: '', competencies: [] } as never, { payload: {} as never },
+      { headline: '' } as never, { payload: {} as never },
     );
     expect(empty.confidence).toBe(0);
   });

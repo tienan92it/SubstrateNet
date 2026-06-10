@@ -29,12 +29,12 @@
 
   <h1>Interactive dashboard</h1>
   <p class="lede">
-    The local view, built for humans and structured as the DIKW pyramid: a
-    self-contained, offline dashboard from your SQLite databases. The global view
-    opens on <strong>Profile</strong> — the synthesized Wisdom layer — and a
-    <strong>Map</strong> you can drill into. Per-project graphs render domains →
-    concepts/entities → rules. The file dependency graph stays in
-    <code>graph.json</code> for agents.
+    The local view, built for humans: a self-contained, offline dashboard from
+    your SQLite databases. The global view organizes everything by
+    <strong>PARA</strong> (actionability) crossed with <strong>DIKW</strong>
+    (distillation) — a compact wisdom hero over Projects, Areas, Resources, and
+    Archive — plus a <strong>Map</strong> you can drill into. The file dependency
+    graph stays in <code>graph.json</code> for agents.
   </p>
 
   <div class="toc">
@@ -84,40 +84,44 @@ subnet dashboard --open     # and open it in your browser</code></pre>
 subnet global wisdom            # (re)synthesize competencies, insights, gaps
 subnet global dashboard --open  # writes ~/.substrate-net/dashboard/index.html</code></pre>
 
-  <h3>Profile — the Wisdom layer</h3>
+  <h3>Organized by PARA, distilled by DIKW</h3>
   <p>
-    The default landing reads top-down through the DIKW pyramid:
+    The knowledge base is organized by <strong>actionability</strong> (the PARA
+    method: Projects, Areas, Resources, Archives) crossed with the DIKW pyramid
+    as drill-down depth. A compact <strong>wisdom hero</strong> sits on top — a
+    synthesized headline and narrative over a D&rarr;I&rarr;K&rarr;W indicator,
+    with insights and gaps tucked into a collapsible strip — then four sections:
   </p>
   <ul>
-    <li><strong>Wisdom hero</strong> — a synthesized headline and narrative: who you are professionally and where your leverage is, over a compact D&rarr;I&rarr;K&rarr;W indicator.</li>
-    <li><strong>Competency map</strong> — your skills grouped into 6–8 areas, each graded by proficiency level (novice &rarr; expert) and showing its member skills. Replaces a flat skill list with a leveled, deduped view.</li>
-    <li><strong>Insights &amp; principles</strong> — evaluated cross-project judgments: patterns in how you work and what you consistently do well.</li>
-    <li><strong>Gaps to close</strong> — named knowledge gaps with concrete recommendations — what to learn or document next.</li>
+    <li><strong>Projects</strong> — what you're actively building, classified from real session recency: a focus line, the topics touched, and last-active. Open one to drill into its knowledge.</li>
+    <li><strong>Areas</strong> — ongoing competencies you maintain, grouped into 5–8 areas and graded by proficiency level (novice &rarr; expert), with the projects and domains that evidence each.</li>
+    <li><strong>Resources</strong> — your knowledge library: subjects sized by weight that expand to topics, then to the member concepts, skills, and domains. A calm hierarchical explorer (subject &rarr; topic &rarr; item), not a graph.</li>
+    <li><strong>Archive</strong> — inactive projects, kept for reference, with what each contributed.</li>
   </ul>
   <p class="small">
-    The Wisdom layer is synthesized by a reasoning agent (with a deterministic
-    offline fallback) and is grounded <code>model</code> — kept visibly separate
-    from the <code>structural</code>/<code>stated</code>/<code>corroborated</code>
-    truth of your projects. Industries and portfolio highlights are aggregated
-    mechanically from L2.5/L5 evidence; nothing is invented.
+    The PARA structure and the Wisdom layer are produced by two reasoning agents
+    — <code>knowledgeOrganizer</code> then <code>wisdomSynthesizer</code> — each
+    with a data-driven offline fallback, and are grounded <code>model</code>
+    (inference), kept visibly separate from the <code>structural</code>/<code>stated</code>/<code>corroborated</code>
+    truth of your projects. Project actionability is derived from real activity dates.
   </p>
   <figure class="shot">
-    <img src="assets/dashboard-profile.png" alt="Global Profile view: synthesized wisdom headline, competency map graded by proficiency level, insight cards, and gap cards." loading="lazy">
-    <figcaption>Profile — the Wisdom layer: competencies, insights, gaps.</figcaption>
+    <img src="assets/dashboard-profile.png" alt="Global Profile: PARA sections (Projects, Areas, Resources, Archive) under a compact synthesized wisdom hero." loading="lazy">
+    <figcaption>Profile — PARA sections under a compact wisdom hero.</figcaption>
   </figure>
 
-  <h3>Map — the cross-project wiki</h3>
+  <h3>Map — the cross-project hierarchy</h3>
   <p>
     A navigable hierarchy of
     <strong>industry &rarr; business domain &rarr; tech domain &rarr; project</strong>.
-    Same-named domains merge across projects, so shared business and technical
-    zones surface as single nodes weighted by how many projects reach them. Click
-    a project node to drill into <em>its</em> knowledge graph; use the breadcrumb
-    to return.
+    Same-named domains merge across projects, so shared zones surface as single
+    nodes weighted by how many projects reach them. Drilling into a project opens
+    its knowledge as a nested <strong>domains &rarr; concepts/entities &rarr; facts</strong>
+    explorer — expandable rows, not a force graph, so a large knowledge base stays legible.
   </p>
   <figure class="shot">
-    <img src="assets/dashboard-map.png" alt="Global Map view: force-directed hierarchy graph with nodes colored by level (industry, business domain, tech domain, project) and a legend." loading="lazy">
-    <figcaption>Map — industry &rarr; domain &rarr; project, colored by knowledge level.</figcaption>
+    <img src="assets/dashboard-map.png" alt="Global Map view: industry to domain to project hierarchy." loading="lazy">
+    <figcaption>Map — industry &rarr; domain &rarr; project, with a nested per-project explorer.</figcaption>
   </figure>
 
   <h2 id="views">Project views</h2>
